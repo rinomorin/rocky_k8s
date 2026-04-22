@@ -1,0 +1,63 @@
+---
+# STEP 1: Create the new Cloud and Provision zones
+- name: Ensure DNS forward zones exist in IPA
+  freeipa.ansible_freeipa.ipadnszone:
+    ipaadmin_password: "{{ ipa_admin_password }}"
+    name: "{{ item }}"
+    state: present
+    author_email: "{{ ipa_admin_email }}"
+    update_policy: "grant {{ dns_primary_zone }} Kerberos realm"
+  loop:
+    - "{{ dns_sub_zone }}"
+
+# STEP 2: Remove the old helper record from the parent zone
+- name: Remove helper reference from parent zone
+  freeipa.ansible_freeipa.ipadnsrecord:
+    ipaadmin_password: "{{ ipa_admin_password }}"
+    zone_name: "{{ dns_primary_zone }}"
+    name: "{{ dns_helper_hostname_short }}.cloud"
+    state: absent
+  ignore_errors: yes
+
+# STEP 3: Add helper to its new zones (Provider and Provision IPs)
+- name: Add A records for helper in new zones
+  freeipa.ansible_freeipa.ipadnsrecord:
+    ipaadmin_password: "{{ ipa_admin_password }}"
+    zone_name: "{{ item.zone }}"
+    name: "{{ dns_helper_hostname_short }}"
+    a_rec: "{{ item.ip }}"
+    state: present
+  loop:
+    - { zone: "{{ dns_sub_zone }}", ip: "{{ dns_helper_provider_ip }}" }
+
+# STEP 4: Delegate the Cloud sub-zone (The Glue)
+- name: Add NS record to parent zone for delegation
+  freeipa.ansible_freeipa.ipadnsrecord:
+    ipaadmin_password: "{{ ipa_admin_password }}"
+    zone_name: "{{ dns_primary_zone }}"
+    name: "cloud"
+    ns_rec: "{{ dns_helper_hostname_short }}.{{ dns_sub_zone }}."
+    state: present
+
+# STEP 5: Configure the Forwarder on the Parent
+- name: Configure DNS Forward Zone for cloud sub-domain
+  freeipa.ansible_freeipa.ipadnsforwardzone:
+    ipaadmin_password: "{{ ipa_admin_password }}"
+    name: "{{ dns_sub_zone }}"
+    forwarders:
+      - ip_address: "{{ dns_helper_provider_ip }}"
+    forward_policy: "only"
+    state: present
+
+# STEP 6: Reverse DNS Management
+- name: Ensure helper PTRs exist in reverse zones
+  freeipa.ansible_freeipa.ipadnsrecord:
+    ipaadmin_password: "{{ ipa_admin_password }}"
+    zone_name: "{{ item.zone }}"
+    name: "{{ item.ptr }}"
+    ptr_rec: "{{ dns_helper_hostname_short }}.{{ item.target_zone }}."
+    state: present
+  loop:
+    - zone: "{{ dns_reverse_zone }}"
+      ptr: "{{ dns_helper_provider_ip.split('.')[-1] }}"
+      target_zone: "{{ dns_sub_zone }}"

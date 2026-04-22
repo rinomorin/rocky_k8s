@@ -1,0 +1,29 @@
+---
+# Host and IP Discovery
+ipa_master_host: "{{ groups['ipa'][0] }}"
+ipa_master_ip: "{{ hostvars[ipa_master_host]['ansible_host'] }}"
+ipa_primary_fqdn: "{{ hostvars[ipa_master_host]['ansible_fqdn'] | default(hostvars[ipa_master_host]['inventory_hostname']) }}"
+
+# Credential Management
+ipa_admin_password: "{{ lookup('env', 'IPA_ADMIN_PASSWORD') }}"
+
+# DNS Zone Logic
+# Extracts 'example.ca' from 'helper.cloud.example.ca'
+dns_primary_zone: "{{ ipa_primary_fqdn.split('.')[-2:] | join('.') }}"
+# Extracts 'cloud.example.ca'
+dns_sub_zone: "cloud.{{ dns_primary_zone }}"
+
+# Helper Identity
+dns_helper_host_key: "{{ groups['helpers'][0] }}"
+dns_helper_hostname_short: "{{ hostvars[dns_helper_host_key]['hostname'].split('.')[0] }}"
+dns_helper_provider_ip: "{{ hostvars[dns_helper_host_key]['provider_ip'] }}"
+dns_helper_provision_ip: "{{ hostvars[dns_helper_host_key]['provision_ip'] }}"
+
+# Provisioning and Email
+dns_provision_zone: "provision.{{ dns_primary_zone | replace('ca', 'local') }}"
+ipa_admin_email: "admin@{{ dns_primary_zone }}"
+
+# Reverse DNS Logic (Generates '100.168.192.in-addr.arpa.')
+dns_reverse_zone: "{{ dns_helper_provider_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa."
+dns_provision_rev_zone: "{{ dns_helper_provision_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa."
+dns_helper_ptr: "{{ dns_helper_ip.split('.')[-1] }}"

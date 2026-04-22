@@ -1,0 +1,5 @@
+- name: Deploy
+  hosts: helper  # Should be the IPA master
+  become: true
+  roles:
+    - role: rocky_dns_cloud
