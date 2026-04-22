@@ -15,7 +15,7 @@
   freeipa.ansible_freeipa.ipadnsrecord:
     ipaadmin_password: "{{ ipa_admin_password }}"
     zone_name: "{{ dns_primary_zone }}"
-    name: "{{ dns_helper_hostname_short }}.cloud"
+    name: "{{ dns_helper_hostname_short }}.dns_helper_zone.split('')[0]"
     state: absent
   ignore_errors: yes
 

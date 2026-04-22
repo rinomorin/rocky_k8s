@@ -9,12 +9,13 @@ ipa_admin_password: "{{ lookup('env', 'IPA_ADMIN_PASSWORD') }}"
 
 # DNS Zone Logic
 # Extracts 'example.ca' from 'helper.cloud.example.ca'
-dns_primary_zone: "{{ ipa_primary_fqdn.split('.')[-2:] | join('.') }}"
+dns_primary_zone: "{{ ipa_primary_fqdn.split('.')[1:] | join('.') }}"
 # Extracts 'cloud.example.ca'
-dns_sub_zone: "cloud.{{ dns_primary_zone }}"
+dns_sub_zone: "{{ dns_helper_host_key.split('.')[1:] | join('.') }} }}"
 
 # Helper Identity
 dns_helper_host_key: "{{ groups['helpers'][0] }}"
+dns_helper_zone: "{{ dns_helper_host_key.split('.')[1:] | join('.') }} }}"
 dns_helper_hostname_short: "{{ hostvars[dns_helper_host_key]['hostname'].split('.')[0] }}"
 dns_helper_provider_ip: "{{ hostvars[dns_helper_host_key]['provider_ip'] }}"
 dns_helper_provision_ip: "{{ hostvars[dns_helper_host_key]['provision_ip'] }}"
