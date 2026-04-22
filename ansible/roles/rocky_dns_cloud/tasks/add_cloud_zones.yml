@@ -10,6 +10,8 @@
 
     # STEP 1: Create the Cloud Zone
     - name: Create the cloud sub-zone
+      vars:
+        ipa_admin_email: "admin@{{ dns_primary_zone }}"
       ansible.builtin.shell: |
         ipa dnszone-add {{ dns_sub_zone }} --author-email={{ ipa_admin_email }} --force
       register: result
