@@ -28,7 +28,7 @@ fi
 # 1: Download/Sync only
 ansible-pull -d "${DEST_DIR}" -U "${REPO_URL}" -C "${CHECKOUT}" --list-hosts 2>/dev/null
 
-echo "${DEST_DIR}/ansible"
+echo "cd to ${DEST_DIR}/ansible"
 # 2: Move to destination
 cd "${DEST_DIR}/ansible" || { echo "Failed to enter ${DEST_DIR}/ansible."; exit 1; }
 
