@@ -19,6 +19,8 @@ while getopts "d:i:U:C:v:e:" opt; do
 done
 shift $((OPTIND-1))
 
+echo "DEST_DIR=$DEST_DIR"
+
 PLAYBOOK=$1
 
 if [ -z "$PLAYBOOK" ]; then
