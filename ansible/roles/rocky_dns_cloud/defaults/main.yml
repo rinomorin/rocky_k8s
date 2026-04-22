@@ -2,7 +2,7 @@
 # Host and IP Discovery
 ipa_master_host: "{{ groups['ipa'][0] }}"
 ipa_master_ip: "{{ hostvars[ipa_master_host]['ansible_host'] }}"
-ipa_primary_fqdn: "{{ hostvars[ipa_master_host]['ansible_fqdn'] | default(hostvars[ipa_master_host]['inventory_hostname']) }}"
+ipa_primary_fqdn: "{{ hostvars[ipa_master_host]['hostname'] | default(hostvars[ipa_master_host]['inventory_hostname']) }}"
 
 # Credential Management
 ipa_admin_password: "{{ lookup('env', 'IPA_ADMIN_PASSWORD') }}"
