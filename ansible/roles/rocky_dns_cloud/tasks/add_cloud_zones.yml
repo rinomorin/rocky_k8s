@@ -1,63 +1,81 @@
 ---
-# STEP 1: Create the new Cloud and Provision zones
-- name: Ensure DNS forward zones exist in IPA
-  freeipa.ansible_freeipa.ipadnszone:
-    ipaadmin_password: "{{ ipa_admin_password }}"
-    name: "{{ item }}"
-    state: present
-    author_email: "{{ ipa_admin_email }}"
-    update_policy: "grant {{ dns_primary_zone }} Kerberos realm"
-  loop:
-    - "{{ dns_sub_zone }}"
+- name: DNS Delegation via IPA CLI
+  delegate_to: "{{ ipa_master_host }}"
+  block:
+    - name: Obtain Kerberos ticket for IPA Admin
+      ansible.builtin.shell: |
+        echo "{{ ipa_admin_password }}" | kinit admin
+      changed_when: false
+      no_log: true
 
-# STEP 2: Remove the old helper record from the parent zone
-- name: Remove helper reference from parent zone
-  freeipa.ansible_freeipa.ipadnsrecord:
-    ipaadmin_password: "{{ ipa_admin_password }}"
-    zone_name: "{{ dns_primary_zone }}"
-    name: "{{ dns_helper_hostname_short }}.dns_helper_zone.split('')[0]"
-    state: absent
-  ignore_errors: yes
+    # STEP 1: Create the Cloud Zone
+    - name: Create the cloud sub-zone
+      ansible.builtin.shell: |
+        ipa dnszone-add {{ dns_sub_zone }} --author-email={{ ipa_admin_email }} --force
+      register: result
+      failed_when: 
+        - result.rc != 0 
+        - "'already exists' not in dns_create.stderr"
+        - "'no modifications' not in dns_create.stderr"
+      changed_when: "'added zone' in result.stdout"
 
-# STEP 3: Add helper to its new zones (Provider and Provision IPs)
-- name: Add A records for helper in new zones
-  freeipa.ansible_freeipa.ipadnsrecord:
-    ipaadmin_password: "{{ ipa_admin_password }}"
-    zone_name: "{{ item.zone }}"
-    name: "{{ dns_helper_hostname_short }}"
-    a_rec: "{{ item.ip }}"
-    state: present
-  loop:
-    - { zone: "{{ dns_sub_zone }}", ip: "{{ dns_helper_provider_ip }}" }
+    # STEP 2: Remove helper.cloud from parent zone
+    - name: Remove helper reference from parent zone
+      ansible.builtin.shell: |
+        ipa dnsrecord-del {{ dns_primary_zone }} {{ dns_helper_hostname_short }}.dns_sub_zone.split('.')[0] --del-all
+      register: result
+      failed_when: 
+        - result.rc != 0 
+        - "'already exists' not in dns_create.stderr"
+        - "'no modifications' not in dns_create.stderr"
+      changed_when: "'deleted' in result.stdout"
 
-# STEP 4: Delegate the Cloud sub-zone (The Glue)
-- name: Add NS record to parent zone for delegation
-  freeipa.ansible_freeipa.ipadnsrecord:
-    ipaadmin_password: "{{ ipa_admin_password }}"
-    zone_name: "{{ dns_primary_zone }}"
-    name: "cloud"
-    ns_rec: "{{ dns_helper_hostname_short }}.{{ dns_sub_zone }}."
-    state: present
+    # STEP 3: Add helper A record to its new zone
+    - name: Add A record for helper in the new cloud zone
+      ansible.builtin.shell: |
+        ipa dnsrecord-add {{ dns_sub_zone }} {{ dns_helper_hostname_short }} --a-rec={{ dns_helper_provider_ip }}
+      register: result
+      failed_when: 
+        - result.rc != 0 
+        - "'already exists' not in dns_create.stderr"
+        - "'no modifications' not in dns_create.stderr"
+      changed_when: "'Added record' in result.stdout"
 
-# STEP 5: Configure the Forwarder on the Parent
-- name: Configure DNS Forward Zone for cloud sub-domain
-  freeipa.ansible_freeipa.ipadnsforwardzone:
-    ipaadmin_password: "{{ ipa_admin_password }}"
-    name: "{{ dns_sub_zone }}"
-    forwarders:
-      - ip_address: "{{ dns_helper_provider_ip }}"
-    forward_policy: "only"
-    state: present
+    # STEP 4: Delegate the Cloud sub-zone (The Glue)
+    - name: Add NS record to parent zone for delegation
+    # Note the trailing dot for the NS record
+      ansible.builtin.shell: |
+        ipa dnsrecord-add {{ dns_primary_zone }} cloud --ns-rec={{ dns_helper_hostname_short }}.{{ dns_sub_zone }}.
+      register: result
+      failed_when: 
+        - result.rc != 0 
+        - "'already exists' not in dns_create.stderr"
+        - "'no modifications' not in dns_create.stderr"
+      changed_when: "'Added record' in result.stdout"
 
-# STEP 6: Reverse DNS Management
-- name: Ensure helper PTRs exist in reverse zones
-  freeipa.ansible_freeipa.ipadnsrecord:
-    ipaadmin_password: "{{ ipa_admin_password }}"
-    zone_name: "{{ item.zone }}"
-    name: "{{ item.ptr }}"
-    ptr_rec: "{{ dns_helper_hostname_short }}.{{ item.target_zone }}."
-    state: present
-  loop:
-    - zone: "{{ dns_reverse_zone }}"
-      ptr: "{{ dns_helper_provider_ip.split('.')[-1] }}"
-      target_zone: "{{ dns_sub_zone }}"
+    # STEP 5: Configure the Forwarder on the Parent
+    - name: Configure DNS Forward Zone for cloud sub-domain
+      ansible.builtin.shell: |
+        ipa dnsforwardzone-add {{ dns_sub_zone }} --forwarder={{ dns_helper_provider_ip }} --forward-policy=only
+      register: result
+      failed_when: 
+        - result.rc != 0 
+        - "'already exists' not in dns_create.stderr"
+        - "'no modifications' not in dns_create.stderr"
+      changed_when: "'Added zone' in result.stdout"
+
+    # STEP 6: Reverse DNS Management
+    - name: Ensure helper PTR exists in reverse zone
+      ansible.builtin.shell: |
+        ipa dnsrecord-add {{ dns_reverse_zone }} {{ dns_helper_provider_ip.split('.')[-1] }} --ptr-rec={{ dns_helper_hostname_short }}.{{ dns_sub_zone }}.
+      register: result
+      failed_when: 
+        - result.rc != 0 
+        - "'already exists' not in dns_create.stderr"
+        - "'no modifications' not in dns_create.stderr"
+      changed_when: "'Added record' in result.stdout"
+
+  always:
+    - name: Destroy Kerberos ticket
+      ansible.builtin.shell: kdestroy
+      changed_when: false
