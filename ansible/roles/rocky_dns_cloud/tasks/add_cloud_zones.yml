@@ -2,22 +2,14 @@
 - name: "Network - Ensure Correct Default Gateway for Ambassador"
   become: yes
   vars:
-    # Use the variable if it exists, otherwise we'll discover it from the system
-    # to prevent the 'undefined' error during the pull.
     safe_helper_ip: "{{ dns_helper_provider_ip }}"
     TGW: "{{ safe_helper_ip.split('.')[:3] | join('.') }}.1"
   ansible.builtin.shell: |
-    # 1. Define the targets from the vars
     TARGET_IP="{{ safe_helper_ip }}"
     TARGET_GW="{{ TGW }}"
-
-    # 2. Find the NIC owning that IP
     NIC_NAME=$(ip -o addr show | grep "$TARGET_IP" | awk '{print $2}' | sed 's/://')
-
-    # 3. Check current gateway
     CURRENT_GW=$(ip route show default | awk '/default/ {print $3}')
 
-    # 4. Logic: Fix if missing or wrong
     if [ "$CURRENT_GW" != "$TARGET_GW" ]; then
         echo "Gateway mismatch! Current: $CURRENT_GW, Target: $TARGET_GW. Updating..."
         nmcli connection modify "$NIC_NAME" ipv4.gateway "$TARGET_GW" ipv4.method manual
@@ -32,27 +24,21 @@
   delegate_to: "{{ ipa_master_host }}"
   block:
     - name: Obtain Kerberos ticket for IPA Admin
-      ansible.builtin.shell: |
-        echo "{{ ipa_admin_password }}" | kinit admin
+      ansible.builtin.shell: echo "{{ ipa_admin_password }}" | kinit admin
       changed_when: false
       no_log: true        
 
     # STEP 1: Create the Cloud Zone
     - name: Create the cloud sub-zone
-      vars:
-        # Ensure this is exactly what we want, avoiding any weird characters
-        target_zone: "{{ dns_sub_zone }}"
-        ipa_admin_email: "admin@{{ dns_primary_zone }}"
       ansible.builtin.shell: |
-        # We use quotes around the variable to prevent shell/jinja confusion
-        ipa dnszone-add {{ dns_sub_zone }} --admin-email={{ ipa_admin_email }} --force
+        ipa dnszone-add "{{ dns_sub_zone }}" --admin-email="admin@{{ dns_primary_zone }}" --force
       register: zone_result
       failed_when: 
         - zone_result.rc != 0 
         - "'already exists' not in zone_result.stderr"
       changed_when: "'added zone' in zone_result.stdout"
 
-    # STEP 2: Add helper A record to its new zone
+    # STEP 2: Add helper A record
     - name: Add A record for helper in the new cloud zone
       ansible.builtin.shell: |
         ipa dnsrecord-add "{{ dns_sub_zone }}" "{{ dns_helper_hostname_short }}" --a-rec="{{ dns_helper_provider_ip }}"
@@ -60,98 +46,53 @@
       failed_when: 
         - rec_result.rc != 0 
         - "'already exists' not in rec_result.stderr"
-        - "'no modifications' not in result.stderr"
+        - "'no modifications' not in rec_result.stderr"
       changed_when: "'Added record' in rec_result.stdout"
 
-    # STEP 3: Remove helper.cloud from parent zone
-    - name: Remove helper reference from parent zone
-      ansible.builtin.shell: |
-        ipa dnsrecord-del {{ dns_primary_zone }} {{ dns_helper_hostname_short }}.cloud --del-all
-      register: result
-      failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in result.stderr"
-        - "'no modifications' not in result.stderr"
-        - "'not found' not in result.stderr"  # Added this to prevent the crash you just saw
-      changed_when: "'deleted' in result.stdout"
-
-    # STEP 4: Delegate the sub-zone (The Glue)
+    # STEP 4: Delegate the sub-zone
     - name: Add NS record to parent zone for delegation
       vars:
-        # Use brackets [] for the split index, not braces {}
-        cloud_label: "{{ dns_helper_zone.split('.')[0] }}"
-      ansible.builtin.shell: >
-        "ipa dnsrecord-add {{ dns_primary_zone }} {{ cloud_label }} --ns-rec={{ dns_helper_hostname_short }}.{{ dns_helper_zone }}."
-      register: result
+        cloud_label: "{{ dns_sub_zone.split('.')[0] }}"
+      ansible.builtin.shell: |
+        ipa dnsrecord-add "{{ dns_primary_zone }}" "{{ cloud_label }}" --ns-rec="{{ dns_helper_hostname_short }}.{{ dns_sub_zone }}."
+      register: ns_result
       failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in result.stderr"
-        - "'no modifications' not in result.stderr"
-        - "'not found' not in result.stderr"
-      changed_when: "'Added record' in result.stdout"
+        - ns_result.rc != 0 
+        - "'already exists' not in ns_result.stderr"
+        - "'no modifications' not in ns_result.stderr"
+      changed_when: "'Added record' in ns_result.stdout"
 
-    # STEP 5: Configure the Forwarder on the Parent
+    # STEP 5: Configure the Forwarder
     - name: Configure DNS Forwarder for the cloud zone
-      ansible.builtin.shell: >
-        ipa dnszone-mod {{ dns_helper_zone }} 
-        --forwarder={{ dns_helper_provider_ip }} --forward-policy=only
-      register: result
+      ansible.builtin.shell: |
+        ipa dnszone-mod "{{ dns_sub_zone }}" --forwarder="{{ dns_helper_provider_ip }}" --forward-policy=only
+      register: fwd_result
       failed_when: 
-        - result.rc != 0 
-        - "'no modifications' not in result.stderr"
-      changed_when: "'Modified zone' in result.stdout"
-
-    # STEP 6: Reverse DNS Management
-    - name: Ensure helper PTR exists in reverse zone
-      ansible.builtin.shell: >
-        ipa dnsrecord-add "{{ dns_reverse_zone }}" "{{ dns_helper_provider_ip.split('.')[-1] }}" 
-        --ptr-rec="{{ dns_helper_hostname }}."
-      register: result
-      failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in result.stderr"
-        - "'no modifications' not in result.stderr"
-        - "'not found' not in result.stderr"
-      changed_when: "'Added record' in result.stdout"
-
-  always:
-    - name: Destroy Kerberos ticket
-      ansible.builtin.shell: kdestroy
-      changed_when: false
+        - fwd_result.rc != 0 
+        - "'no modifications' not in fwd_result.stderr"
+      changed_when: "'Modified zone' in fwd_result.stdout"
 
 - name: "DNS - Create Isolated Provisioning Zones"
   delegate_to: "{{ ipa_master_host }}"
   block:
-    - name: Obtain Kerberos ticket for IPA Admin
-      ansible.builtin.shell: |
-        echo "{{ ipa_admin_password }}" | kinit admin
-      changed_when: false
-      no_log: true
-
-    # Forward Zone: Points to the Helper's internal 10.x identity
     - name: Create the provision.local isolated zone
       ansible.builtin.shell: |
-        ipa dnszone-add "{{ dns_provision_zone }}" \
-        --forwarder="{{ dns_helper_provision_ip }}" \
-        --forward-policy=only --force
+        ipa dnszone-add "{{ dns_provision_zone }}" --forwarder="{{ dns_helper_provision_ip }}" --forward-policy=only --force
       register: prov_zone_result
       failed_when: 
         - prov_zone_result.rc != 0 
         - "'already exists' not in prov_zone_result.stderr"
-        - "'no modifications' not in result.stderr"
+        - "'no modifications' not in prov_zone_result.stderr"
       changed_when: "'added zone' in prov_zone_result.stdout"
 
-    # Reverse Zone: So we can map 10.x IPs back to names
     - name: Ensure Isolated Reverse Zone exists
       ansible.builtin.shell: |
-        ipa dnszone-add "{{ dns_provision_rev_zone }}" \
-        --forwarder="{{ dns_helper_provision_ip }}" \
-        --forward-policy=only --force
+        ipa dnszone-add "{{ dns_provision_rev_zone }}" --forwarder="{{ dns_helper_provision_ip }}" --forward-policy=only --force
       register: prov_rev_result
       failed_when: 
         - prov_rev_result.rc != 0 
         - "'already exists' not in prov_rev_result.stderr"
-        - "'no modifications' not in result.stderr"
+        - "'no modifications' not in prov_rev_result.stderr"
       changed_when: "'added zone' in prov_rev_result.stdout"
 
   always:
