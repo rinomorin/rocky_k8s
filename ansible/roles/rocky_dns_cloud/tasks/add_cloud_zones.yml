@@ -70,6 +70,7 @@
         - result.rc != 0 
         - "'already exists' not in result.stderr"
         - "'no modifications' not in result.stderr"
+        - "'not found' not in result.stderr"  # Added this to prevent the crash you just saw
       changed_when: "'deleted' in result.stdout"
 
     # STEP 4: Delegate the Cloud sub-zone (The Glue)
