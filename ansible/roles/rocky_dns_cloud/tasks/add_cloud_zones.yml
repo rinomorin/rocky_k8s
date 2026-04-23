@@ -79,7 +79,7 @@
         # Use brackets [] for the split index, not braces {}
         cloud_label: "{{ dns_helper_zone.split('.')[0] }}"
       ansible.builtin.shell: >
-        "ipa dnsrecord-add {{ dns_primary_zone }}{{ cloud_label }} --ns-rec={{ dns_helper_hostname_short }}.{{ dns_helper_zone }}."
+        "ipa dnsrecord-add {{ dns_primary_zone }} {{ cloud_label }} --ns-rec={{ dns_helper_hostname_short }}.{{ dns_helper_zone }}."
       register: result
       failed_when: 
         - result.rc != 0 
