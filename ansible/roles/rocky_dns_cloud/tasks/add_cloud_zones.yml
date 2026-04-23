@@ -42,12 +42,12 @@
       vars:
         ipa_admin_email: "admin@{{ dns_primary_zone }}"
       ansible.builtin.shell: |
-        ipa dnszone-add {{ dns_sub_zone }} --admin-email={{ ipa_admin_email }} --force
+        # Use quotes to ensure the shell receives a clean string
+        ipa dnszone-add "{{ dns_sub_zone }}" --admin-email="{{ ipa_admin_email }}" --force
       register: result
       failed_when: 
         - result.rc != 0 
         - "'already exists' not in result.stderr"
-        - "'no modifications' not in result.stderr"
       changed_when: "'added zone' in result.stdout"
 
     # STEP 2: Add helper A record to its new zone FIRST
