@@ -89,16 +89,15 @@
       changed_when: "'Added record' in result.stdout"
 
     # STEP 5: Configure the Forwarder on the Parent
-    - name: Configure DNS Forward Zone for cloud sub-domain
+    - name: Configure DNS Forwarder for the cloud zone
       ansible.builtin.shell: >
-        ipa dnsforwardzone-add {{ dns_helper_zone }} 
+        ipa dnszone-mod {{ dns_helper_zone }} 
         --forwarder={{ dns_helper_provider_ip }} --forward-policy=only
       register: result
       failed_when: 
         - result.rc != 0 
-        - "'already exists' not in result.stderr"
         - "'no modifications' not in result.stderr"
-      changed_when: "'Added zone' in result.stdout"
+      changed_when: "'Modified zone' in result.stdout"
 
     # STEP 6: Reverse DNS Management
     - name: Ensure helper PTR exists in reverse zone
