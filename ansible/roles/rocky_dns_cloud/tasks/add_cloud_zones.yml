@@ -90,6 +90,7 @@
 
     # STEP 5: Configure the Forwarder on the Parent
     - name: Configure DNS Forward Zone for cloud sub-domain
+      become: yes
       ansible.builtin.shell: |
         "ipa dnsforwardzone-add {{ dns_helper_zone }} --forwarder={{ dns_helper_provider_ip }} --forward-policy=only"
       register: result
