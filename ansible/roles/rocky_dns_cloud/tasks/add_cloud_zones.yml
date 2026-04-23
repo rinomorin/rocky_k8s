@@ -35,13 +35,7 @@
       ansible.builtin.shell: |
         echo "{{ ipa_admin_password }}" | kinit admin
       changed_when: false
-      no_log: true
-    - debug:
-        msg:
-          - "h {{ dns_helper_host_key.split('.')[1:] | join('.') }}"
-          - "k {{ dns_helper_host_key }}"
-          - "z {{ dns_sub_zone }}"
-          
+      no_log: true        
 
     # STEP 1: Create the Cloud Zone
     - name: Create the cloud sub-zone
@@ -118,6 +112,44 @@
         - "'no modifications' not in result.stderr"
         - "'not found' not in result.stderr"
       changed_when: "'Added record' in result.stdout"
+
+  always:
+    - name: Destroy Kerberos ticket
+      ansible.builtin.shell: kdestroy
+      changed_when: false
+
+- name: "DNS - Create Isolated Provisioning Zones"
+  delegate_to: "{{ ipa_master_host }}"
+  block:
+    - name: Obtain Kerberos ticket for IPA Admin
+      ansible.builtin.shell: |
+        echo "{{ ipa_admin_password }}" | kinit admin
+      changed_when: false
+      no_log: true
+
+    # Forward Zone: Points to the Helper's internal 10.x identity
+    - name: Create the provision.local isolated zone
+      ansible.builtin.shell: |
+        ipa dnszone-add "{{ dns_provision_zone }}" \
+        --forwarder="{{ dns_helper_provision_ip }}" \
+        --forward-policy=only --force
+      register: prov_zone_result
+      failed_when: 
+        - prov_zone_result.rc != 0 
+        - "'already exists' not in prov_zone_result.stderr"
+      changed_when: "'added zone' in prov_zone_result.stdout"
+
+    # Reverse Zone: So we can map 10.x IPs back to names
+    - name: Ensure Isolated Reverse Zone exists
+      ansible.builtin.shell: |
+        ipa dnszone-add "{{ dns_provision_rev_zone }}" \
+        --forwarder="{{ dns_helper_provision_ip }}" \
+        --forward-policy=only --force
+      register: prov_rev_result
+      failed_when: 
+        - prov_rev_result.rc != 0 
+        - "'already exists' not in prov_rev_result.stderr"
+      changed_when: "'added zone' in prov_rev_result.stdout"
 
   always:
     - name: Destroy Kerberos ticket

@@ -19,7 +19,7 @@ dns_primary_zone: "{{ ipa_primary_fqdn.split('.')[1:] | join('.') }}"
 dns_sub_zone: "{{ dns_helper_hostname.split('.')[1:] | join('.') }}"
 # Fixed trailing braces
 dns_helper_zone: "{{ dns_helper_hostname.split('.')[1:] | join('.') }}"
-dns_helper_hostname_short: "{{ hostvars[dns_helper_host_key]['hostname'].split('.')[0] }}"
+dns_helper_hostname_short: "{{ dns_helper_hostname.split('.')[0] }}"
 dns_helper_provider_ip: "{{ hostvars[dns_helper_host_key]['provider_ip'] }}"
 dns_helper_provision_ip: "{{ hostvars[dns_helper_host_key]['provision_ip'] }}"
 
