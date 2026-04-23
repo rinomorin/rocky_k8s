@@ -1,3 +1,4 @@
+---
 # DNS Zone Logic
 # Extracts 'home.morinsoft.ca'
 dns_primary_zone: "{{ ipa_primary_fqdn.split('.')[1:] | join('.') }}"
