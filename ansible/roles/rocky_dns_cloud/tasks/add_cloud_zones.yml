@@ -45,7 +45,7 @@
         ipa_admin_email: "admin@{{ dns_primary_zone }}"
       ansible.builtin.shell: |
         # We use quotes around the variable to prevent shell/jinja confusion
-        ipa dnszone-add "{{ target_zone }}" --admin-email="{{ ipa_admin_email }}" --force
+        ipa dnszone-add {{ dns_sub_zone }} --admin-email={{ ipa_admin_email }} --force
       register: zone_result
       failed_when: 
         - zone_result.rc != 0 
