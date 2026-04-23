@@ -8,14 +8,14 @@ ipa_primary_fqdn: "{{ hostvars[ipa_master_host]['hostname'] | default(hostvars[i
 ipa_admin_password: "{{ lookup('env', 'IPA_ADMIN_PASSWORD') }}"
 
 # DNS Zone Logic
+# Helper Identity
+dns_helper_host_key: "{{ groups['helpers'][0] }}"
+
 # Extracts 'home.morinsoft.ca'
 dns_primary_zone: "{{ ipa_primary_fqdn.split('.')[1:] | join('.') }}"
 
 # Extracts 'cloud.home.morinsoft.ca' (Fixed trailing braces)
 dns_sub_zone: "{{ dns_helper_host_key.split('.')[1:] | join('.') }}"
-
-# Helper Identity
-dns_helper_host_key: "{{ groups['helpers'][0] }}"
 # Fixed trailing braces
 dns_helper_zone: "{{ dns_helper_host_key.split('.')[1:] | join('.') }}"
 dns_helper_hostname: "{{ hostvars[dns_helper_host_key]['hostname'] }}"
