@@ -103,7 +103,7 @@
     - name: Ensure helper PTR exists in reverse zone
       ansible.builtin.shell: >
         ipa dnsrecord-add "{{ dns_reverse_zone }}" "{{ dns_helper_provider_ip.split('.')[-1] }}" 
-        --ptr-rec="{{ dns_helper_hostname_short }}.{{ dns_helper_zone }}."
+        --ptr-rec="{{ dns_helper_hostname }}."
       register: result
       failed_when: 
         - result.rc != 0 
