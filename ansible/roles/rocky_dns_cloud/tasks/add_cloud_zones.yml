@@ -73,11 +73,14 @@
         - "'not found' not in result.stderr"  # Added this to prevent the crash you just saw
       changed_when: "'deleted' in result.stdout"
 
-    # STEP 4: Delegate the Cloud sub-zone (The Glue)
+    # STEP 4: Delegate the sub-zone (The Glue)
     - name: Add NS record to parent zone for delegation
+      vars:
+        # Extracts the first label (e.g., 'cloud') from the helper zone
+        cloud_name: "{{ dns_helper_zone.split('.')[0] }}"
       ansible.builtin.shell: >
-        ipa dnsrecord-add "{{ dns_primary_zone }}" "cloud" 
-        --ns-rec="{{ dns_helper_hostname_short }}.{{ dns_sub_zone }}."
+        ipa dnsrecord-add "{{ dns_primary_zone }}" "{{ cloud_name }}" 
+        --ns-rec="{{ dns_helper_hostname_short }}.{{ dns_helper_zone }}."
       register: result
       failed_when: 
         - result.rc != 0 
