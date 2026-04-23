@@ -1,13 +1,15 @@
 ---
 - name: "Network - Ensure Correct Default Gateway for Ambassador"
   become: yes
-  TGW: "{{ ipa_helper_ip.split('.')[:3] | join('.') }}.1"
+  vars:
+    # Properly scoped variable for this task
+    TGW: "{{ ipa_helper_ip.split('/')[0].split('.')[:3] | join('.') }}.1"
   ansible.builtin.shell: |
     # 1. Define the targets
     TARGET_IP="{{ ipa_helper_ip }}"
     TARGET_GW="{{ TGW }}"
     
-    # 2. Find the NIC owning that IP (removing trailing colon from ip -o)
+    # 2. Find the NIC owning that IP
     NIC_NAME=$(ip -o addr show | grep "$TARGET_IP" | awk '{print $2}' | sed 's/://')
     
     # 3. Check current gateway in the kernel
