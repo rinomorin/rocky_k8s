@@ -36,7 +36,13 @@
         echo "{{ ipa_admin_password }}" | kinit admin
       changed_when: false
       no_log: true
-    - debug: msg="{{ dns_sub_zone }}"
+    - debug:
+        msg:
+          - "h {{ dns_helper_host_key.split('.')[1:] | join('.') }}"
+          - "k {{ dns_helper_host_key }}"
+          - "z {{ dns_sub_zone }}"
+          
+
     # STEP 1: Create the Cloud Zone
     - name: Create the cloud sub-zone
       vars:
