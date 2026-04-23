@@ -82,6 +82,7 @@
         - result.rc != 0 
         - "'already exists' not in result.stderr"
         - "'no modifications' not in result.stderr"
+        - "'not found' not in result.stderr"
       changed_when: "'Added record' in result.stdout"
 
     # STEP 5: Configure the Forwarder on the Parent
