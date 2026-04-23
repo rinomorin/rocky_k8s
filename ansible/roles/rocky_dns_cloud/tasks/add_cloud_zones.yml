@@ -76,10 +76,10 @@
     # STEP 4: Delegate the sub-zone (The Glue)
     - name: Add NS record to parent zone for delegation
       vars:
-        # Extracts the first label (e.g., 'cloud') from the helper zone
-        cloud_name: "{{ dns_helper_zone.split('.')[0] }}"
+        # Use brackets [] for the split index, not braces {}
+        cloud_label: "{{ dns_helper_zone.split('.')[0] }}"
       ansible.builtin.shell: >
-        ipa dnsrecord-add "{{ dns_primary_zone }}" "{{ cloud_name }}" 
+        ipa dnsrecord-add "{{ dns_primary_zone }}" "{{ cloud_label }}" 
         --ns-rec="{{ dns_helper_hostname_short }}.{{ dns_helper_zone }}."
       register: result
       failed_when: 
