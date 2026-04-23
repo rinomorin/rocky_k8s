@@ -36,7 +36,7 @@
         echo "{{ ipa_admin_password }}" | kinit admin
       changed_when: false
       no_log: true
-
+    - debug: msg="{{ dns_sub_zone }}"
     # STEP 1: Create the Cloud Zone
     - name: Create the cloud sub-zone
       vars:
