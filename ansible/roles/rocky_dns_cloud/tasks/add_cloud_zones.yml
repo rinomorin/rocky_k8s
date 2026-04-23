@@ -40,26 +40,27 @@
     # STEP 1: Create the Cloud Zone
     - name: Create the cloud sub-zone
       vars:
+        # Ensure this is exactly what we want, avoiding any weird characters
+        target_zone: "{{ dns_sub_zone }}"
         ipa_admin_email: "admin@{{ dns_primary_zone }}"
       ansible.builtin.shell: |
-        # Use quotes to ensure the shell receives a clean string
-        ipa dnszone-add "{{ dns_sub_zone }}" --admin-email="{{ ipa_admin_email }}" --force
-      register: result
+        # We use quotes around the variable to prevent shell/jinja confusion
+        ipa dnszone-add "{{ target_zone }}" --admin-email="{{ ipa_admin_email }}" --force
+      register: zone_result
       failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in result.stderr"
-      changed_when: "'added zone' in result.stdout"
+        - zone_result.rc != 0 
+        - "'already exists' not in zone_result.stderr"
+      changed_when: "'added zone' in zone_result.stdout"
 
-    # STEP 2: Add helper A record to its new zone FIRST
+    # STEP 2: Add helper A record to its new zone
     - name: Add A record for helper in the new cloud zone
       ansible.builtin.shell: |
-        ipa dnsrecord-add {{ dns_sub_zone }} {{ dns_helper_hostname_short }} --a-rec={{ dns_helper_provider_ip }}
-      register: result
+        ipa dnsrecord-add "{{ dns_sub_zone }}" "{{ dns_helper_hostname_short }}" --a-rec="{{ dns_helper_provider_ip }}"
+      register: rec_result
       failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in result.stderr"
-        - "'no modifications' not in result.stderr"
-      changed_when: "'Added record' in result.stdout"
+        - rec_result.rc != 0 
+        - "'already exists' not in rec_result.stderr"
+      changed_when: "'Added record' in rec_result.stdout"
 
     # STEP 3: Remove helper.cloud from parent zone
     - name: Remove helper reference from parent zone
