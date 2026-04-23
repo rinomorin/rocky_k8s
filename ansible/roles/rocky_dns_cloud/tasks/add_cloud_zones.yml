@@ -4,7 +4,7 @@
   vars:
     # Use the variable if it exists, otherwise we'll discover it from the system
     # to prevent the 'undefined' error during the pull.
-    safe_helper_ip: "{{ ipa_helper_ip }}"
+    safe_helper_ip: "{{ dns_helper_provider_ip }}"
     TGW: "{{ safe_helper_ip.split('.')[:3] | join('.') }}.1"
   ansible.builtin.shell: |
     # 1. Define the targets from the vars
