@@ -28,7 +28,6 @@
   register: gw_result
   changed_when: "'Updating...' in gw_result.stdout"
 
-
 - name: DNS Delegation via IPA CLI
   delegate_to: "{{ ipa_master_host }}"
   block:
@@ -51,19 +50,7 @@
         - "'no modifications' not in result.stderr"
       changed_when: "'added zone' in result.stdout"
 
-
-    # STEP 2: Remove helper.cloud from parent zone
-    - name: Remove helper reference from parent zone
-      ansible.builtin.shell: |
-        ipa dnsrecord-del {{ dns_primary_zone }} {{ dns_helper_hostname_short }}.cloud --del-all
-      register: result
-      failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in result.stderr"
-        - "'no modifications' not in result.stderr"
-      changed_when: "'deleted' in result.stdout"
-
-    # STEP 3: Add helper A record to its new zone
+    # STEP 2: Add helper A record to its new zone FIRST
     - name: Add A record for helper in the new cloud zone
       ansible.builtin.shell: |
         ipa dnsrecord-add {{ dns_sub_zone }} {{ dns_helper_hostname_short }} --a-rec={{ dns_helper_provider_ip }}
@@ -73,6 +60,17 @@
         - "'already exists' not in result.stderr"
         - "'no modifications' not in result.stderr"
       changed_when: "'Added record' in result.stdout"
+
+    # STEP 3: Remove helper.cloud from parent zone
+    - name: Remove helper reference from parent zone
+      ansible.builtin.shell: |
+        ipa dnsrecord-del {{ dns_primary_zone }} {{ dns_helper_hostname_short }}.cloud --del-all
+      register: result
+      failed_when: 
+        - result.rc != 0 
+        - "'already exists' not in result.stderr"
+        - "'no modifications' not in result.stderr"
+      changed_when: "'deleted' in result.stdout"
 
     # STEP 4: Delegate the Cloud sub-zone (The Glue)
     - name: Add NS record to parent zone for delegation
@@ -99,7 +97,7 @@
     # STEP 6: Reverse DNS Management
     - name: Ensure helper PTR exists in reverse zone
       ansible.builtin.shell: |
-        ipa dnsrecord-add {{ dns_reverse_zone }} {{ dns_helper_provider_ip.split('.')[-1] }} --ptr-rec={{ dns_helper_hostname_short }}.{{ dns_sub_zone }}.
+        ipa dnsrecord-add {{ dns_reverse_zone }} {{ dns_helper_provider_ip.split('.')[-1] }} --ptr-rec={{ dns_helper_hostname_short }}.{{ dns_sub_zone  }}.
       register: result
       failed_when: 
         - result.rc != 0 
