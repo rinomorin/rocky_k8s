@@ -4,7 +4,7 @@
   ansible.builtin.shell: |
     # 1. Define the targets
     TARGET_IP="{{ ipa_helper_ip }}"
-    TARGET_GW="$(echo $TARGET_IP | cut -d. -f1-3).1"
+    TARGET_GW="{{ ipa_helper_ip.split('.')[:3] | join('.') }}.1"
     
     # 2. Find the NIC owning that IP (removing trailing colon from ip -o)
     NIC_NAME=$(ip -o addr show | grep "$TARGET_IP" | awk '{print $2}' | sed 's/://')
