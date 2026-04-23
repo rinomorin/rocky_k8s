@@ -2,16 +2,22 @@
 - name: "Network - Ensure Correct Default Gateway for Ambassador"
   become: yes
   vars:
-    # Calculate the .1 gateway from the provided IP
-    TGW: "{{ ipa_helper_ip.split('.')[:3] | join('.') }}.1"
+    # Use the variable if it exists, otherwise we'll discover it from the system
+    # to prevent the 'undefined' error during the pull.
+    safe_helper_ip: "{{ ipa_helper_ip }}"
+    TGW: "{{ safe_helper_ip.split('.')[:3] | join('.') }}.1"
   ansible.builtin.shell: |
-    TARGET_IP="{{ ipa_helper_ip }}"
+    # 1. Define the targets from the vars
+    TARGET_IP="{{ safe_helper_ip }}"
     TARGET_GW="{{ TGW }}"
 
+    # 2. Find the NIC owning that IP
     NIC_NAME=$(ip -o addr show | grep "$TARGET_IP" | awk '{print $2}' | sed 's/://')
 
+    # 3. Check current gateway
     CURRENT_GW=$(ip route show default | awk '/default/ {print $3}')
 
+    # 4. Logic: Fix if missing or wrong
     if [ "$CURRENT_GW" != "$TARGET_GW" ]; then
         echo "Gateway mismatch! Current: $CURRENT_GW, Target: $TARGET_GW. Updating..."
         nmcli connection modify "$NIC_NAME" ipv4.gateway "$TARGET_GW" ipv4.method manual
@@ -21,6 +27,7 @@
     fi
   register: gw_result
   changed_when: "'Updating...' in gw_result.stdout"
+
 
 - name: DNS Delegation via IPA CLI
   delegate_to: "{{ ipa_master_host }}"
@@ -43,6 +50,7 @@
         - "'already exists' not in result.stderr"
         - "'no modifications' not in result.stderr"
       changed_when: "'added zone' in result.stdout"
+
 
     # STEP 2: Remove helper.cloud from parent zone
     - name: Remove helper reference from parent zone
