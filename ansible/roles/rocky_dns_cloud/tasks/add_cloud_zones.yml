@@ -1,84 +1,13 @@
----
-- name: DNS Delegation via IPA CLI
-  delegate_to: "{{ ipa_master_host }}"
-  block:
-    - name: Obtain Kerberos ticket for IPA Admin
-      ansible.builtin.shell: |
-        echo "{{ ipa_admin_password }}" | kinit admin
-      changed_when: false
-      no_log: true
+TASK [rocky_dns_cloud : Create the cloud sub-zone] *****************************
+[ERROR]: Task failed: Module failed: non-zero return code
+Origin: /opt/ansible_work/cloud/ansible/roles/rocky_dns_cloud/tasks/add_cloud_zones.yml:12:7
 
-    # STEP 1: Create the Cloud Zone
-    - name: Create the cloud sub-zone
-      vars:
-        ipa_admin_email: "admin@{{ dns_primary_zone }}"
-      ansible.builtin.shell: |
-        ipa dnszone-add {{ dns_sub_zone }} --admin-email={{ ipa_admin_email }} --force
-      register: result
-      failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in dns_create.stderr"
-        - "'no modifications' not in dns_create.stderr"
-      changed_when: "'added zone' in result.stdout"
+10
+11     # STEP 1: Create the Cloud Zone
+12     - name: Create the cloud sub-zone
+         ^ column 7
 
-    # STEP 2: Remove helper.cloud from parent zone
-    - name: Remove helper reference from parent zone
-      ansible.builtin.shell: |
-        ipa dnsrecord-del {{ dns_primary_zone }} {{ dns_helper_hostname_short }}.dns_sub_zone.split('.')[0] --del-all
-      register: result
-      failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in dns_create.stderr"
-        - "'no modifications' not in dns_create.stderr"
-      changed_when: "'deleted' in result.stdout"
+fatal: [helper -> ipa01(192.168.100.10)]: FAILED! => {"changed": false, "cmd": "ipa dnszone-add  }} --author-email=admin@home.morinsoft.ca --force\n", "delta": "0:00:00.302319", "end": "2026-04-22 04:53:30.613210", "failed_when_result": "Error while evaluating conditional: 'dns_create' is undefined", "msg": "non-zero return code", "rc": 2, "start": "2026-04-22 04:53:30.310891", "stderr": "Usage: ipa [global-options] dnszone-add NAME [options]\n\nipa: error: no such option: --author-email", "stderr_lines": ["Usage: ipa [global-options] dnszone-add NAME [options]", "", "ipa: error: no such option: --author-email"], "stdout": "", "stdout_lines": []}
 
-    # STEP 3: Add helper A record to its new zone
-    - name: Add A record for helper in the new cloud zone
-      ansible.builtin.shell: |
-        ipa dnsrecord-add {{ dns_sub_zone }} {{ dns_helper_hostname_short }} --a-rec={{ dns_helper_provider_ip }}
-      register: result
-      failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in dns_create.stderr"
-        - "'no modifications' not in dns_create.stderr"
-      changed_when: "'Added record' in result.stdout"
-
-    # STEP 4: Delegate the Cloud sub-zone (The Glue)
-    - name: Add NS record to parent zone for delegation
-    # Note the trailing dot for the NS record
-      ansible.builtin.shell: |
-        ipa dnsrecord-add {{ dns_primary_zone }} cloud --ns-rec={{ dns_helper_hostname_short }}.{{ dns_sub_zone }}.
-      register: result
-      failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in dns_create.stderr"
-        - "'no modifications' not in dns_create.stderr"
-      changed_when: "'Added record' in result.stdout"
-
-    # STEP 5: Configure the Forwarder on the Parent
-    - name: Configure DNS Forward Zone for cloud sub-domain
-      ansible.builtin.shell: |
-        ipa dnsforwardzone-add {{ dns_sub_zone }} --forwarder={{ dns_helper_provider_ip }} --forward-policy=only
-      register: result
-      failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in dns_create.stderr"
-        - "'no modifications' not in dns_create.stderr"
-      changed_when: "'Added zone' in result.stdout"
-
-    # STEP 6: Reverse DNS Management
-    - name: Ensure helper PTR exists in reverse zone
-      ansible.builtin.shell: |
-        ipa dnsrecord-add {{ dns_reverse_zone }} {{ dns_helper_provider_ip.split('.')[-1] }} --ptr-rec={{ dns_helper_hostname_short }}.{{ dns_sub_zone }}.
-      register: result
-      failed_when: 
-        - result.rc != 0 
-        - "'already exists' not in dns_create.stderr"
-        - "'no modifications' not in dns_create.stderr"
-      changed_when: "'Added record' in result.stdout"
-
-  always:
-    - name: Destroy Kerberos ticket
-      ansible.builtin.shell: kdestroy
-      changed_when: false
-
+TASK [rocky_dns_cloud : Destroy Kerberos ticket] *******************************
+ok: [helper -> ipa01(192.168.100.10)]
