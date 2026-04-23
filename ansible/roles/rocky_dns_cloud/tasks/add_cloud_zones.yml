@@ -13,7 +13,7 @@
       vars:
         ipa_admin_email: "admin@{{ dns_primary_zone }}"
       ansible.builtin.shell: |
-        ipa dnszone-add {{ dns_sub_zone }} --author-email={{ ipa_admin_email }} --force
+        ipa dnszone-add {{ dns_sub_zone }} --admin-email={{ ipa_admin_email }} --force
       register: result
       failed_when: 
         - result.rc != 0 
@@ -81,3 +81,4 @@
     - name: Destroy Kerberos ticket
       ansible.builtin.shell: kdestroy
       changed_when: false
+
