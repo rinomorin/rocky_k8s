@@ -9,7 +9,7 @@ ipa_admin_password: "{{ lookup('env', 'IPA_ADMIN_PASSWORD') }}"
 
 # DNS Zone Logic
 # Helper Identity
-dns_helper_host_key: "{{ groups['helpers'][0] }}"
+dns_helper_host_key: "{{ groups['helpers'][0].hostname }}"
 
 # Extracts 'home.morinsoft.ca'
 dns_primary_zone: "{{ ipa_primary_fqdn.split('.')[1:] | join('.') }}"
