@@ -60,6 +60,7 @@
       failed_when: 
         - rec_result.rc != 0 
         - "'already exists' not in rec_result.stderr"
+        - "'no modifications' not in result.stderr"
       changed_when: "'Added record' in rec_result.stdout"
 
     # STEP 3: Remove helper.cloud from parent zone
@@ -137,6 +138,7 @@
       failed_when: 
         - prov_zone_result.rc != 0 
         - "'already exists' not in prov_zone_result.stderr"
+        - "'no modifications' not in result.stderr"
       changed_when: "'added zone' in prov_zone_result.stdout"
 
     # Reverse Zone: So we can map 10.x IPs back to names
@@ -149,6 +151,7 @@
       failed_when: 
         - prov_rev_result.rc != 0 
         - "'already exists' not in prov_rev_result.stderr"
+        - "'no modifications' not in result.stderr"
       changed_when: "'added zone' in prov_rev_result.stdout"
 
   always:
