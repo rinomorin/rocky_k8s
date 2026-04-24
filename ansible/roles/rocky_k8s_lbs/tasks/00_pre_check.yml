@@ -2,6 +2,9 @@
 - name: 0.1 - Check if LB Nodes already exist
   delegate_to: "{{ VM_HOST_IP }}"
   become: yes
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[VM_HOST_IP]['ansible_user'] }}"
   shell: |
     if virsh list --all | grep -q "{{ item.split('.')[0] }}"; then
       echo "exists"
@@ -22,6 +25,9 @@
   delegate_to: "{{ VM_HOST_IP }}"
   become: yes
   when: rebuild_lbs | default(false) | bool
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[VM_HOST_IP]['ansible_user'] }}"
   shell: |
     VM="{{ item.split('.')[0] }}"
     virsh destroy $VM || true
