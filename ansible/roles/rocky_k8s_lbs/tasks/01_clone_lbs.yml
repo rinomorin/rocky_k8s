@@ -16,13 +16,18 @@
     - lb_clones.rc != 0 
     - "'already exists' not in lb_clones.stderr"
 
-- name: Start cloned VMs
-  delegate_to: "{{ VM_HOST_IP }}"
+- name: "Power on lb image
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
-  community.libvirt.virt:
-    name: "{{ item.split('.')[0] }}"
-    state: running
-  loop: "{{ groups['hahost'] }}"
+  shell: "virsh start {{ golden_image_name }}"
+  register: vm_start
+  # We ignore the error if it's already running to be resilient
+  failed_when: 
+    - vm_start.rc != 0 
+    - "'already active' not in vm_start.stderr"
+  changed_when: "vm_start.rc == 0"
 
 - name: 1.1 - Discover Maintenance IP from br-nat
   delegate_to: "{{ VM_HOST_IP }}"
