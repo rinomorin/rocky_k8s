@@ -1,10 +1,12 @@
 - name: Deploy
+  gather_facts: false
   hosts: helper  # Should be the IPA master
   become: true
   roles:
     - role: rocky_dns_cloud
 
 - name: DNS population
+  gather_facts: false
   hosts: all  # Should be the IPA master
   become: true
   roles:
