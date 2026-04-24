@@ -48,7 +48,7 @@
 
     - name: "DNS - Register Provisioning Records (10.x)"
       vars:
-        this_ip: "{{ provision_ip }}"
+        this_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
         ptr_val: "{{ this_ip.split('.')[-1] }}"
         short_name: "{{ hostvars[inventory_hostname]['hostname'].split('.')[0] }}"
         hostname: "{{ hostvars[inventory_hostname]['hostname'] }}"
