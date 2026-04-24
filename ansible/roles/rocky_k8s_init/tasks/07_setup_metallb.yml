@@ -1,0 +1,96 @@
+---
+- name: Allow MetalLB Memberlist traffic
+  firewalld:
+    port: "{{ item }}"
+    permanent: true
+    state: enabled
+    immediate: true
+  loop:
+    - 7946/tcp
+    - 7946/udp
+
+- name: 7.1 - Enable Strict ARP in Kube-Proxy (Required for MetalLB)
+  shell: |
+    kubectl get configmap kube-proxy -n kube-system -o yaml | \
+    sed 's/strictARP: false/strictARP: true/' | \
+    kubectl apply -f - -n kube-system
+  delegate_to: localhost
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+
+- name: 7.2 - Install MetalLB Manifests
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  command: "kubectl apply -f {{ item }} --validate=false"
+  loop:
+    - https://raw.githubusercontent.com/metallb/metallb/v0.14.3/config/manifests/metallb-native.yaml
+  delegate_to: localhost
+
+- name: 7.2b - Give the API a moment to breathe
+  pause:
+    seconds: 10
+
+- name: 7.3 - Wait for MetalLB Controller to exist and be Ready
+  shell: "kubectl get pods -n metallb-system -l app=metallb,component=controller -o jsonpath='{.items[0].status.phase}'"
+  register: mlb_check
+  until: mlb_check.stdout == "Running"
+  retries: 20
+  delay: 10
+  delegate_to: localhost
+  failed_when: false # Prevents crashing if the pod isn't created in the first 1 second
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+
+- name: 7.2c - Give the API a moment to breathe againt
+  pause:
+    seconds: 20
+
+- name: 7.4 - Configure MetalLB IP Pool and L2 Advertisement
+  delegate_to: localhost
+  environment:
+    KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+  shell: |
+    cat <<EOF | kubectl apply --validate=false -f -
+    apiVersion: metallb.io/v1beta1
+    kind: IPAddressPool
+    metadata:
+      name: first-pool
+      namespace: metallb-system
+    spec:
+      addresses:
+      - 10.0.0.200-10.0.0.200
+    ---
+    apiVersion: metallb.io/v1beta1
+    kind: L2Advertisement
+    metadata:
+      name: example-ad
+      namespace: metallb-system
+    spec:
+      ipAddressPools:
+      - first-pool
+    EOF
+  register: apply_result
+  until: apply_result.rc == 0
+  retries: 10
+  delay: 15
+
+- name: 7.5 - Expose Nginx Smoke Test via MetalLB
+  shell: |
+    cat <<EOF | kubectl apply -f -
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: nginx-lb
+    spec:
+      selector:
+        app: nginx
+      ports:
+        - protocol: TCP
+          port: 80
+          targetPort: 80
+      type: LoadBalancer
+      loadBalancerIP: {{ metallb_vip }}
+    EOF
+  delegate_to: localhost
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"

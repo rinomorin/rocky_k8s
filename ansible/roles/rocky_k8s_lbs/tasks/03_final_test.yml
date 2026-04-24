@@ -1,0 +1,57 @@
+# 03_final_test.yml
+- name: Power Cycle and Connectivity Verification
+  block:
+    - name: Hard Power Off VMs
+      delegate_to: "{{ VM_HOST_IP }}"
+      shell: "sudo virsh destroy {{ item.split('.')[0] }} || true"
+      loop: "{{ groups['hahost'] }}"
+
+    - name: Wait for state settlement
+      pause:
+        seconds: 5
+
+    - name: Power On VMs
+      delegate_to: "{{ VM_HOST_IP }}"
+      shell: "sudo virsh start {{ item.split('.')[0] }}"
+      loop: "{{ groups['hahost'] }}"
+
+    - name: Wait for SSH on Production IP
+      delegate_to: localhost
+      wait_for:
+        host: "{{ hostvars[item].ansible_host }}"
+        port: 22
+        state: started
+        delay: 10
+        timeout: 120
+      loop: "{{ groups['hahost'] }}"
+
+    - name: Final Verification - Internal Services
+      delegate_to: localhost
+      vars:
+        ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
+      shell: |
+        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} "systemctl is-active haproxy keepalived"
+      loop: "{{ groups['hahost'] }}"
+      register: service_status
+      failed_when: service_status.rc != 0
+
+    - name: 1.1 - Open Ports and Start Services on HA Hosts
+      delegate_to: localhost
+      vars:
+        ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
+      shell: |
+        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --permanent --add-port=6443/tcp 
+        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --permanent --add-rich-rule='rule protocol value=\"vrrp\" accept'
+        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --reload
+        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} sudo systemctl enable --now haproxy keepalived
+      # loop: "{{ groups['hahost'] }}"
+      register: lb_bootstrap
+      failed_when: lb_bootstrap.rc != 0
+
+    - name: 1.2 - Verify VIP is now active (Ping Test)
+      delegate_to: localhost
+      shell: "ping -c 3 {{ k8s_api_vip }}"
+      register: vip_ping
+      until: vip_ping.rc == 0
+      retries: 5
+      delay: 5

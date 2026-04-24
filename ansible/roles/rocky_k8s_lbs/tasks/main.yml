@@ -1,0 +1,27 @@
+---
+- name: initialize IPs
+  set_fact:
+    lb_ip_list:
+      - maintenance_lb: ""
+      - provider_lb: ""
+      - provision_lb: ""
+      - cluster_lb: ""
+
+## 00 precheck
+- import_tasks: 00_pre_check.yml
+- debug:
+    msg: "skip_build {{ skip_build }}"
+- block:
+  # # 00: Prep DNS so the network identity exists
+  # - import_tasks: 00_dns_registration.yml
+
+  # 01: Create the hardware (VMs) and flip them to static IPs
+  - import_tasks: 01_clone_lbs.yml
+
+  # 02: Install services and push HA configurations
+  - import_tasks: 02_configure_lbs.yml
+
+  # 03: Final Test 
+  - import_tasks: 03_final_test.yml
+  when: not skip_build | bool
+

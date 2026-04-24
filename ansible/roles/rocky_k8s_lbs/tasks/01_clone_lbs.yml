@@ -1,0 +1,130 @@
+# 01_clone_lbs.yml
+---
+- name: Clone Load Balancer nodes from Golden Image
+  delegate_to: "{{ VM_HOST_IP }}"
+  command: >
+    sudo virt-clone --original {{ golden_image_name }}
+    --name {{ item.split('.')[0] }} 
+    --file /var/lib/libvirt/images/{{ item.split('.')[0] }}.qcow2
+  loop: "{{ groups['hahost'] }}"
+  register: lb_clones
+  failed_when: 
+    - lb_clones.rc != 0 
+    - "'already exists' not in lb_clones.stderr"
+
+- name: Start cloned VMs
+  delegate_to: "{{ VM_HOST_IP }}"
+  community.libvirt.virt:
+    name: "{{ item.split('.')[0] }}"
+    state: running
+  loop: "{{ groups['hahost'] }}"
+
+- name: 1.1 - Discover Maintenance IP from br-nat
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    M_MAC=$(sudo virsh domiflist {{ item.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    while ! sudo virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
+    sudo virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+  register: maintenance_ip_raw
+  loop: "{{ groups['hahost'] }}"
+
+- name: 1.2 - Verify Maintenance SSH (sshok)
+  delegate_to: localhost
+  vars:
+    m_ip: "{{ item.stdout }}"
+    key_path: "/home/cloud_helper/.ssh/id_rsa"
+  shell: |
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }} core@{{ m_ip }} "echo sshok"
+  register: ssh_test
+  until: "'sshok' in ssh_test.stdout"
+  retries: 5
+  delay: 3
+  loop: "{{ maintenance_ip_raw.results }}"
+
+- name: 1.3 - Store Maintenance IPs
+  set_fact:
+    maintenance_map: "{{ maintenance_map | default({}) | combine({ item.item: item.stdout }) }}"
+  loop: "{{ maintenance_ip_raw.results }}"
+
+- name: 1.3b - Store Maintenance IPs directly on HAProxy hosts
+  ansible.builtin.set_fact:
+    maintenance_lb: "{{ item.stdout }}"
+  # This matches the loop item (e.g. msrlv9l01) to the actual inventory host
+  delegate_to: "{{ item.item }}"
+  delegate_facts: true
+  loop: "{{ maintenance_ip_raw.results }}"
+
+- name: 1.4 - Debug Verification (Optional)
+  ansible.builtin.debug:
+    msg: "Host {{ item }} has maintenance IP {{ hostvars[item].maintenance_lb }}"
+  loop: "{{ groups['hahost'] }}"
+
+- name: 2.1 - Discover Provider MAC from default network
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    sudo virsh domiflist {{ item.split('.')[0] }} | grep 'default' | awk '{print $5}'
+  register: provider_mac_raw
+  loop: "{{ groups['hahost'] }}"
+
+- name: 2.2 - Configure Provider IP via Maintenance Tunnel
+  delegate_to: localhost
+  vars:
+    provider_ip: "{{ hostvars[item].ansible_host }}"
+    provider_gw: "{{ hostvars['kvmdc01'].libvirt_networks | selectattr('name', 'equalto', 'default') | map(attribute='cidr') | first | ansible.utils.ipaddr('net') | ansible.utils.ipaddr('1') | split('/') | first }}"
+    m_ip: "{{ maintenance_map[item] }}"
+    p_mac: "{{ (provider_mac_raw.results | selectattr('item', 'equalto', item) | first).stdout }}"
+    key_path: "/home/cloud_helper/.ssh/id_rsa"
+    dns_servers: "{{ groups['dns'] | map('extract', hostvars, 'ansible_host') | join(' ') }}"
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }} core@{{ m_ip }}"
+  shell: |
+    # 1. Get the Device name (e.g. eth1) by looking for the line AFTER the MAC match
+    # nmcli -t output usually puts GENERAL.DEVICE right above GENERAL.HWADDR
+    DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
+
+    # 2. Cleanup existing profile
+    {{ ssh_cmd }} "sudo nmcli con delete provider || true"
+
+    # 3. Add and Configure the connection
+    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name provider ifname $DEV ipv4.method manual ipv4.addresses {{ provider_ip }}/24 ipv4.gateway {{ provider_gw }} ipv4.dns '{{ dns_servers }}' connection.autoconnect yes"
+
+    # 4. Bring it up
+    {{ ssh_cmd }} "sudo nmcli con up provider"
+  loop: "{{ groups['hahost'] }}"
+
+- name: 2.3 - Discover Cluster MAC from br-cluster
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    sudo virsh domiflist {{ item.split('.')[0] }} | grep 'br-cluster' | awk '{print $5}'
+  register: cluster_mac_raw
+  loop: "{{ groups['hahost'] }}"
+
+- name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
+  delegate_to: localhost
+  vars:
+    node_ip: "{{ hostvars[item].node_ip }}"
+    m_ip: "{{ maintenance_map[item] }}"
+    c_mac: "{{ (cluster_mac_raw.results | selectattr('item', 'equalto', item) | first).stdout }}"
+    key_path: "/home/cloud_helper/.ssh/id_rsa"
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }} core@{{ m_ip }}"
+  shell: |
+    # 1. Get the Device name (e.g. eth2) by matching the Cluster MAC
+    DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ c_mac }}" | head -n 1 | cut -d: -f2)
+
+    # 2. Cleanup existing profile if it exists
+    {{ ssh_cmd }} "sudo nmcli con delete cluster || true"
+
+    # 3. Add and Configure the 10.0.0.x connection
+    # Note: No gateway here, as the default GW stays on the Provider network
+    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name cluster ifname $DEV ipv4.method manual ipv4.addresses {{ node_ip }}/24 connection.autoconnect yes"
+
+    # 4. Bring it up
+    {{ ssh_cmd }} "sudo nmcli con up cluster"
+  loop: "{{ groups['hahost'] }}"
+
+- name: Verify SSH reachability on Static IPs
+  wait_for:
+    host: "{{ hostvars[item].ansible_host }}"
+    port: 22
+    state: started
+    timeout: 60
+  loop: "{{ groups['hahost'] }}"

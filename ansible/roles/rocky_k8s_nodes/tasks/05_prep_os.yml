@@ -1,0 +1,82 @@
+---
+# ============================================================
+# STEP 1: Discover All MACs and Maintenance IP (Host Side)
+# ============================================================
+- name: 1.1 - Map MAC Addresses and Maintenance IP
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    VM="{{ item.split('.')[0] }}"
+    # Get the MACs for each specific bridge
+    PROV_MAC=$(sudo virsh domiflist $VM | grep 'default' | awk '{print $5}')
+    CLUS_MAC=$(sudo virsh domiflist $VM | grep 'br-cluster' | awk '{print $5}')
+    NAT_MAC=$(sudo virsh domiflist $VM | grep 'br-nat' | awk '{print $5}')
+    
+    # Get the current DHCP IP on the NAT bridge to enter the VM
+    M_IP=$(sudo virsh net-dhcp-leases br-nat | grep "$NAT_MAC" | awk '{print $5}' | cut -d/ -f1)
+    
+    echo "PROV_MAC=$PROV_MAC|CLUS_MAC=$CLUS_MAC|M_IP=$M_IP"
+  register: node_network_info
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: item != 'helper'
+
+# ============================================================
+# STEP 2: Configure Static IPs via MAC Addressing (VM Side)
+# ============================================================
+- name: 1.2 - Configure Static IPs by MAC
+  delegate_to: localhost
+  vars:
+    # Extract data from the previous shell task
+    raw_info: "{{ (node_network_info.results | selectattr('item', 'equalto', item) | first).stdout }}"
+    prov_mac: "{{ raw_info | regex_search('PROV_MAC=([0-9a-fA-F:]+)', '\\1') | first }}"
+    clus_mac: "{{ raw_info | regex_search('CLUS_MAC=([0-9a-fA-F:]+)', '\\1') | first }}"
+    m_ip: "{{ raw_info | regex_search('M_IP=([0-9.]+)', '\\1') | first }}"
+    
+    ssh_opts: "-o StrictHostKeyChecking=no -o BatchMode=yes -i {{ ssh_key_path }}"
+    p_ip: "{{ hostvars[item].provider_ip | default('') }}"
+    node_ip: "{{ hostvars[item].node_ip | default('') }}"
+  shell: |
+    # 1. Map MAC to Device Name inside the VM
+    # This command finds the 'ethX' name that matches the MAC address exactly
+    NODE_DEV=$(ssh {{ ssh_opts }} core@{{ m_ip }} "ip -o link show | grep -i '{{ clus_mac }}' | awk '{print \$2}' | sed 's/://'")
+    
+    # 2. Configure Cluster Network (Required for ALL)
+    ssh {{ ssh_opts }} core@{{ m_ip }} << EOF
+      sudo nmcli con add type ethernet con-name cluster-net ifname $NODE_DEV \
+      ipv4.method manual ipv4.addresses {{ node_ip }}/24 connection.autoconnect yes
+      sudo nmcli con up cluster-net
+    EOF
+
+    # 3. Configure Provider Network (Only for Masters)
+    if [ -n "{{ p_ip }}" ]; then
+      PROV_DEV=$(ssh {{ ssh_opts }} core@{{ m_ip }} "ip -o link show | grep -i '{{ prov_mac }}' | awk '{print \$2}' | sed 's/://'")
+      ssh {{ ssh_opts }} core@{{ m_ip }} << EOF
+        sudo nmcli con add type ethernet con-name provider-net ifname $PROV_DEV \
+        ipv4.method manual ipv4.addresses {{ p_ip }}/24 connection.autoconnect yes
+        sudo nmcli con up provider- 
+      EOF
+    fi
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: item != 'helper'
+
+# ============================================================
+# STEP 3: Black Hole Provider for Workers
+# ============================================================
+- name: 2.1 - Isolate Provider Interface on Workers
+  delegate_to: "{{ VM_HOST_IP }}"
+  vars:
+    raw_info: "{{ (node_network_info.results | selectattr('item', 'equalto', item) | first).stdout }}"
+    prov_mac: "{{ raw_info | regex_search('PROV_MAC=([0-9a-fA-F:]+)', '\\1') | first }}"
+  shell: |
+    VM="{{ item.split('.')[0] }}"
+    cat <<EOF > /tmp/${VM}_prov_dead.xml
+    <interface type='network'>
+      <mac address='{{ prov_mac }}'/>
+      <source network='black-hole'/>
+      <link state='down'/>
+    </interface>
+    EOF
+    sudo virsh update-device $VM /tmp/${VM}_prov_dead.xml --live --config
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: 
+    - item != 'helper'
+    - "'wrk' in item"

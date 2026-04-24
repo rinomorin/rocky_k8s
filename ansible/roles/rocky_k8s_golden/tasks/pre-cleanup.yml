@@ -1,0 +1,56 @@
+---
+- name: Audit VM disk and backing store metadata
+  shell: |
+    VMS=$(virsh list --name --all)
+    if [ -z "$VMS" ]; then
+        exit 0
+    fi
+    for vm in $VMS; do
+        xml=$(virsh dumpxml "$vm")
+        disk_path=$(echo "$xml" | xmllint --xpath "string(//disk/source/@file)" - 2>/dev/null)
+        back_path=$(echo "$xml" | xmllint --xpath "string(//disk/backingStore/source/@file)" - 2>/dev/null)
+        disk_file=$(basename "$disk_path")
+        link_file=$( [ -n "$back_path" ] && basename "$back_path" || echo "none" )
+        echo "vm=$vm,disk_file=$disk_file,link_file=$link_file"
+    done
+  register: disk_output
+  changed_when: false
+
+- name: Exit early if no VMs are present
+  # This stops the current file and returns to main.yml if no VMs exist
+  ansible.builtin.meta: end_host
+  when: disk_output.stdout | trim == ""
+
+- name: Identify protected parent VMs
+  set_fact:
+    vm_map: "{{ vm_map | default({}) | combine({ item.split(',')[0].split('=')[1] : item.split(',')[2].split('=')[1] }) }}"
+  loop: "{{ disk_output.stdout_lines }}"
+  # Only add to the map if there is a backing file (link_file != none)
+  when: "item.split(',')[2].split('=')[1] != 'none'"
+
+- name: Set protection and deletion lists
+  set_fact:
+    # We use | default({}) here so that if vm_map was never created, the task won't crash
+    do_not_delete_list: "{{ (vm_map | default({})).values() | map('regex_replace', '\\.qcow2$', '') | unique | list + [golden_image_name] }}"
+    
+- name: Determine safe to delete list
+  set_fact:
+    safe_to_delete: >-
+      {{ disk_output.stdout_lines 
+         | map('regex_replace', '^vm=([^,]+),.*', '\\1') 
+         | difference(do_not_delete_list) 
+         | select('match', vm_prefix_filter) 
+         | reject('search', build_date) 
+         | list }}
+
+- name: Execute VM and storage removal
+  shell: |
+    virsh destroy "{{ item }}" 2>/dev/null || true
+    virsh undefine "{{ item }}" --remove-all-storage
+  loop: "{{ safe_to_delete }}"
+  when: safe_to_delete | length > 0
+
+- name: Report cleanup status
+  debug:
+    msg: "Cleaned up the following VMs: {{ safe_to_delete }}"
+  when: safe_to_delete | length > 0

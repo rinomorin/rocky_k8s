@@ -1,0 +1,44 @@
+---
+# -------------------------------------------------------------------------
+# BUILD PROFILE: 'infra' (Rocky 10) or 'k8s' (Rocky 9)
+# -------------------------------------------------------------------------
+# This checks if 'BUILD_PROFILE' is already defined (via -e), 
+# then checks the env, then defaults to 'k8s'
+build_profile: "{{ BUILD_PROFILE | default(lookup('env', 'BUILD_PROFILE')) | default('k8s', true) }}"
+build_date: "{{ lookup('pipe', 'date +%Y%m%d') }}"
+build_timestamp: "{{ lookup('pipe', 'date +%Y%m%d-%H%M') }}"
+build_loops: "{{ BUILD_LOOPS_VAR | default(lookup('env', 'build_loops')) | default(120, true) }}"
+VM_HOST: "{{ lookup('env', 'VM_HOST') | default(groups['kvm'][0], true) }}"
+VM_HOST_IP: "{{ lookup('env', 'VM_HOST_IP') | default(hostvars[VM_HOST]['ansible_host'], true) }}"
+cloud_helper_user: "{{ lookup('env', 'CLOUD_HELPER_USER') | default('cloud-helper', true) }}"
+
+# OS & Version MappingBUI
+tos_name: "rocky"
+tos_variant: "{{ '10' if build_profile == 'infra' else '9' }}"
+# Automatically turns "9.4" into "9r4"
+safe_os_version: "{{ tos_variant | replace('.', 'r') }}"
+golden_image_name: "gi-{{ build_profile }}-{{ safe_os_version }}-{{ build_date }}"
+vm_prefix_filter: "^gi-"
+crio_version: "{{ lookup('env', 'crio_version') | default('1.34', true) }}"
+kubernetes_version: "{{ lookup('env', 'K8S_VERSION') | default('1.34', true) }}"
+iso_path: "/var/lib/libvirt/images/Rocky-{{ tos_variant }}-latest-x86_64-dvd.iso"
+
+# Resource Scaling based on Profile
+# Infra (Gateways) stay lean; K8s (Nodes) get more resources
+tram_size: "{{ 4096 if build_profile == 'infra' else 8192 }}"
+tcpu_count: "{{ 2 if build_profile == 'infra' else 4 }}"
+tdisk_size: "{{ 40 if build_profile == 'infra' else 60 }}"
+
+# SSH & Identity (Generic/Sanitized)
+core_ssh_key: >-
+  {{ 
+    lookup('env', 'secops_key') | default(
+      lookup('file', lookup('env', 'helper_ssh_pubkey_path') | default('~/.ssh/id_rsa.pub', true)),
+      true
+    ) 
+  }}
+cloud_zone: "{{ lookup('env', 'cloud_zone') | default('example.lan', true) }}"
+
+# Software Versions
+# crio_version: "{{ lookup('env', 'crio_version') | default('1.34', true) }}"
+# kubernetes_version: "{{ lookup('env', 'K8S_VERSION') | default('1.34', true) }}"

@@ -1,0 +1,352 @@
+# -------------------------------------------------------------------------
+# 1. PRE-CALCULATE FINAL NETWORK (Avoid Migration)
+# -------------------------------------------------------------------------
+- name: "Set Target Network Fact for {{ guest_member }}"
+  set_fact:
+    target_network: "{{ 'default' if guest_configs[guest_member].profile == 'infra' else 'br-nat' }}"
+    
+
+- name: "Find Golden Image for {{ guest_member }}"
+  become: true
+  delegate_to: kvmdc01
+  shell: |
+    # Get the primary disk path
+    DISK_PATH=$(virsh dumpxml "{{ guest_member }}" | grep -oP "file='\K[^']+" | head -1)
+    
+    # Use -U (force-share) to bypass the lock on a running VM
+    BACKING=$(qemu-img info -U "$DISK_PATH" | grep "backing file:" | cut -d ':' -f2- | xargs)
+    
+    if [ -n "$BACKING" ]; then
+      basename "$BACKING"
+    else
+      echo "none"
+    fi
+  register: golden_image_raw
+  changed_when: false
+
+- name: "Determine Image for {{ guest_member }}"
+  set_fact:
+    current_image: "{{ guest_configs[guest_member].image | default('/var/lib/libvirt/images/example-golden.qcow2') }}"
+
+- name: Show default image for {{ guest_member }}
+  debug: 
+    msg: |
+      - "{{ guest_member }} is a child of {{ golden_image_raw.stdout }}"
+      - "{{ guest_member }} current_image is {{ current_image }}"
+
+# -------------------------------------------------------------------------
+# 2. PROVISIONING (CLONE & DEFINE)
+# -------------------------------------------------------------------------
+- name: "Provisioning Block for {{ guest_member }}"
+  when: should_reclone | bool
+  block:
+    # --- SAFETY CHECK: Ensure the dict key exists before calling shell ---
+    - name: "Initialize guest_configs entry for {{ guest_member }}"
+      set_fact:
+        guest_configs: "{{ guest_configs | combine({ guest_member: {} }, recursive=True) }}"
+      when: guest_member not in guest_configs
+
+    - name: "Create Linked Clone Disk: {{ current_image }} to {{ guest_member }}"
+      become: yes
+      shell: >
+        qemu-img create -f qcow2 
+        -b /var/lib/libvirt/images/{{ current_image }}
+        -F qcow2 
+        /var/lib/libvirt/images/{{ guest_member }}.qcow2
+
+    - name: Ensure image readable by QEMU (using sudo shell)
+      become: false  # Do not use Ansible become
+      shell: |
+        # We use sudo directly in the shell string
+        chown qemu:qemu /var/lib/libvirt/images/{{ current_image }}
+        chmod 0644 /var/lib/libvirt/images/{{ current_image }}
+        # Verify the path is accessible to the hypervisor
+        ls -la /var/lib/libvirt/images/{{ current_image }}
+      when: not existing_vms
+      register: iso_perms
+
+    - name: "Define VM Structure: {{ guest_member }}"
+      become: yes
+      shell: |
+        virt-install \
+          --name {{ guest_member }} \
+          --ram {{ tram_size | default(4096) }} \
+          --vcpus {{ tcpu_count | default(2) }} \
+          --metadata description="build_date={{ build_timestamp }},profile={{ build_profile }}" \
+          --disk path=/var/lib/libvirt/images/{{ guest_member }}.qcow2,bus=sata,size={{ tdisk_size }} \
+          --import \
+          --os-variant {{ 'rocky9' if (guest_configs[guest_member].os | default('9')) == '9' else 'rocky10' }} \
+          {% if build_profile == 'k8s' %}
+          --network network=br-nat,model=virtio,link_state=up \
+          --network network=br-cluster,model=virtio,link_state=down \
+          --network network=default,model=virtio,link_state=down \
+          {% else %}
+          --network network=default,model=virtio,link_state=up \
+          {% endif %}
+          --graphics none \
+          --noautoconsole \
+          --noreboot
+  
+    - name: "Ensure ownership for {{ guest_member }} disk"
+      become: yes
+      file:
+        path: "/var/lib/libvirt/images/{{ guest_member }}.qcow2"
+        owner: qemu
+        group: qemu
+        mode: '0644'
+      when: should_reclone | bool
+
+    # 2. Let virt-sysprep do the heavy lifting on the cold disk
+    - name: "- Sysprep and Personalize the Image"
+      become: true
+      command: >
+        virt-sysprep -d {{ guest_member }}
+        --operations machine-id,net-hostname,net-hwaddr,ssh-hostkeys,bash-history,logfiles,tmp-files
+        --delete '/etc/NetworkManager/system-connections/*'
+        --delete '/etc/udev/rules.d/70-persistent-net.rules'
+
+    - name: Sysprep the {{ guest_member }} (On Hypervisor)
+      become: true
+      shell: |
+        # We run this on the KVM host while the VM is OFF
+        virt-sysprep -d {{ guest_member }} \
+          --operations machine-id,net-hostname,net-hwaddr,ssh-hostkeys,customize
+      
+# -------------------------------------------------------------------------
+# 2. START & DISCOVER
+# -------------------------------------------------------------------------
+- name: "Power On {{ guest_member }}"
+  become: yes
+  shell: |
+    virsh start "{{ guest_member }}"
+  register: start_res
+  # Logic: It's only a failure if the return code is non-zero 
+  # AND the error message is NOT "Domain is already active"
+  failed_when: 
+    - start_res.rc != 0 
+    - "'already active' not in start_res.stderr"
+  # Logic: Report 'changed' only if we actually started it
+  changed_when: 
+    - start_res.rc == 0
+
+- name: "Discover Temporary DHCP IP for {{ guest_member }} on {{ target_network }}"
+  become: true
+  shell: |
+    GUEST_IP=$(virsh domifaddr "{{ guest_member }}" --source agent 2>/dev/null | grep -oP '{% raw %}(\d{1,3}\.){3}\d{1,3}{% endraw %}' | grep -v '127.0.0.1' | head -n 1)
+    
+    if [ -z "$GUEST_IP" ]; then
+      GUEST_IP=$(virsh net-dhcp-leases "{{ target_network }}" | grep -i "{{ guest_member }}" | awk '{print $5}' | cut -d/ -f1)
+    fi
+
+    if [ -z "$GUEST_IP" ]; then
+      MAC=$(virsh domiflist "{{ guest_member }}" | grep "{{ target_network }}" | awk '{print $5}' | head -n 1)
+      GUEST_IP=$(virsh net-dhcp-leases "{{ target_network }}" | grep -i "$MAC" | awk '{print $5}' | cut -d/ -f1)
+    fi
+
+    if [ -n "$GUEST_IP" ] && ping -c 1 -W 1 "$GUEST_IP" > /dev/null 2>&1; then
+      echo "$GUEST_IP"
+    else
+      echo "not_found"
+    fi
+  args:
+    executable: /bin/bash
+  register: ip_discovery
+  until: ip_discovery.stdout != "not_found"
+  retries: 50
+  delay: 10
+    
+- name: "Save Temporary IP to guest_configs"
+  set_fact:
+    guest_configs: "{{ guest_configs | combine({
+        guest_member: guest_configs[guest_member] | combine({
+          'reachable_ip': ip_discovery.stdout | trim
+        })
+      }, recursive=True) }}"
+
+- name: "Connectivity Established"
+  debug:
+    msg: "We can now reach {{ guest_member }} at {{ guest_configs[guest_member].reachable_ip }} to apply static config."
+
+# -------------------------------------------------------------------------
+# 4. MAP FACTS & ZONES
+# -------------------------------------------------------------------------
+
+- name: "Extract MAC and Network from XML for {{ guest_member }}"
+  become: true
+  shell: |
+    virsh dumpxml "{{ guest_member }}" | \
+    awk -F"'" '/mac address/ {mac=$2} /source network/ {net=$2; print net "," mac}'
+  register: xml_interfaces
+  changed_when: false
+
+- name: "Extract MACs from inside guest {{ guest_member }}"
+  shell: |
+    ssh -o StrictHostKeyChecking=no -i /home/{{ ansible_user }}/.ssh/id_rsa core@{{ guest_configs[guest_member].reachable_ip }} "ip a" | \
+    awk '/^[0-9]+:/ { ifname=$2; sub(/:/, "", ifname) } /link\/ether/ { print ifname "," $2 }'
+  register: guest_interfaces
+
+- name: "Build MAC to Device Name Lookup Map"
+  set_fact:
+    mac_to_dev_map: "{{ dict(guest_interfaces.stdout_lines | map('split', ',') | map('reverse') | list) }}"
+    inventory_configs: {}
+
+# - debug:
+#     msg: "MAC to Device Map for {{ guest_member }}: {{ mac_to_dev_map }}"
+
+- name: "Initialize Interface Dictionary for {{ guest_member }}"
+  set_fact:
+    guest_configs: >-
+      {%- if item.name == 'br-nat' -%}
+        {%- set ip_val = 'DHCP' -%}
+      {%- elif item.name == 'br-cluster' -%}
+        {%- set ip_val = hostvars[guest_member]['provision_ip'] | default('none') -%}
+      {%- else -%}
+        {%- set ip_val = hostvars[guest_member]['provider_ip'] | default(hostvars[guest_member]['ansible_host']) -%}
+      {%- endif -%}
+      {{ 
+        guest_configs | combine({
+          guest_member: guest_configs[guest_member] | combine({
+            'interfaces': guest_configs[guest_member]['interfaces'] | default({}) | combine({
+              item.name: {
+                'name': item.name,
+                'cidr': item.cidr,
+                'mac': 'N/A',
+                'ip': ip_val
+              }
+            })
+          })
+        }, recursive=True) 
+      }}
+  loop: "{{ hostvars['kvmdc01']['libvirt_networks'] }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Map xml_interfaces to dict
+  set_fact:
+    network_segments: "{{ dict(xml_interfaces.stdout_lines | map('split', ',') | list) }}"
+
+
+- name: "Initialize temporary Interface Dictionary for {{ guest_member }}"
+  set_fact:
+    inventory_configs: >-
+      {%- if item.name == net_maintenance -%}
+        {%- set ip_val = 'DHCP' -%}
+      {%- elif item.name == net_provision -%}
+        {%- set ip_val = hostvars[guest_member]['provision_ip'] | default('none') -%}
+      {%- else -%}
+        {%- set ip_val = hostvars[guest_member]['provider_ip'] | default(hostvars[guest_member]['ansible_host']) -%}
+      {%- endif -%}
+      
+      {{ 
+        inventory_configs | combine({
+          guest_member: inventory_configs[guest_member] | default({'interfaces': {}}) | combine({
+            'interfaces': inventory_configs[guest_member]['interfaces'] | default({}) | combine({
+              item.name: {
+                'name': item.name,
+                'cidr': item.cidr,
+                'mac': 'N/A',
+                'ip': ip_val
+              }
+            })
+          })
+        }, recursive=True) 
+      }}
+  loop: "{{ hostvars['kvmdc01']['libvirt_networks'] }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Patch interface MACs from network_segments
+  set_fact:
+    inventory_configs: >-
+      {{
+        inventory_configs | combine({
+          guest_member:
+            inventory_configs[guest_member] | combine({
+              'interfaces':
+                inventory_configs[guest_member]['interfaces'] | combine({
+                  item.key:
+                    inventory_configs[guest_member]['interfaces'][item.key] | combine({
+                      'mac': item.value
+                    })
+                })
+            })
+        }, recursive=True)
+      }}
+  loop: "{{ network_segments | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}" 
+
+- name: initial guess_network
+  set_fact:
+    guess_network: {}
+
+- name: "Map Live MACs directly to Inventory Keys"
+  set_fact:
+    # We use | combine on the dict itself, ensuring it stays a dict
+    guest_configs: "{{ guest_configs | combine({
+        guest_member: guest_configs[guest_member] | combine({
+          'interfaces': guest_configs[guest_member]['interfaces'] | combine({
+            (item.key | trim): guest_configs[guest_member]['interfaces'][item.key | trim] | combine({
+              'mac': item.value,
+              'devname': mac_to_dev_map[item.value] | default('unknown')
+            })
+          })
+        })
+      }, recursive=True) }}"
+  loop: "{{ network_segments | dict2items }}"
+  when: 
+    - xml_interfaces.stdout_lines | length > 0
+    # Use .get() or check if it's a mapping to prevent the 'str' error
+    - guest_configs is mapping
+    # - (item.split(',')[0] | trim) in guest_configs[guest_member]['interfaces']
+      
+- name: "Final Infrastructure Report for {{ guest_member }}"
+  vars:
+    nat_seg: "{{ net_maintenance }}"
+    pro_seg: "{{ net_provider }}"
+    cld_seg: "{{ net_provision }}"
+  debug:
+    msg: 
+      - "========================================================"
+      - "           INFRASTRUCTURE DEPLOYMENT REPORT             "
+      - "========================================================"
+      - "GUEST IDENTITY"
+      - "  Name         : {{ guest_member }}"
+      - "  Profile      : {{ guest_configs[guest_member].profile | default('unknown') | upper }}"
+      - "  FQDN         : {{ guest_configs[guest_member].fqdn | default('example.local') }}"
+      - "  Image        : {{ guest_configs[guest_member].image | default('none') }}"
+      - "  OS           : {{ guest_configs[guest_member].os | default('9') }}"
+      - "--------------------------------------------------------"
+      - "CONNECTIVITY STATE"
+      - "  Reachable IP : {{ guest_configs[guest_member].reachable_ip | default('NOT FOUND') }}"
+      - "  Target Net   : {{ guest_configs[guest_member].network | default('example-net') }}"
+      - "--------------------------------------------------------"
+      - "FINAL CONFIGURATION"
+      - "  Assigned IP  : {{ guest_configs[guest_member].assigned_ip | default('none') }}"
+      - "  Provider IP  : {{ hostvars[guest_member]['provider_ip'] | default('none') }}"
+      - "  Provision IP : {{ hostvars[guest_member]['provision_ip'] | default('none') }}"
+      - "--------------------------------------------------------"
+      - "--------------------------------------------------------"
+      - "PROVIDER NETWORK"
+      - "  Name/CIDR    : {{ guest_configs[guest_member].interfaces[pro_seg].name | default('N/A') }} ({{ guest_configs[guest_member].interfaces[pro_seg].cidr | default('N/A') }})"
+      - "  MAC          : {{ guest_configs[guest_member].interfaces[pro_seg].mac | default('N/A') }}"
+      - "  Device Name  : {{ guest_configs[guest_member].interfaces[pro_seg].devname | default('N/A') }}"
+      - "  IP           : {{ guest_configs[guest_member].interfaces[pro_seg].ip | default('N/A') }}"
+      - "--------------------------------------------------------"
+      - "PROVISION NETWORK"
+      - "  Name/CIDR    : {{ guest_configs[guest_member].interfaces[cld_seg].name | default('N/A') }} ({{ guest_configs[guest_member].interfaces[cld_seg].cidr | default('N/A') }})"
+      - "  MAC          : {{ guest_configs[guest_member].interfaces[cld_seg].mac | default('N/A') }}"
+      - "  Device Name  : {{ guest_configs[guest_member].interfaces[cld_seg].devname | default('N/A') }}"
+      - "  IP           : {{ guest_configs[guest_member].interfaces[cld_seg].ip | default('N/A') }}"
+      - "--------------------------------------------------------"
+      - "NAT NETWORK {{ nat_seg }}"
+      - "  CIDR         : {{ guest_configs[guest_member].interfaces[nat_seg].cidr | default('N/A') }}"
+      - "  MAC          : {{ guest_configs[guest_member].interfaces[nat_seg].mac | default('N/A') }}"
+      - "  Device Name  : {{ guest_configs[guest_member].interfaces[nat_seg].devname | default('N/A') }}"
+      - "  IP           : {{ guest_configs[guest_member].interfaces[nat_seg].ip | default('N/A') }}"
+      - "========================================================"
+
+- name: Save for Database later
+  become: false
+  import_tasks: write_json.yml
+  

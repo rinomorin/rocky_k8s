@@ -1,0 +1,209 @@
+- name: 1.3.4 - Set Lead Master Maintenance IP Fact
+  set_fact:
+    # Change 'lead_m_ip' to 'golden_ip' to match your next tasks
+    golden_ip: "{{ lead_master_m_ip.stdout | trim }}"
+
+- name: set ssh user for golden-base
+  set_fact:
+    ansible_ssh_user: "core"
+
+
+# ============================================================
+# PLAY 2 — Provision Golden Image (runs inside VM)
+# ============================================================
+# --------------------------------------------------------
+# Install podman
+# --------------------------------------------------------
+- name: Install podman
+  become: false
+  delegate_to: localhost
+  shell: |
+    ssh core@"{{ golden_ip }}" sudo dnf install -y podman
+# --------------------------------------------------------
+# Install kubeadm, kubelet, kubectl
+# --------------------------------------------------------
+- name: Install kubeadm, kubelet, kubectl
+  become: false
+  delegate_to: localhost
+  shell: |
+    ssh core@"{{ golden_ip }}" sudo dnf install -y kubeadm kubelet   kubectl
+
+
+- name: Prepare Golden Image with cloud-init
+  become: false
+  delegate_to: localhost
+  shell: |
+    ssh core@"{{ golden_ip }}" "sudo dnf install -y cloud-init"
+    ssh core@"{{ golden_ip }}" "sudo systemctl enable cloud-init"
+
+# --------------------------------------------------------
+# Install crictl
+# --------------------------------------------------------
+- name: Set crictl version
+  set_fact:
+    crictl_version: "{{ lookup('env','crictl_version') | default('1.30.0', true) }}"
+
+- name: Download crictl
+  become: false
+  delegate_to: localhost
+  get_url:
+    url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ crictl_version }}/crictl-v{{ crictl_version }}-linux-amd64.tar.gz"
+    dest: "/tmp/crictl.tar.gz"
+
+- name: upload crictl to golden-base and extract
+  become: False
+  delegate_to: localhost
+  shell: |
+    scp /tmp/crictl-{{ crictl_version }}.tar.gz core@{{ golden_ip }}:/tmp/crictl.tar.gz
+    ssh core@"{{ golden_ip }}" sudo tar xzf /tmp/crictl.tar.gz -C /usr/local/bin/
+    ssh core@"{{ golden_ip }}" sudo chmod 755 /usr/local/bin/crictl
+    ssh core@"{{ golden_ip }}" sudo ln -s /usr/local/bin/crictl /usr/bin/crictl
+    ssh core@"{{ golden_ip }}" rm -f /tmp/crictl.tar.gz
+    
+- name: setup kube config permissions and placeholder
+  become: false
+  delegate_to: localhost
+  shell: |
+    ssh core@"{{ golden_ip }}" "{{item}}"
+  loop:
+    - "mkdir -p /home/core/.kube"
+    - "chmod 750 /home/core/.kube"
+    - "echo 'kubeconfig will be populated after cluster bootstrap' > /home/core/.kube/config"
+    - "chmod 600 /home/core/.kube/config"    
+
+# Install cri-o
+# --------------------------------------------------------
+- name: Install cri-o
+  become: false
+  delegate_to: localhost
+  shell: |
+    ssh core@"{{ golden_ip }}" sudo dnf install -y cri-o
+
+
+# --------------------------------------------------------
+# Validate binaries
+# --------------------------------------------------------
+- name: Validate kubeadm
+  become: false
+  delegate_to: localhost
+  shell: |
+    ssh core@"{{ golden_ip }}" kubeadm version
+  register: kubeadm_check
+  changed_when: false
+  failed_when: kubeadm_check.rc != 0
+
+- name: Validate kubectl
+  become: false
+  delegate_to: localhost
+  shell: |
+    ssh core@"{{ golden_ip }}" kubectl version --client=true
+  register: kubectl_check
+  changed_when: false
+  failed_when: kubectl_check.rc != 0
+
+- name: Validate crictl
+  become: false
+  delegate_to: localhost
+  command: ssh core@"{{ golden_ip }}" "crictl --version"
+  register: crictl_check
+  changed_when: false
+  failed_when: crictl_check.rc != 0
+
+- name: setup kube config permissions and placeholder
+  become: false
+  delegate_to: localhost
+  shell: |
+    ssh core@"{{ golden_ip }}" "{{item}}"
+  loop:
+    - "mkdir -p /home/core/.kube"
+    - "chmod 750 /home/core/.kube"
+    - "echo 'kubeconfig will be populated after cluster bootstrap' > /home/core/.kube/config"
+    - "chmod 600 /home/core/.kube/config"    
+
+- name: set etcd_ver
+  set_fact:
+    etcd_ver: "{{ lookup('env','etcd_ver') | default('v3.5.12', true) }}"
+
+- name: Download ectd
+  become: false
+  delegate_to: localhost
+  get_url:
+    url: "https://github.com/etcd-io/etcd/releases/download/v3.5.12/etcd-{{ etcd_ver }}-linux-amd64.tar.gz"
+    dest: "/tmp/etcd-{{ etcd_ver }}-linux-amd64.tar.gz"
+
+- name: upload ectd to golden-base and extract
+  become: False
+  delegate_to: localhost
+  shell: |
+    scp /tmp/etcd-{{ etcd_ver }}-linux-amd64.tar.gz core@{{ golden_ip }}:/tmp/etcd-{{ etcd_ver }}-linux-amd64.tar.gz
+    ssh core@"{{ golden_ip }}" sudo tar xzf /tmp/etcd-{{ etcd_ver }}-linux-amd64.tar.gz -C /tmp --strip-components=1 etcd-{{ etcd_ver}}-linux-amd64/etcdctl
+    ssh core@"{{ golden_ip }}" sudo mv /tmp/etcdctl /usr/local/bin/etcdctl
+    ssh core@"{{ golden_ip }}" sudo chmod +x /usr/local/bin/etcdctl
+    ssh core@"{{ golden_ip }}" sudo ln -s /usr/local/bin/etcdctl /usr/bin/etcdctl
+    ssh core@"{{ golden_ip }}" sudo rm -f /tmp/etcd-{{ etcd_ver }}-linux-amd64.tar.gz
+
+
+# --------------------------------------------------------
+# Clean dynamic state before freezing image
+# --------------------------------------------------------
+- name: Clean image for use as a template (Inside VM)
+  delegate_to: localhost
+  become: false
+  shell: |
+    # This cleans the OS state from inside before we shut it down
+    ssh -o StrictHostKeyChecking=no core@"{{ golden_ip }}" "sudo cloud-init clean --logs --seed && sudo rm -rf /var/log/*"
+
+- name: Clear dnf cache
+  become: false 
+  delegate_to: localhost
+  shell: |
+    ssh core@"{{ golden_ip }}" sudo dnf clean all
+  
+
+# --------------------------------------------------------
+# Power off the golden image
+# --------------------------------------------------------
+- name: Power off golden image
+  become: false
+  delegate_to: localhost
+  ignore_errors: true
+  failed_when: false
+  changed_when: false
+  shell: |
+    ssh core@"{{ golden_ip }}" sudo shutdown -h now
+
+
+# --------------------------------------------------------
+# Power off the golden image (via KVM host, not SSH)
+# --------------------------------------------------------
+- name: Power off golden image
+  shell: sudo virsh shutdown golden-base
+  delegate_to: "{{ VM_HOST_IP }}"
+  failed_when: false
+  changed_when: false
+  ignore_errors: true
+
+- name: Wait for golden image to be powered off
+  shell: sudo virsh domstate golden-base
+  register: golden_power
+  until: golden_power.stdout == "shut off"
+  retries: 30
+  delay: 2
+  delegate_to: "{{ VM_HOST_IP }}"
+
+- name: Sysprep the Master (On Hypervisor)
+  delegate_to: "{{ VM_HOST_IP }}"
+  become: true
+  shell: |
+    # We run this on the KVM host while the VM is OFF
+    virt-sysprep -d {{ groups['control_nodes'][0].split('.')[0]}} \
+      --operations machine-id,net-hostname,net-hwaddr,ssh-hostkeys,customize \
+      --hostname {{ groups['control_nodes'][0].split('.')[0]}}.{{ c_zone }}
+
+- name: rm local downloaded crictl archive
+  delegate_to: localhost
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/tmp/crictl.tar.gz"

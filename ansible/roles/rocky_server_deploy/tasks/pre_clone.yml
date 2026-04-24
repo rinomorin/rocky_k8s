@@ -1,0 +1,30 @@
+---
+- name: "Connectivity Check: SSH Probe for {{ guest_member }}"
+  become: false
+  shell: >
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null 
+    -o BatchMode=yes -o ConnectTimeout=3 -i .ssh/id_rsa
+    core@{{ guest_configs[guest_member].interfaces[pro_seg].ip }} 'true'
+  register: live_check
+  # We use this to keep the console clean and non-red
+  failed_when: false
+  changed_when: false
+
+- name: "Evaluate Skip Condition"
+  set_fact:
+    skip_config: >-
+      {{
+        live_check.rc == 0 and 
+        not (reclone_all | default(false)) and 
+        guest_member not in (reclone_nodes | default([]))
+      }}
+
+- name: "Status: {{ guest_member }}"
+  debug:
+    msg: "SSH Success. Skipping configuration for {{ guest_member }} to protect data."
+  when: skip_config | bool
+
+# - name: "Run Guest Configuration"
+#   include_tasks: 03_Config_guest.yml
+#   # We only run if skip_config is false (meaning either SSH failed or we want a reclone)
+#   when: not skip_config | bool

@@ -1,0 +1,60 @@
+---
+- name: "Ensure state directory exists on control node"
+  file:
+    path: "{{ playbook_dir }}/../state"
+    state: directory
+  delegate_to: localhost
+
+- name: "Check if infrastructure state file exists"
+  stat:
+    path: "{{ playbook_dir }}/../state/deployment_report.json"
+  register: state_file
+  delegate_to: localhost
+
+- name: "Read existing infrastructure state"
+  slurp:
+    src: "{{ playbook_dir }}/../state/deployment_report.json"
+  register: existing_state_raw
+  when: state_file.stat.exists
+  delegate_to: localhost
+
+- name: "Consolidate and Merge State Data"
+  set_fact:
+    full_infra_state: >-
+      {%- set existing = (existing_state_raw.content | b64decode | from_json) if (state_file.stat.exists and not existing_state_raw.failed) else {'infrastructure': {}, 'golden_images': {}} -%}
+      {%- if guest_member is defined and guest_configs is defined -%}
+        {%- set infra_updates = existing.infrastructure | combine({guest_member: guest_configs[guest_member]}, recursive=True) -%}
+        {{ existing | combine({'infrastructure': infra_updates}) }}
+      {%- elif golden_image_name is defined -%}
+        {%- set image_info = {
+            'name': golden_image_name,
+            'build_date': build_date | default(lookup('pipe', 'date +%Y%m%d')),
+            'profile': build_profile | default('unknown'),
+            'os_variant': tos_variant | default('unknown'),
+            'specs': {
+                'cpu': tcpu_count | default(2),
+                'ram': tram_size | default(4096),
+                'disk': tdisk_size | default(40)
+            },
+            'versions': {
+                'crio': crio_version | default('N/A'),
+                'k8s': kubernetes_version | default('N/A')
+            },
+            'login': {
+                'user': cloud_helper_user | default('core'),
+                'ssh_key_path': lookup('env', 'helper_ssh_pubkey_path') | default('~/.ssh/id_rsa.pub')
+            }
+        } -%}
+        {%- set image_updates = existing.golden_images | combine({golden_image_name: image_info}, recursive=True) -%}
+        {{ existing | combine({'golden_images': image_updates}) }}
+      {%- else -%}
+        {{ existing }}
+      {%- endif -%}
+  delegate_to: localhost
+
+- name: "Commit updated state to JSON file"
+  copy:
+    content: "{{ full_infra_state | to_nice_json }}"
+    dest: "{{ playbook_dir }}/../state/deployment_report.json"
+    mode: '0644'
+  delegate_to: localhost

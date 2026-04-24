@@ -1,0 +1,203 @@
+---
+# ============================================================
+# 3.1 - Prepare and "Wash" the Lead Master (Silver Image)
+# ============================================================
+- name: "3.1.1 - Power off {{ groups['control_nodes'][0].split('.')[0]}} for cleaning"
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    if sudo virsh list --all | grep -q "{{ groups['control_nodes'][0].split('.')[0]}}"; then
+      sudo virsh destroy {{ groups['control_nodes'][0].split('.')[0]}} || true
+      for i in {1..15}; do
+        STATE=$(sudo virsh domstate {{ groups['control_nodes'][0].split('.')[0]}})
+        if [ "$STATE" == "shut off" ]; then exit 0; fi
+        sleep 2
+      done
+    fi
+  changed_when: true
+
+- name: "3.1.2 - Sysprep Lead Master (The Silver Image)"
+  delegate_to: "{{ VM_HOST_IP }}"
+  command: >
+    sudo virt-sysprep -d {{ groups['control_nodes'][0].split('.')[0]}} \
+    --operations machine-id,net-hostname,net-hwaddr,ssh-hostkeys,customize
+    --hostname {{ groups['control_nodes'][0].split('.')[0]}}.{{ c_zone }}
+
+- name: "3.1.3 - Force Remove Cluster Nodes from known_hosts"
+  delegate_to: localhost
+  become: false
+  shell: |
+    rm -f ~/.ssh/known_hosts*
+    
+# ============================================================
+# 3.2 - Clone and Prepare the Remaining Nodes
+# ============================================================
+- name: "3.2.1 - Clone the remaining nodes from Lead Master"
+  delegate_to: "{{ VM_HOST_IP }}"
+  command: >
+    sudo virt-clone 
+    --original {{ groups['control_nodes'][0].split('.')[0] }}
+    --name {{ item.split('.')[0] }} 
+    --file /var/lib/libvirt/images/{{ item.split('.')[0] }}.qcow2
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: 
+    - item != 'helper'
+    - item != groups['control_nodes'][0]
+  args:
+    # This prevents re-cloning if the disk already exists
+    creates: "/var/lib/libvirt/images/{{ item.split('.')[0] }}.qcow2"
+
+- name: "3.2.2 - Sysprep the Clones"
+  delegate_to: "{{ VM_HOST_IP }}"
+  command: >
+    sudo virt-sysprep -d {{ item.split('.')[0] }} \
+    --operations machine-id,net-hostname,net-hwaddr,ssh-hostkeys,customize \
+    --hostname {{ item.split('.')[0] }}.{{ c_zone }}
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: 
+    - item != 'helper'
+    - item != groups['control_nodes'][0].split('.')[0]
+
+
+- name: "3.2.3 - Power On All Nodes"
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    if [ "$(sudo virsh domstate {{ item.split('.')[0] }})" == "shut off" ]; then
+      sudo virsh start {{ item.split('.')[0] }}
+    fi
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: item != 'helper'
+
+# ============================================================
+# 3.3 - Discovery (Mapping KVM MACs to Intended IPs)
+# ============================================================
+# ============================================================
+# 3.3 - Discovery (Mapping KVM MACs to Intended IPs)
+# ============================================================
+- name: "3.3.1 - Discovery: Map KVM MACs and Maintenance IPs"
+  delegate_to: "{{ VM_HOST_IP }}"
+  become: true
+  shell: |
+    VM="{{ item.split('.')[0] }}"
+    P_MAC=$(virsh domiflist $VM | grep 'default' | awk '{print $5}')
+    C_MAC=$(virsh domiflist $VM | grep 'br-cluster' | awk '{print $5}')
+    N_MAC=$(virsh domiflist $VM | grep 'br-nat' | awk '{print $5}')
+    M_IP=$(virsh net-dhcp-leases br-nat | grep -i "$N_MAC" | awk '{print $5}' | cut -d/ -f1)
+    
+    if [ -z "$M_IP" ]; then exit 1; fi
+    echo "P_MAC=$P_MAC|C_MAC=$C_MAC|N_MAC=$N_MAC|M_IP=$M_IP"
+  register: temp_net_map
+  until: temp_net_map.rc == 0
+  retries: 50
+  delay: 10
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: item != 'helper'
+
+- name: "3.3.2 - DISPLAY NETWORK MAPPING"
+  debug:
+    msg: |
+      {% for result in temp_net_map.results if result.stdout is defined %}
+      ---------------------------------------------------------
+      NODE: {{ result.item }}
+      MAINT:   {{ (result.stdout | regex_search('N_MAC=([^|]+)', '\1')) | first }} -> {{ (result.stdout | regex_search('M_IP=([^|]+)', '\1')) | first }}
+      PROV:    {{ (result.stdout | regex_search('P_MAC=([^|]+)', '\1')) | first }} -> {{ hostvars[result.item].provider_ip | default('N/A') }}
+      CLUSTER: {{ (result.stdout | regex_search('C_MAC=([^|]+)', '\1')) | first }} -> {{ hostvars[result.item].provision_ip }}
+      {% endfor %}
+
+- name: "3.3.3 - Set Discovery Facts on Nodes"
+  set_fact:
+    discovery_data: "{{ item.stdout }}"
+  loop: "{{ temp_net_map.results }}"
+  when: 
+    - item.stdout is defined
+    - item.item != 'helper'
+  delegate_to: "{{ item.item }}"
+  delegate_facts: true
+
+# ============================================================
+# 3.4 - Network Customization (Using your LBS Logic)
+# ============================================================
+- name: "3.4.1 - Final Network Injection via Maintenance Tunnel"
+  delegate_to: localhost
+  become: false
+  vars:
+    m_ip: "{{ (hostvars[item].discovery_data | regex_search('M_IP=([^|]+)', '\\1')) | first }}"
+    c_mac: "{{ (hostvars[item].discovery_data | regex_search('C_MAC=([^|]+)', '\\1')) | first }}"
+    p_mac: "{{ (hostvars[item].discovery_data | regex_search('P_MAC=([^|]+)', '\\1')) | first }}"
+    target_c_ip: "{{ hostvars[item].provision_ip }}"
+    target_p_ip: "{{ hostvars[item].provider_ip | default('N/A') }}"
+    key_path: "/home/cloud_helper/.ssh/id_rsa"
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }} core@{{ m_ip }}"
+  shell: |
+    # 1. Find CLUSTER device name by MAC
+    C_DEV=$({{ ssh_cmd }} "grep -l '{{ c_mac | lower }}' /sys/class/net/*/address | cut -d/ -f5")
+    
+    if [ -n "$C_DEV" ]; then
+      echo "Configuring Cluster Net on $C_DEV"
+      {{ ssh_cmd }} "sudo nmcli device disconnect $C_DEV || true"
+      {{ ssh_cmd }} "sudo nmcli con delete cluster-net || true"
+      {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name cluster-net ifname $C_DEV 802-3-ethernet.mac-address {{ c_mac }} ipv4.method manual ipv4.addresses {{ target_c_ip }}/24 connection.autoconnect yes"
+      {{ ssh_cmd }} "sudo nmcli con up cluster-net"
+    fi
+
+    # 2. Find PROVIDER device name by MAC
+    if [ "{{ target_p_ip }}" != "N/A" ]; then
+      P_DEV=$({{ ssh_cmd }} "grep -l '{{ p_mac | lower }}' /sys/class/net/*/address | cut -d/ -f5")
+      if [ -n "$P_DEV" ]; then
+        echo "Configuring Provider Net on $P_DEV"
+        {{ ssh_cmd }} "sudo nmcli device disconnect $P_DEV || true"
+        {{ ssh_cmd }} "sudo nmcli con delete provider-net || true"
+        {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name provider-net ifname $P_DEV 802-3-ethernet.mac-address {{ p_mac }} ipv4.method manual ipv4.addresses {{ target_p_ip }}/24 connection.autoconnect yes"
+        {{ ssh_cmd }} "sudo nmcli con up provider-net"
+      fi
+    fi
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: 
+    - item != 'helper'
+    - hostvars[item].discovery_data is defined
+
+- name: "3.4.0 - Isolate the Blackhole Bridge via Firewall"
+  become: true
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    # 1. Get the actual bridge interface name for the 'black-hole' network
+    BR_DEV=$(virsh net-info black-hole | grep "Bridge:" | awk '{print $2}')
+    
+    if [ -n "$BR_DEV" ]; then
+      # 2. Apply surgical isolation using the actual device name
+      if ! firewall-cmd --direct --get-rules eb filter FORWARD | grep -q "$BR_DEV"; then
+        firewall-cmd --permanent --direct --add-rule eb filter FORWARD 0 --logical-in $BR_DEV -j DROP
+        firewall-cmd --reload
+      fi
+    else
+      echo "Error: Libvirt network 'black-hole' not found."
+      exit 1
+    fi
+- name: Get the Blackhole
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    virsh net-info black-hole | grep "Bridge:" | awk '{print $2}'
+  register: blackhole
+  
+- name: "3.4.4 - Move Worker Provider NICs to Blackhole"
+  delegate_to: "{{ VM_HOST_IP }}"
+  vars:
+    p_mac: "{{ (hostvars[item].discovery_data | regex_search('P_MAC=([^|]+)', '\\1')) | first }}"
+    # Change 'br-blackhole' to the name of your isolated bridge
+    blackhole_bridge: "{{ blackhole.stdout }}" 
+  shell: |
+    sudo virsh detach-interface {{ item }} --type bridge --mac {{ p_mac }} --config --live
+    sudo virsh attach-interface {{ item }} --type bridge --source {{ blackhole_bridge }} --mac {{ p_mac }} --model virtio --config --live
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: 
+    - "'wrk' in item"
+    - hostvars[item].discovery_data is defined
+ 
+- name: "3.4.5 - Wait for Network Configuration to Finish"
+  async_status:
+    jid: "{{ item.ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 30
+  delay: 5
+  loop: "{{ network_config_jobs.results }}"
+  when: item.ansible_job_id is defined

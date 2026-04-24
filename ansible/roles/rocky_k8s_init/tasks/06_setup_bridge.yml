@@ -1,0 +1,75 @@
+- name: 6.1.0 - Check if Ingress Controller Namespace exists
+  delegate_to: localhost
+  run_once: true
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user_id }}/.kube/config"
+  ansible.builtin.shell: |
+    kubectl get namespace ingress-nginx --no-headers
+  register: ingress_ns_check
+  failed_when: false
+  changed_when: false
+
+- name: Setup kubeconfig for core user
+  become: yes
+  block:
+    - name: Create .kube directory
+      shell: |
+        mkdir -p /home/core/.kube
+        chown core:core /home/core/.kube
+        chmod 750 /home/core/.kube
+
+    - name: Copy admin.conf to user home
+      shell: |
+        sudo cp -f /etc/kubernetes/admin.conf /home/core/.kube/config
+        sudo chown core:core /home/core/.kube/config
+        sudo chmod 600 /home/core/.kube/config  
+
+  when: "'control_nodes' in group_names"
+
+- name: 6.1.1 - Deploy NGINX Ingress Controller
+  shell: |
+    kubectl apply --validate=false -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
+  # Run this only once from the master node that has the config
+  run_once: true
+  delegate_to: msrlv9mast01
+  become: false
+  environment:
+    # Use the absolute path to the config on that node
+    KUBECONFIG: "/home/core/.kube/config" 
+  register: ingress_result
+  until: ingress_result.rc == 0
+  retries: 5
+  delay: 15
+
+- name: 6.1.2 - Ingress Deployment Summary & Next Steps
+  run_once: true
+  delegate_to: localhost
+  ansible.builtin.debug:
+    msg: 
+      - "---------------------------------------------------------------"
+      - "STAGE 1 COMPLETE: INGRESS CONTROLLER & METALLB ONLINE"
+      - "---------------------------------------------------------------"
+      - "Web Access: http://nginx.{{ cloud_zone }}"
+      - "(Note: HTTPS is not yet implemented)"
+      - ""
+      - "VERIFICATION STEPS:"
+      - "1. Ensure MetalLB IPAddressPool is set to: 10.0.0.200-10.0.0.210"
+      - "2. Deploy applications using the following Ingress spec:"
+      - ""
+      - "apiVersion: networking.k8s.io/v1"
+      - "kind: Ingress"
+      - "metadata:"
+      - "  name: [app-name]-ingress"
+      - "spec:"
+      - "  ingressClassName: nginx"
+      - "  rules:"
+      - "  - http:"
+      - "      paths:"
+      - "      - path: /"
+      - "        pathType: Prefix"
+      - "        backend:"
+      - "          service:"
+      - "            name: [service-name]"
+      - "            port:"
+      - "              number: 80"
+      - "---------------------------------------------------------------"

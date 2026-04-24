@@ -1,0 +1,91 @@
+- name: Get list of specific infra VMs
+  # We use the shell module so the pipe (|) works as expected
+  ansible.builtin.shell: "virsh list --name --all | grep 'gi-{{ build_profile }}' || true"
+  register: infra_vm_check
+  changed_when: false
+
+- name: Run pre-cleanup.yml
+  become: true
+  import_tasks: pre-cleanup.yml
+  run_once: true
+  when: infra_vm_check.stdout | trim != ""
+
+- name: Run basic connectivity commands
+  ansible.builtin.shell: |
+    hostname
+    ip -brief a
+  register: shellout
+  changed_when: false
+
+- name: Show command output
+  ansible.builtin.debug:
+    msg: "{{ shellout.stdout }}"
+
+- name: Check if golden-base already exists on KVM host
+  shell: "virsh list --all | grep -q '{{ golden_image_name }}' && echo 'exists' || echo 'not found'"
+  register: vm_check
+  changed_when: false
+
+- name: Ensure Python requirements are met locally
+  run_once: true
+  become: false
+  delegate_to: localhost
+  pip:
+    requirements: "{{ role_path }}/files/requirements.txt"
+
+- name: Initialize golden-base facts
+  set_fact: 
+    existing_vms: false
+    golden_ip: "unknown"
+    # Create a timestamp for version tracking
+    build_timestamp: "{{ lookup('pipe', 'date +%Y%m%d-%H%M') }}"
+
+- name: create golden image
+  import_tasks: 00_create_golden.yml
+
+# check if the image is already "Sealed"
+- name: "Check if Golden Image is already present"
+  stat:
+    path: "/var/lib/libvirt/images/{{ golden_image_name }}.qcow2"
+  register: gi_stat
+
+- name: "Set Safety Flag"
+  set_fact:
+    skip_factory: "{{ gi_stat.stat.exists and not (force_new_image | default(false) | bool) }}"
+
+- name: "Factory Bypass Notice"
+  debug:
+    msg: "PROTECTION: {{ golden_image_name }} exists. Skipping Factory/Sysprep to avoid disrupting active clones (like ipa01)."
+  when: skip_factory
+
+# Only run these if the image is missing OR we explicitly forced a new build
+- name: Wait for Auto-Install shutdown
+  import_tasks: 01_wait_for_shutdown.yml
+  when: not skip_factory
+
+# - name: Securet the golden image
+#   include_tasks: 02_secure_golden.yml
+#   # when: not skip_factory
+
+- name: Determine if Sysprep is required
+  include_tasks: 03_sysprep.yml
+  when: not skip_factory
+
+- name: "Ensure ownership for golden images"
+  shell: |
+    # Find all files in the images directory starting with 'gi'
+    for img in /var/lib/libvirt/images/gi*; do
+      # Only act if the file actually exists (prevents errors on empty globs)
+      if [ -f "$img" ]; then
+        sudo chown qemu:qemu "$img"
+        sudo chmod 644 "$img"
+      fi
+    done
+  register: ownership_update
+  changed_when: false
+
+- name: "Update Golden Image Database"
+  become: false
+  import_tasks: 04_write_json.yml
+
+# https://gemini.google.com/app/4d52bd0a74995e3b

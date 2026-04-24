@@ -1,0 +1,27 @@
+- name: Check for existing K8s Nodes
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    if sudo virsh list --all | grep -q "{{ item.split('.')[0] }}"; then
+      echo "exists"
+    else
+      echo "missing"
+    fi
+  register: node_check
+  loop: "{{ groups['cluster_nodes'] }}"
+  # We skip 'helper' because it's the physical machine, not a VM to be cloned
+  when: item != 'helper'
+
+- name: Set Build Fact
+  set_fact:
+    skip_build: "{{ not (rebuild_nodes | default(false) | bool) and ('missing' not in node_check.results | selectattr('stdout', 'defined') | map(attribute='stdout') | list) }}"
+
+- name: Cleanup for Rebuild
+  delegate_to: "{{ VM_HOST_IP }}"
+  when: 
+    - rebuild_nodes | default(false) | bool
+    - item != 'helper'
+  shell: |
+    VM="{{ item.split('.')[0] }}"
+    sudo virsh destroy $VM || true
+    sudo virsh undefine $VM --remove-all-storage --nvram || true
+  loop: "{{ groups['cluster_nodes'] }}"

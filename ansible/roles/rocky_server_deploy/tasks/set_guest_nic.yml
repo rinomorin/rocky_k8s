@@ -1,0 +1,139 @@
+- name: "Set guest NIC variables for {{ guest_member }} interface {{ module_zone }}"
+  set_fact:
+    module_value: "{{ module_item.value }}"
+
+- name: "Get vnet and mac for {{ guest_member }} on network {{ module_item.key }}"
+  shell: |
+    # 1. Find the bridge associated with the libvirt network
+    BRIDGE_NAME=$(virsh net-dumpxml "{{ module_item.key }}" | grep "<bridge name=" | sed -E "s/.*name='([^']+)'.*/\1/")
+    
+    # 2. Extract the interface and MAC from the VM
+    virsh domiflist {{ guest_member }} | grep "$BRIDGE_NAME" | awk -v net="{{ module_item.key }}" '{print net "," $1 "," $NF}'
+  register: vnet_result
+  changed_when: false
+  # Only run if we don't have a MAC yet
+  when: 
+    - module_value.mac is defined 
+    - module_value.mac == 'N/A'
+
+- name: "Update module_value with discovered networking for {{ module_item.key }}"
+  set_fact:
+    module_value: "{{ module_value | combine({ 
+        'vnet': vnet_result.stdout.split(',')[1] | trim, 
+        'mac': vnet_result.stdout.split(',')[2] | trim 
+      }) }}"
+  when:
+    - module_value.mac is defined
+    - module_value.mac == 'N/A'
+    - vnet_result.stdout is defined
+    - vnet_result.stdout | length > 0
+    - module_item.key == vnet_result.stdout.split(',')[0] | trim
+
+# - name: "Update module_value with discovered vnet for {{ module_item.key }}"
+#   set_fact:
+#     module_value: "{{ module_value | combine({ 
+#         'vnet': vnet_result.stdout.split(',')[1] | trim
+#       }) }}"
+#   when:
+#     - module_value.mac is defined
+#     - module_value.mac != 'N/A'
+    
+- name: "initial vnet_out for {{ guest_member }}"
+  set_fact:
+    vnet_out: "N/A"
+  when: vnet_out is not defined
+
+- name: Get vnet for {{ guest_member}} on mac {{ module_value.mac }}
+  shell: |
+    for i in $(virsh domiflist helper |grep '{{ module_value.mac }}'|awk '{print $1}'); do echo $i; done
+  register: vnet_result3
+  changed_when: false
+  # Only run if we don't have a MAC yet
+  when: 
+    - vnet_out == 'N/A'
+
+- name: "Update module_value with discovered vnet for {{ module_item.key }}"
+  set_fact:
+    module_value: "{{ module_value | combine({ 
+        'vnet': vnet_result3.stdout | trim
+      }) }}"
+  when:
+    - vnet_out == 'N/A'
+    - vnet_result3.stdout is defined
+    - vnet_result3.stdout | length > 0
+
+- name: Set guest NIC variables for {{ guest_member }} interface {{ module_item.key }}
+  set_fact:
+    module_zone: "{{ module_item.key }}"
+    module_mac: "{{ module_value.mac }}"
+    module_ip: "{{ module_value.ip }}"
+    module_cidr: "{{ module_value.cidr.split('/')[-1] | int }}"
+    module_devname: "{{ module_value.devname | default('N/A') }}"
+    module_network: "{{ module_value.cidr}}"
+    module_vnet: "{{ module_value.vnet | default('N/A') }}"
+
+- name: "Get devname via SSH for {{ guest_member }} for {{ module_value.mac }}"
+  shell: |
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa -T core@{{ guest_ip }} \
+    "nmcli -f GENERAL.DEVICE,GENERAL.HWADDR device show" 2>/dev/null \
+    | awk '/GENERAL.DEVICE/ {dev=$2} /GENERAL.HWADDR/ {print dev ":" $2}' \
+    | grep -i '{{ module_value.mac | trim }}' | cut -d':' -f1
+  register: devname_result
+  changed_when: false
+  when: 
+    - module_value.devname is not defined or module_value.devname | trim | upper == 'N/A'
+    - module_value.mac is search(':') 
+
+- debug:
+    msg: 
+      - "DevName result for {{ guest_member }} on {{ module_zone }}"
+      - "stdout: {{ devname_result.stdout }}"
+  when: 
+    - devname_result.stdout is defined
+    - devname_result.stdout | trim | length > 0
+
+- name: "Update DevName in module_value"
+  set_fact:
+    module_value: "{{ module_value | combine({ 'devname': devname_result.stdout | trim }) }}"
+    module_devname: "{{ devname_result.stdout | trim }}"
+  when: 
+    - devname_result.stdout is defined
+    - devname_result.stdout | trim | length > 0
+
+- name: List current interfaces for {{ guest_member }}
+  debug:
+    msg:
+      - "Interface: {{ module_zone }}"
+      - "  MAC: {{ module_mac }}"
+      - "  IP: {{ module_ip }}"
+      - "  CIDR: {{ module_cidr }}"
+      - "  DevName: {{ module_devname }}"
+      - "  Network: {{ module_network}}"
+      - "  Vnet: {{ module_vnet }}"
+      - "  Guest IP: {{ guest_ip }}"
+  when: 
+    - module_ip is defined and module_ip != 'DHCP'
+
+- name: start vnet {{ module_vnet }} on kvm for {{ guest_member }} if not running
+  shell: "virsh domif-setlink {{ guest_member }} {{ module_vnet }} up"
+  when: 
+    - module_vnet is defined
+    - module_vnet != 'N/A'
+
+- name: Set ip for {{ guest_member }} on {{ module_devname }} to {{ module_ip }}
+  become: false
+  shell: |  
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa -T core@{{ guest_ip }} << 'EOF'
+      # 1. Modify the config on disk
+      sudo nmcli con mod '{{ module_devname }}' \
+        ipv4.addresses '{{ module_ip }}/{{ module_cidr }}' \
+        ipv4.method manual \
+        connection.autoconnect yes
+
+      # 2. Force the interface to pick up the new settings
+      sudo nmcli con up '{{ module_devname }}'
+    EOF
+  when:
+    - module_ip is defined and module_ip != 'DHCP'
+    - module_devname is defined and module_devname != 'N/A'
+

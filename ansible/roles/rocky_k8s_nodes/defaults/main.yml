@@ -1,0 +1,34 @@
+---
+# ------------------------------------------------------------
+# Infrastructure Identity
+# ------------------------------------------------------------
+c_zone: "{{ lookup('env', 'cloud_zone') | default('morinsoft.ca', true) }}"
+p_zone: "{{ lookup('env', 'provision_zone') | default('prov.morinsoft.ca', true) }}"
+ssh_key_path: "{{ lookup('env', 'ssh_key_path') | default('~/.ssh/id_rsa', true) | regex_replace('\\.pub$', '') }}"
+# ------------------------------------------------------------
+# Dynamic CIDR Extraction (from install.yml / inventory)
+# ------------------------------------------------------------
+# We pull from the first host in the 'kvm' group
+kvm_host: "{{ groups['kvm'][0] }}"
+
+cloud_cidr: "{{ hostvars[kvm_host].libvirt_networks | selectattr('name', 'equalto', 'default') | map(attribute='cidr') | first }}"
+prov_cidr:  "{{ hostvars[kvm_host].libvirt_networks | selectattr('name', 'equalto', 'br-cluster') | map(attribute='cidr') | first }}"
+nat_cidr:   "{{ hostvars[kvm_host].libvirt_networks | selectattr('name', 'equalto', 'br-nat') | map(attribute='cidr') | first }}"
+
+# ------------------------------------------------------------
+# Dynamic Reverse Zone Calculation
+# ------------------------------------------------------------
+# Result e.g.: 100.168.192.in-addr.arpa.
+rev_cloud: "{{ cloud_cidr | ansible.utils.ipaddr('revdns') | regex_replace('^0\\.', '') }}"
+rev_prov:  "{{ prov_cidr | ansible.utils.ipaddr('revdns') | regex_replace('^0\\.', '') }}"
+
+# ------------------------------------------------------------
+# Service Configuration
+# ------------------------------------------------------------
+k8s_api_vip: "{{ lookup('env', 'K8S_API_VIP') | default('192.168.100.30', true) }}"
+ipa_master_fqdn: "ipa.{{ c_zone }}"
+build_loops: "{{ lookup('env', 'build_loops') | default(120, true) }}"
+
+# Hypervisor & Credentials
+VM_HOST_IP: "{{ hostvars[kvm_host].ansible_host | default(kvm_host) }}"
+ipa_admin_password: "{{ lookup('env', 'IPA_ADMIN_PASSWORD') }}"

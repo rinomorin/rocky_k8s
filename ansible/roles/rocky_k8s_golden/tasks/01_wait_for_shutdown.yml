@@ -1,0 +1,35 @@
+---
+- debug:
+    msg: "Waiting for the Golden Base VM to shutdown. This may take a few minutes... {{ build_loops }}"
+
+- name: Calculate wait time in minutes
+  set_fact:
+    wait_time_to_shutdown_or_fail: "{{ ((build_loops | int) * 10 // 60) }}"
+
+- name: Display wait time
+  debug:
+    msg: "Probe VM will wait up to {{ wait_time_to_shutdown_or_fail }} minutes before resuming to next tasks"
+
+- name: Probe VM with virsh until VM powers down
+  shell: |
+    virsh list --all | sed 's/shut off/shutdown/' | grep -i "^.*{{ golden_image_name }}.*" | awk '{print $NF}'
+  register: vm_state
+  failed_when: false
+  changed_when: false
+  until: vm_state.stdout_lines[-1] == "shutdown"
+  retries: "{{ build_loops|int }}"
+  delay: 10
+
+- name: Sysprep the Master (On Hypervisor)
+  become: true
+  shell: |
+    # We run this on the KVM host while the VM is OFF
+    virt-sysprep -d {{ golden_image_name }} \
+      --operations machine-id,net-hostname,net-hwaddr,ssh-hostkeys,customize \
+      --hostname {{ golden_image_name }}-sysprep
+
+- name: Record Build Completion
+  debug:
+    msg: "Golden Base Version {{ build_timestamp }} is now offline and ready."
+
+

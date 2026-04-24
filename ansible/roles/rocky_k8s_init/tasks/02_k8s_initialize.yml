@@ -1,0 +1,39 @@
+
+- name: Check if Kubernetes is already initialized
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: kube_init_check
+  when: inventory_hostname == groups['control_nodes'][0]
+
+# 02_k8s_initialize.yml
+- name: 2.1 - Initialize Control Plane on Seed Master
+  run_once: true
+  delegate_to: "{{ groups['control_nodes'][0] }}"
+  command: >
+    kubeadm init 
+    --control-plane-endpoint "{{ k8s_api_vip }}:6443" 
+    --upload-certs 
+    --token "{{ cluster_token }}"
+    --pod-network-cidr=10.244.0.0/16
+    --apiserver-advertise-address={{ node_ip }}
+    --ignore-preflight-errors=SystemVerification
+    --v=5
+  when: 
+    - inventory_hostname == groups['control_nodes'][0]
+    - not kube_init_check.stat.exists
+  register: kubeadm_init
+
+- name: 2.2 - Handle Existing Cluster (Extract Key if 2.1 Skipped)
+  shell: |
+    kubeadm init phase upload-certs --upload-certs | tail -n 1
+  register: cert_reupload
+  when: 
+    - inventory_hostname == groups['control_nodes'][0]
+    - kubeadm_init.skipped is defined
+  changed_when: false
+
+- name: 2.3 - Set Global Certificate Key Fact
+  set_fact:
+    cert_key: "{{ kubeadm_init.stdout | regex_search('--certificate-key\\s+([a-f0-9]+)', '\\1') | first if kubeadm_init.changed else cert_reupload.stdout | trim }}"
+  when: inventory_hostname == groups['control_nodes'][0]
+

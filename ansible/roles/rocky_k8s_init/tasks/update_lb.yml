@@ -1,0 +1,35 @@
+- name: Push to staging area on {{ item }}
+  template:
+    src: "../../rocky_k8s_lbs/templates/haproxy.cfg.j2"
+    dest: "/tmp/haproxy.cfg.generated"
+    mode: '0644'
+  delegate_to: localhost
+  loop: "{{ groups['hahost'] }}"
+
+- name: Move staging to live config on {{ item }}
+  vars:
+    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o LogLevel=ERROR -i {{ ssh_key_path }}"
+    target_ip: "{{ hostvars[item].ansible_host }}"
+  ansible.builtin.command: "scp {{ ssh_opts }} /tmp/haproxy.cfg.generated core@{{ target_ip }}:/tmp/haproxy.cfg"
+  delegate_to: localhost
+  loop: "{{ groups['hahost'] }}"
+
+- name: Copy staging to live config on {{ item }}
+  ansible.builtin.command: "sudo mv -f /tmp/haproxy.cfg /etc/haproxy/haproxy.cfg"
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['hahost'] }}"
+
+- name: set staging to live config on {{ item }}
+  shell: |
+    sudo chmod 644 /etc/haproxy/haproxy.cfg
+    sudo chown root:root /etc/haproxy/haproxy.cfg
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['hahost'] }}"
+  
+- name: Move staging to live config on {{ item }}
+  ansible.builtin.command: "sudo systemctl restart haproxy"
+  delegate_to: "{{ item }}"
+
+- name: remove temporary file in /tmp
+  ansible.builtin.command: "rm -f /tmp/haproxy.cfg.generated"
+  delegate_to: localhost

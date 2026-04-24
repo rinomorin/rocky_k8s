@@ -1,0 +1,24 @@
+# --- KUBERNETES API SERVER (6443) ---
+# --- SERVICE: {{ svc_name }} ---
+frontend {{ svc_name }}-http
+    bind {{ k8s_api_vip }}:80
+    default_backend {{ svc_name }}-http-be
+
+backend {{ svc_name }}-http-be
+    balance roundrobin
+    {% for host in groups['control_nodes'] %}
+    server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_http_nodeport }} check
+    {% endfor %}
+
+frontend {{ svc_name }}-https
+    bind {{ k8s_api_vip }}:443
+    default_backend {{ svc_name }}-https-be
+
+backend {{ svc_name }}-https-be
+    balance roundrobin
+    {% for host in groups['control_nodes'] %}
+    server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_https_nodeport }} check
+    {% endfor %}
+
+
+# MANDATORY EMPTY LINE BELOW - DO NOT DELETE

@@ -1,0 +1,38 @@
+vrrp_instance VI_1 {
+    # Use 'item' because that is the host we are currently templating for
+    state {{ 'MASTER' if item == groups['hahost'][0] else 'BACKUP' }}
+    
+    # Pull facts specifically for the 'item' host
+    interface {{ hostvars[item].provider_interface | default('enp3s0') }}
+    
+    virtual_router_id 51
+    
+    # Calculate priority based on the item's position in the hahost group
+    priority {{ 100 - (groups['hahost'].index(item) * 10) }}
+    
+    advert_int 1
+    nopreempt
+
+    authentication {
+        auth_type PASS
+        auth_pass 42
+    }
+
+    # Unicast needs to know the IP of the host we are templating (item)
+    unicast_src_ip {{ hostvars[item].provider_ip }}
+    unicast_peer {
+        {% for host in groups['hahost'] %}
+        {% if host != item %}
+        {{ hostvars[host].provider_ip }}
+        {% endif %}
+        {% endfor %}
+    }
+
+    virtual_ipaddress {
+        {{ k8s_api_vip }} dev {{ hostvars[item].provider_interface | default('enp3s0') }}
+    }
+
+    track_script {
+        check_haproxy
+    }
+}

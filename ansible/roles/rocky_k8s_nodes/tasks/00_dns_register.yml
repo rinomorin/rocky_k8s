@@ -1,0 +1,37 @@
+- name: "3.0.1 - Dynamic DNS Registration for Cluster Nodes"
+  run_once: true
+  delegate_to: localhost
+  become: no
+  block:
+    - name: Authenticate with FreeIPA
+      shell: "kinit admin <<< '{{ ipa_admin_password }}'"
+      no_log: true
+
+    - name: Register DNS A and PTR Records for Cluster Nodes
+      shell: |
+        SHORT_NAME=$(echo "{{ item }}" | cut -d'.' -f1)
+        PROV_IP="{{ hostvars[item].provision_ip }}"
+        DATA_IP="{{ hostvars[item].provider_ip | default('N/A') }}"
+        
+        # 1. Always register in Provisioning Zone (10.0.0.x)
+        ipa dnsrecord-add {{ p_zone }} $SHORT_NAME --a-rec=$PROV_IP
+        
+        # PTR for Provisioning
+        LAST_OCTET_PROV=$(echo $PROV_IP | cut -d'.' -f4)
+        ipa dnsrecord-add {{ rev_prov }} $LAST_OCTET_PROV --ptr-rec=$SHORT_NAME.{{ p_zone }}.
+
+        # 2. Conditionally register Masters in Cloud Zone (192.168.100.x)
+        if [[ "$SHORT_NAME" == *"mast"* ]] && [ "$DATA_IP" != "N/A" ]; then
+          ipa dnsrecord-add {{ c_zone }} $SHORT_NAME --a-rec=$DATA_IP
+          
+          # PTR for Cloud/Data
+          LAST_OCTET_DATA=$(echo $DATA_IP | cut -d'.' -f4)
+          ipa dnsrecord-add {{ rev_cloud }} $LAST_OCTET_DATA --ptr-rec=$SHORT_NAME.{{ c_zone }}.
+        fi
+      loop: "{{ groups['cluster_nodes'] }}"
+      register: dns_nodes
+      failed_when: 
+        - dns_nodes.rc != 0 
+        - "'already exists' not in dns_nodes.stderr"
+        - "'no modifications' not in dns_nodes.stderr"
+      when: hostvars[item].provision_ip is defined

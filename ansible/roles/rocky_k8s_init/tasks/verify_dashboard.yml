@@ -1,0 +1,19 @@
+---
+- name: Generate Dashboard Admin Token
+  ansible.builtin.shell: |
+    kubectl -n kubernetes-dashboard create token admin-user
+  register: dashboard_token
+  changed_when: false
+  when: inventory_hostname in groups['masters'][0]
+
+- name: Display Dashboard Access Information
+  ansible.builtin.debug:
+    msg: 
+      - "------------------------------------------------------------"
+      - "K8S DASHBOARD ACCESS"
+      - "URL: https://k8s.{{ lookup('env', 'cloud_zone') }}"
+      - "TOKEN: {{ dashboard_token.stdout }}"
+      - "------------------------------------------------------------"
+  when: 
+    - inventory_hostname in groups['masters'][0]
+    - dashboard_token.stdout is defined

@@ -1,0 +1,109 @@
+- name: "Check current state of {{ guest_member }}"
+  shell: "virsh domstate {{ guest_member }}"
+  register: vm_state
+  changed_when: false
+    
+- name: Set nat filters for {{ guest_member }}
+  set_fact:
+    nat_filters: "{{ guest_configs[guest_member].interfaces[net_maintenance].cidr.split('.')[0] | int }}"
+    prod_filters: "{{ guest_configs[guest_member].interfaces[net_provision].cidr.split('.')[0] | int }}"
+    prov_filters: "{{ guest_configs[guest_member].interfaces[net_provider].cidr.split('.')[0] | int }}"
+
+- name: Set segment network_segments
+  vars:
+    seg_item: "{{ item }}"
+  set_fact:
+    provider_segment: "{{ item }} if sed_item.value.cidr.split('.')[0] | int == prod_filters | int"
+    provision_segment: "{{ item }} if sed_item.value.cidr.split('.')[0] | int == prov_filters | int"
+    nat_segment: "{{ item }} if sed_item.value.cidr.split('.')[0] | int == nat_filters | int"
+  loop: "{{ guest_configs[guest_member].interfaces | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+
+- name: Configure k8s network for {{ guest_member }} for {{ guest_configs[guest_member].reachable_ip }}
+  include_tasks: set_guest_nic.yml
+  vars:
+    module_item: "{{ item }}"
+    module_zone: "{{ item.key | default('N/A') }}"
+    guest_ip: "{{ guest_configs[guest_member].reachable_ip }}"
+  loop: "{{ guest_configs[guest_member].interfaces | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: 
+    - item.value.cidr.split('.')[0] | int != nat_filters | int
+    - guest_configs[guest_member].reachable_ip.split('.')[0] | int == nat_filters | int
+
+- name: Configure infra network for {{ guest_member }}
+  vars:
+    reachable_octet: "{{ guest_configs[guest_member].reachable_ip.split('.')[0] | int }}"
+    interface_ip_octet: "{{ guest_configs[guest_member].interfaces[net_provider].ip.split('.')[0] | int }}"
+    filter_octet: "{{ prov_filters | int }}"
+  block:
+    - name: "Process Guest"
+      debug:
+        msg: "Processing {{ guest_member }} at {{ guest_configs[guest_member].interfaces[net_provider].ip }}"
+
+    - name: Get guess state 
+      shell: |
+        virsh domstate {{ guest_member }}
+      register: vm_state
+      changed_when: false
+
+    - name: Stop the {{ guest_member }}
+      shell: "virsh destroy {{ guest_member }}"
+      when: vm_state.stdout == 'running'
+      changed_when: false
+      run_once: true
+
+    - name: "Path B: Inject Identity via virt-customize (Offline)"
+      shell: |
+        virt-customize -d {{ guest_member }} \
+        --write '/etc/NetworkManager/system-connections/{{ item.value.devname }}.nmconnection:
+          [connection]
+          id={{ item.value.devname }}
+          type=ethernet
+          interface-name={{ item.value.devname }}
+          autoconnect={{ "false" if item.value.ip == "none" else "true" }}
+
+          [ipv4]
+          {% if item.value.ip == "DHCP" -%}
+          method=auto
+          {%- elif item.value.ip == "none" -%}
+          method=disabled
+          {%- else -%}
+          method=manual
+          address1={{ item.value.ip }}/{{ item.value.cidr.split("/")[-1] }}{{ "," + guest_configs[guest_member].gateway if item.key == "default" else "" }}
+          {%- endif %}
+
+          [ipv6]
+          method=disabled' \
+        --run-command "sed -i 's/^[[:space:]]*//' /etc/NetworkManager/system-connections/{{ item.value.devname }}.nmconnection" \
+        --run-command "chmod 600 /etc/NetworkManager/system-connections/{{ item.value.devname }}.nmconnection"
+      args:
+        executable: /bin/bash
+      loop: "{{ guest_configs[guest_member].interfaces | dict2items }}"
+      when: 
+        - guest_configs[guest_member].reachable_ip is not defined or "172.16." not in guest_configs[guest_member].reachable_ip
+        - item.value.devname is defined and item.value.devname != 'N/A'
+
+    - name: Get guess state 
+      shell: |
+        virsh domstate {{ guest_member }}
+      register: vm_state
+      changed_when: false
+    - debug:
+        msg: "{{ guest_member }} VM State: {{ vm_state.stdout }}"
+
+    - name: "Start up {{ guest_member }} if shutdown "
+      shell: "virsh start {{ guest_member }}"
+      when: vm_state.stdout == 'shut off'
+      changed_when: false
+
+  when:
+    - provider_segment is defined
+    - guest_configs[guest_member].reachable_ip is defined
+    - guest_configs[guest_member].interfaces[net_provider].ip is defined
+    - reachable_octet == filter_octet
+    - interface_ip_octet == filter_octet
+

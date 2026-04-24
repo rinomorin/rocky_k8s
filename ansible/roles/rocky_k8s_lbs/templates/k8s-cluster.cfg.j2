@@ -1,0 +1,37 @@
+
+# --- KUBERNETES API SERVER (6443) ---
+# --- DUMMY KUBERNETES API (For Startup) ---
+frontend k8s-api-dummy
+    bind {{ k8s_api_vip }}:6443
+    default_backend k8s-masters-dummy
+
+backend k8s-masters-dummy
+    balance roundrobin
+    server dummy 127.0.0.1:6443 check
+
+
+# --- INGRESS TRAFFIC (HTTPS - 443) ---
+frontend k8s-ingress-https
+    bind {{ k8s_api_vip }}:443
+    default_backend k8s-workers-https
+
+backend k8s-workers-https
+    balance roundrobin
+    {% for host in groups['control_nodes'] %}
+    server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_https_nodeport | default('30443') }} check
+    {% endfor %}
+
+# --- INGRESS TRAFFIC (HTTP - 80) ---
+frontend k8s-ingress-http
+    bind {{ k8s_api_vip }}:80
+    default_backend k8s-workers-http
+
+backend k8s-workers-http
+    balance roundrobin
+    {% for host in groups['control_nodes'] %}
+    server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_http_nodeport | default('30080') }} check
+    {% endfor %}
+
+
+# MANDATORY EMPTY LINE BELOW - DO NOT DELETE
+

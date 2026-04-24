@@ -1,0 +1,201 @@
+#version=RHEL9
+# Minimal Rocky 9 base image for post-install provisioning + immutable conversion
+
+url --mirrorlist={{ 'https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-' ~ my_os_variant }}
+repo --name=AppStream --mirrorlist={{ 'https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=AppStream-' ~ my_os_variant }}
+
+lang en_CA.UTF-8
+keyboard  --vckeymap=us --xlayouts='us'
+timezone UTC,UTCS
+# NIC 1 — NAT (always enp0s1)
+network --bootproto=dhcp --device=enp1s0 --activate  --hostname={{ hostname | default(inventory_hostname) }}
+
+# ------------------------------------------------------------
+# System basics
+# ------------------------------------------------------------
+
+rootpw --lock
+user --name=core --groups=wheel --lock
+
+firewall --enabled --service=ssh
+selinux --enforcing
+services --enabled=sshd
+
+bootloader --location=mbr --boot-drive={{ install_disk }} --append="crashkernel=auto"
+
+# ------------------------------------------------------------
+# Disk layout: EFI + /boot + XFS root
+# ------------------------------------------------------------
+
+zerombr
+clearpart --all --initlabel
+
+part /boot/efi --fstype=vfat --size=600 --fsoptions="umask=0077,shortname=winnt"
+part /boot     --fstype=xfs  --size=1024
+part /         --fstype=xfs  --size=1 --grow
+
+skipx
+text
+
+# ------------------------------------------------------------
+# Minimal package set
+# ------------------------------------------------------------
+
+%packages
+--ignoremissing
+@^minimal-environment
+bash-completion
+tar
+gzip
+bzip2
+xz
+curl
+wget
+rsync
+chrony
+tmux
+git
+jq
+openssh-clients
+python3
+python3-pyyaml
+%end
+
+# ------------------------------------------------------------
+# Post-install configuration
+# ------------------------------------------------------------
+
+%post --log=/root/ks-post.log
+
+dnf install -y vim-enhanced --nobest
+
+# Inject Build Metadata for tracking upgrades
+echo "IMAGE_TYPE=golden-base" > /etc/golden-release
+echo "BUILD_TIMESTAMP={{ build_timestamp }}" >> /etc/golden-release
+echo "K8S_VERSION={{ kubernetes_repo_ver }}" >> /etc/golden-release
+
+mkdir -p /home/core/.ssh
+chmod 700 /home/core/.ssh
+
+cat << 'EOF' >> /etc/sudoers 
+%wheel ALL=(ALL) NOPASSWD: ALL
+EOF
+# C. SSH Identity Setup
+mkdir -p /home/core/.ssh
+cat << 'EOF' > /home/core/.ssh/authorized_keys
+{{ rawcore_ssh_key }}
+EOF
+
+# D. Permissions & SELinux Scrub
+# We do this twice to ensure no intermediate steps mess with ownership
+chown -R core:core /home/core/.ssh
+chmod 700 /home/core/.ssh
+chmod 600 /home/core/.ssh/authorized_keys
+restorecon -Rw /home/core/.ssh
+
+# E. Hardening Overrides (Scrub Vendor Configs)
+# This removes 40-redhat-crypto-policies.conf and 50-redhat.conf
+rm -f /etc/ssh/sshd_config.d/*.conf
+
+cat << 'EOF' > /etc/ssh/sshd_config.d/99-darkweb-hardened.conf
+# Project DarkWeb Hardening
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+# UsePAM allows system account checks but won't bypass our password disable
+UsePAM yes
+EOF
+
+# Enable chrony
+systemctl enable chronyd
+
+# Clean machine identity so clones diverge
+rm -f /etc/machine-id
+: > /etc/machine-id
+
+# Remove SSH host keys so they regenerate on first boot
+rm -f /etc/ssh/ssh_host_*
+
+# ------------------------------------------------------------
+# First-boot provisioning hook (Stage 2 will fill this in)
+# ------------------------------------------------------------
+
+cat >/usr/local/sbin/firstboot-provision.sh << 'EOF'
+#!/bin/bash
+set -euo pipefail
+
+# Regenerate machine-id if empty
+if [ ! -s /etc/machine-id ]; then
+  systemd-machine-id-setup
+fi
+
+# Regenerate SSH host keys if missing
+if ! ls /etc/ssh/ssh_host_*key >/dev/null 2>&1; then
+  /usr/libexec/openssh/sshd-keygen || ssh-keygen -A
+fi
+
+# Disable after successful run
+systemctl disable firstboot-provision.service
+EOF
+
+###############################################
+# Install CRI-O and Kubernetes repositories
+###############################################
+
+CRIO_VER="{{ crio_repo_ver }}"
+K8S_VER="{{ kubernetes_repo_ver }}"
+
+# CRI-O repo
+cat >/etc/yum.repos.d/crio.repo <<EOF2
+[crio]
+name=CRI-O ${CRIO_VER}
+baseurl=https://download.opensuse.org/repositories/isv:/cri-o:/stable:/v${CRIO_VER}/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://download.opensuse.org/repositories/isv:/cri-o:/stable:/v${CRIO_VER}/rpm/repodata/repomd.xml.key
+EOF2
+
+# Kubernetes repo
+cat >/etc/yum.repos.d/kubernetes.repo <<EOF3
+[kubernetes]
+name=Kubernetes ${K8S_VER}
+baseurl=https://pkgs.k8s.io/core:/stable:/v${K8S_VER}/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v${K8S_VER}/rpm/repodata/repomd.xml.key
+EOF3
+
+# Refresh repos
+dnf clean all
+dnf makecache
+
+###############################################
+# Placeholder for Stage 2 provisioning
+###############################################
+
+# Disable after successful run
+systemctl disable firstboot-provision.service
+EOF
+
+chmod 0755 /usr/local/sbin/firstboot-provision.sh
+
+cat >/etc/systemd/system/firstboot-provision.service << 'EOF'
+[Unit]
+Description=First boot provisioning for Kubernetes node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/firstboot-provision.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable firstboot-provision.service
+
+%end
+poweroff

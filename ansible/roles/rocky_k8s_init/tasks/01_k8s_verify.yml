@@ -1,0 +1,105 @@
+---
+- name: 1.1 - Verify Unique Identity
+  assert:
+    that:
+      - ansible_machine_id != hostvars[groups['control_nodes'][1]]['ansible_machine_id']
+    fail_msg: "CRITICAL: Nodes share the same machine-id! Sysprep failed."
+  when: inventory_hostname == groups['control_nodes'][0]
+
+- name: 1.2 - Ensure CRI-O is started and enabled
+  systemd:
+    name: crio
+    state: started
+    enabled: yes
+
+- name: 1.3 - Check Container Runtime Health
+  command: crictl info
+  register: crio_check
+  changed_when: false
+
+- name: 1.4 - Ensure Kubelet is enabled but stopped
+  systemd:
+    name: kubelet
+    enabled: yes
+    state: stopped
+
+- name: 1.5 - Load Required Kernel Modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: 1.6 - Persist Kernel Modules on Boot
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+
+- name: 1.7 - Set Sysctl Parameters for K8s
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/k8s.conf
+    reload: yes
+  loop:
+    - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { key: 'net.ipv4.ip_forward', value: '1' }
+
+- name: 1.8 - Ensure full cluster hostname resolution in /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ hostvars[item]['node_ip'] }} {{ item }} {{ hostvars[item]['hostname'] | default('') }}"
+    state: present
+    create: yes
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: hostvars[item]['node_ip'] is defined
+
+- name: 1.9 - Configure Firewalld for Kubernetes
+  firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop:
+    # Common ports for all nodes
+    - 10250/tcp  # Kubelet API
+    - 30000-32767/tcp # NodePort Services
+    - 7946/udp # MetalLB Memberlist (UDP)
+    - 7946/tcp # MetalLB Memberlist (TCP)
+    - 4789/udp # MetalLB VXLAN (UDP)
+  
+- name: 1.10 - Open Control Plane Specific Ports
+  firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop:
+    - 6443/tcp   # Kubernetes API Server
+    - 2379-2380/tcp # etcd server client API
+    - 10257/tcp  # kube-controller-manager
+    - 10259/tcp  # kube-scheduler
+  when: inventory_hostname in groups['control_nodes']
+
+- name: 1.11 - Allow VRRP/Keepalived traffic (If LBs are on these nodes)
+  firewalld:
+    rich_rule: 'rule protocol value="vrrp" accept'
+    permanent: yes
+    state: enabled
+    immediate: yes
+  when: inventory_hostname in groups['kvm'] # Adjust group name if needed
+
+- name: 1.12 - Open CNI Overlay Ports
+  firewalld:
+    port: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop:
+    - 8472/udp   # Flannel/VXLAN
+    - 4789/udp   # Cilium/VXLAN

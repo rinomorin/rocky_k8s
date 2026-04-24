@@ -1,0 +1,134 @@
+# Project DarkWeb: Level 0 Generic Golden Base
+# Version: {{ build_timestamp }}
+# Target: Rocky Linux {{ tos_variant }}
+
+# 1. Repository Configuration
+url --mirrorlist=https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=BaseOS-{{ tos_variant }}
+repo --name=AppStream --mirrorlist=https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=AppStream-{{ tos_variant }}
+
+{% if tos_variant == '10' %}
+repo --name=CRB --mirrorlist=https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=CRB-10
+{% else %}
+repo --name=CRB --mirrorlist=https://mirrors.rockylinux.org/mirrorlist?arch=x86_64&repo=CRB-9
+{% endif %}
+
+lang en_CA.UTF-8
+keyboard --vckeymap=us --xlayouts='us'
+timezone UTC --utc
+
+# 2. Network Configuration
+network --bootproto=dhcp --device=enp1s0 --activate --hostname={{ hostname | default(inventory_hostname) }}
+
+# 3. System Basics & Security
+rootpw --lock
+user --name=core --groups=wheel --lock
+firewall --enabled --service=ssh
+selinux --enforcing
+services --enabled=sshd,chronyd
+
+# Enable FIPS for Infra Profile
+bootloader --location=mbr --append="crashkernel=auto {{ 'fips=1' if build_profile == 'infra' else '' }}"
+
+# 4. Disk Layout (BIOS/Legacy compatible GPT)
+zerombr
+clearpart --all --initlabel
+part biosboot --fstype=biosboot --size=1
+part /boot     --fstype=xfs  --size=1024
+part /         --fstype=xfs  --size=1 --grow
+
+skipx
+text
+
+# 5. Minimal Package Set
+%packages
+--ignoremissing
+@^minimal-environment
+bash-completion
+tar
+curl
+wget
+rsync
+chrony
+tmux
+git
+jq
+openssh-clients
+python3
+%end
+
+# 6. Post-Install Configuration
+%post --log=/root/ks-post.log
+
+dnf install -y vim-enhanced --nobest
+
+# A. Inject Build Metadata
+echo "IMAGE_TYPE=darkweb-golden" > /etc/golden-release
+echo "PROFILE={{ build_profile }}" >> /etc/golden-release
+echo "BUILD_TIMESTAMP={{ build_timestamp }}" >> /etc/golden-release
+
+# B. Sudoers Configuration
+echo "%wheel ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/core
+chmod 0440 /etc/sudoers.d/core
+
+# C. SSH Identity Setup
+mkdir -p /home/core/.ssh
+cat << 'EOF' > /home/core/.ssh/authorized_keys
+{{ rawcore_ssh_key }}
+EOF
+
+# D. Permissions & SELinux Scrub
+# We do this twice to ensure no intermediate steps mess with ownership
+chown -R core:core /home/core/.ssh
+chmod 700 /home/core/.ssh
+chmod 600 /home/core/.ssh/authorized_keys
+restorecon -Rw /home/core/.ssh
+
+# E. Hardening Overrides (Scrub Vendor Configs)
+# This removes 40-redhat-crypto-policies.conf and 50-redhat.conf
+rm -f /etc/ssh/sshd_config.d/*.conf
+
+cat << 'EOF' > /etc/ssh/sshd_config.d/99-darkweb-hardened.conf
+# Project DarkWeb Hardening
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+# UsePAM allows system account checks but won't bypass our password disable
+UsePAM yes
+EOF
+
+# F. Clean Machine Identity
+truncate -s 0 /etc/machine-id
+rm -f /etc/ssh/ssh_host_*
+
+# G. First-Boot Provisioning Script
+cat >/usr/local/sbin/firstboot-provision.sh << 'EOF'
+#!/bin/bash
+set -euo pipefail
+# Regenerate identity if missing
+[ -s /etc/machine-id ] || systemd-machine-id-setup
+[ -f /etc/ssh/ssh_host_rsa_key ] || /usr/libexec/openssh/sshd-keygen || ssh-keygen -A
+# Disable service so it only runs once
+systemctl disable firstboot-provision.service
+EOF
+chmod 0755 /usr/local/sbin/firstboot-provision.sh
+
+# H. Systemd First-Boot Unit
+cat >/etc/systemd/system/firstboot-provision.service << 'EOF'
+[Unit]
+Description=First Boot Provisioning
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/firstboot-provision.sh
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable firstboot-provision.service
+
+# I. Final Cleanup
+dnf clean all
+%end
+poweroff

@@ -1,0 +1,107 @@
+---
+- name: "Power on {{ golden_image_name }}"
+  shell: "virsh start {{ golden_image_name }}"
+  register: vm_start
+  # We ignore the error if it's already running to be resilient
+  failed_when: 
+    - vm_start.rc != 0 
+    - "'already active' not in vm_start.stderr"
+  changed_when: "vm_start.rc == 0"
+
+- name: "Wait for temporary IP via Guest Agent"
+  shell: |
+    virsh domifaddr {{ golden_image_name }} --source agent | grep -oP '(\d{1,3}\.){3}\d{1,3}' | grep -v '127.0.0.1' | head -n 1
+  register: temp_ip
+  until: temp_ip.stdout != "" and temp_ip.stdout != "127.0.0.1"
+  retries: 40
+  delay: 10
+
+- name: "Run Security Lifecycle for {{ golden_image_name }}"
+  vars:
+    ssh_opts: >-
+      -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null 
+      -o BatchMode=yes -o ConnectTimeout=10 -i .ssh/id_rsa
+    skip_rules: >-
+      --skip-rule xccdf_org.ssgproject.content_rule_grub2_password
+      --skip-rule xccdf_org.ssgproject.content_rule_sudo_require_authentication
+      --skip-rule xccdf_org.ssgproject.content_rule_sudo_remove_nopasswd 
+      --skip-rule xccdf_org.ssgproject.content_rule_partition_for_home
+      --skip-rule xccdf_org.ssgproject.content_rule_partition_for_tmp
+      --skip-rule xccdf_org.ssgproject.content_rule_partition_for_var
+      --skip-rule xccdf_org.ssgproject.content_rule_partition_for_var_log
+      --skip-rule xccdf_org.ssgproject.content_rule_partition_for_var_log_audit
+      --skip-rule xccdf_org.ssgproject.content_rule_partition_for_var_tmp
+      --skip-rule xccdf_org.ssgproject.content_rule_ensure_root_password_configured
+      --results /tmp/$(hostname -s)-scan-result.xml 
+      --report /tmp/$(hostname -s)-scan-report.html 
+    os_ver: "{{ golden_image_name.split('-')[2] }}"
+    scap_ds: "rl{{ os_ver }}-ds.xml"
+    scap_profile: "xccdf_org.ssgproject.content_profile_cis"
+    report_prefix: "scan_{{ golden_image_name }}_{{ build_timestamp }}"
+  shell: |
+    ssh {{ ssh_opts }} core@{{ temp_ip.stdout }} "
+      # PRE. Setup userssh group and add core user
+      if ! getent group userssh > /dev/null; then
+        sudo groupadd userssh
+      fi
+      sudo usermod -a -G userssh core
+      # Pre 2 install oscap and guide. 
+      echo '--- 0: Installing OpenSCAP Toolset ---'
+      sudo dnf install -y openscap-scanner scap-security-guide
+      
+      echo '--- 1: Determining Violations ---'
+      sudo oscap xccdf eval --profile {{ scap_profile }} {{ skip_rules }} {{ scap_ds }} | grep -iv 'faillock' | grep -iB3 'fail' || true
+      
+      # echo '--- 2: Remediating Violations ---'
+      # sudo oscap xccdf eval --remediate --profile {{ scap_profile }} {{ skip_rules }} {{ scap_ds }} > /dev/null 2>&1 || true
+      
+      # echo '--- 3: Final Verification and Report Generation ---'
+      # sudo oscap xccdf eval --profile {{ scap_profile }} {{ skip_rules }} \
+      #   --results {{ report_prefix }}.xml \
+      #   --report {{ report_prefix }}.html \
+      #   {{ scap_ds }} | grep -iv 'faillock' | grep -iB3 'fail' || true
+    "
+  register: hardening_results
+
+
+
+# - debug:
+#     msg: "{{ hardening_results }}"
+
+- name: "Hop 1: Pull reports from Guest to KVM Host (/tmp)"
+  become: false
+  vars:
+    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa"
+    report_prefix: "scan_{{ golden_image_name }}_{{ build_timestamp }}"
+  shell: "scp {{ ssh_opts }} core@{{ temp_ip.stdout }}:~/{{ report_prefix }}.* /tmp/."
+
+- name: "Hop 2: Pull reports from KVM Host to Controller"
+  become: false
+  vars:
+    report_prefix: "scan_{{ golden_image_name }}_{{ build_timestamp }}"
+  fetch:
+    src: "/tmp/{{ report_prefix }}.{{ item }}"
+    dest: "{{ playbook_dir }}/../state/"
+    flat: yes
+  loop:
+    - "xml"
+    - "html"
+
+- name: "Cleanup KVM Host temp files"
+  vars:
+    report_prefix: "scan_{{ golden_image_name }}_{{ build_timestamp }}"
+  file:
+    path: "/tmp/{{ report_prefix }}.{{ item }}"
+    state: absent
+  loop:
+    - "xml"
+    - "html"
+
+- name: "Display Hardening Failures"
+  debug:
+    msg: "{{ hardening_results.stdout_lines }}"
+
+- name: "Gracefully shut down {{ golden_image_name }}"
+  shell: "virsh shutdown {{ golden_image_name }}"
+
+  

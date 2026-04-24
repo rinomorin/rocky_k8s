@@ -1,0 +1,3 @@
+- name: "Reboot for FIPS"
+  reboot:
+    msg: "Rebooting to enable FIPS mode for IPA compatibility"

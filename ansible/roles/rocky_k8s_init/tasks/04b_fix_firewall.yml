@@ -1,0 +1,43 @@
+---
+- name: Configure Firewalld for Kubernetes Networking
+  ansible.posix.firewalld:
+    zone: trusted
+    interface: "{{ item }}"
+    state: enabled
+    permanent: yes
+    immediate: yes
+  loop:
+    - enp2s0
+    - flannel.1
+    - cni0
+
+- name: Allow intra-zone forwarding in trusted zone (Permanent)
+  ansible.posix.firewalld:
+    zone: trusted
+    target: ACCEPT
+    permanent: yes
+    state: enabled
+
+- name: Reload firewalld to apply zone target changes
+  service:
+    name: firewalld
+    state: reloaded
+
+- name: Enable Masquerading for Pod Network
+  ansible.posix.firewalld:
+    masquerade: yes
+    state: enabled
+    permanent: yes
+    immediate: yes
+
+- name: Set Bridge and Routing Sysctls
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+    - { name: 'net.ipv4.conf.all.rp_filter', value: '2' }
+    - { name: 'net.ipv4.conf.default.rp_filter', value: '2' }

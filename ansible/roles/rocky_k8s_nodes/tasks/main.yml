@@ -1,0 +1,19 @@
+---
+- name: 0.1 - Run Pre-checks and Build Decision
+  import_tasks: 00_pre_check.yml
+
+- name: 0.2 - Debug Build Status
+  debug:
+    msg: "Rebuild requested: {{ rebuild_nodes | default(false) }} | Skipping Build: {{ skip_build }}"
+
+- name: Kubernetes Node Provisioning Block
+  block:
+    - import_tasks: 00_dns_register.yml
+    - import_tasks: 01_clone_first_node.yml
+    - import_tasks: 02_final_golden_touch.yml
+    - import_tasks: 03_clone_them_all.yml
+    # - import_tasks: 01_poweron_golden.yml
+    # - import_tasks: 04_clone_nodes.yml
+    # - import_tasks: 05_prep_os.yml
+  when: not skip_build | bool
+

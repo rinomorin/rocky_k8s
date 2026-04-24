@@ -1,0 +1,100 @@
+---
+# 1. PRE-CALCULATE FACTS & CLEANUP
+# -------------------------------------------------------------------------
+
+- name: "Check if {{ guest_member }} exists in Libvirt"
+  shell: "virsh list --all | grep -q ' {{ guest_member }} ' && echo 'exists' || echo 'notfound'"
+  register: guest_check
+  changed_when: false
+
+- name: "Set Final Network and Reclone Facts"
+  set_fact:
+    target_network: "{{ 'br-nat' }}"
+    should_reclone: >-
+      {{ 
+        (guest_check.stdout == 'notfound') or 
+        (reclone | default([]) == 'all') or 
+        (force_new_image | default([]) == True ) or
+        (guest_member in (reclone | default([]))) 
+      }}
+
+- name: "Cleanup Existing Guest if Recloning"
+  when: should_reclone | bool and guest_check.stdout == 'exists'
+  block:
+    - name: "Force stop and undefine {{ guest_member }}"
+      shell: |
+        virsh destroy {{ guest_member }} || true
+        virsh undefine {{ guest_member }} --remove-all-storage || true
+      ignore_errors: yes
+
+- name: "Map Global Context for {{ guest_member }}"
+  vars:
+    # --- Re-evaluate Profile ---
+    has_provision: "{{ hostvars[guest_member]['provision_ip'] is defined }}"
+    has_provider: "{{ hostvars[guest_member]['provider_ip'] is defined or hostvars[guest_member]['ansible_host'] is defined }}"
+
+    detected_profile: >-
+      {% if has_provision %}k8s{% elif has_provider %}infra{% else %}k8s{% endif %}
+
+    # Correcting OS Version based on your specific rules
+    detected_osver: >-
+      {% if has_provision %}9{% elif has_provider %}10{% else %}9{% endif %}
+
+    # --- Re-calculate Network ---
+    derived_network: "{{ 'default' if (detected_profile | trim) == 'infra' else 'br-nat' }}"
+
+    # --- Resolve Network Specs ---
+    target_net_info: "{{ hostvars['kvmdc01']['libvirt_networks'] | selectattr('name', 'equalto', derived_network) | first | default({}) }}"
+    net_cidr: "{{ target_net_info.cidr | default('none') }}"
+    net_gw: "{{ (net_cidr != 'none') | ternary(net_cidr.split('.')[:3] | join('.') ~ '.1', 'none') }}"
+
+    # --- Node Role & IP Logic ---
+    is_worker: "{{ true if 'k8s_workers' in group_names else false }}"    
+    derived_provider_ip: >-
+      {% if (detected_profile | trim) == 'infra' or not is_worker %}
+        {{ hostvars[guest_member]['provider_ip'] | default(hostvars[guest_member]['ansible_host']) | default('none') }}
+      {% else %}
+        none
+      {% endif %}
+
+  set_fact:
+    guest_configs: >-
+      {{ 
+        guest_configs | default({}) | combine({
+          guest_member: (guest_configs[guest_member] | default({})) | combine({
+            'profile': detected_profile | trim,
+            'network': derived_network,
+            'cidr': net_cidr,
+            'gateway': net_gw,
+            'name': guest_member,
+            'fqdn': hostvars[guest_member]['hostname'] | default('none'),
+            'provider_ip': derived_provider_ip | trim,
+            'provision_ip': hostvars[guest_member]['provision_ip'] | default('none'),
+            'os': (detected_osver | trim),
+            'image': "gi-" ~ (detected_profile | trim | lower) ~ "-" ~ (detected_osver | trim) ~ "-" ~ (build_date | default('00000000')) ~ ".qcow2",
+          })
+        }, recursive=True) 
+      }}
+
+# 3. VERIFICATION
+# -------------------------------------------------------------------------
+
+- name: "Final Infrastructure Report for {{ guest_member }}"
+  debug:
+    msg: 
+      - "========================================================"
+      - "           INFRASTRUCTURE DEPLOYMENT REPORT             "
+      - "========================================================"
+      - " Name         : {{ guest_configs[guest_member].name }}"
+      - " Profile      : {{ guest_configs[guest_member].profile | upper }}"
+      - " FQDN         : {{ guest_configs[guest_member].fqdn }}"
+      - " Image Profile: {{ guest_configs[guest_member].image }}"
+      - " OS:          : {{ guest_configs[guest_member].os }}"
+      - "--------------------------------------------------------"
+      - " Target Net   : {{ guest_configs[guest_member].network }}"
+      - " CIDR         : {{ guest_configs[guest_member].cidr }}"
+      - " Gateway      : {{ guest_configs[guest_member].gateway }}"
+      - "--------------------------------------------------------"
+      - " Provider IP  : {{ guest_configs[guest_member].provider_ip }}"
+      - " Provision IP : {{ guest_configs[guest_member].provision_ip }}"
+      - "========================================================"

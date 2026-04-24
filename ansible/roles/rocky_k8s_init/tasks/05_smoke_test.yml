@@ -1,0 +1,149 @@
+- name: Open HTTP and HTTPS on Load Balancers
+  delegate_to: "{{ item[0] }}"
+  # This creates a list of [ ('lb01', 'http'), ('lb01', 'https'), ('lb02', 'http')... ]
+  loop: "{{ groups['hahost'] | product(['http', 'https']) | list }}"
+  run_once: true
+  ansible.builtin.firewalld:
+    service: "{{ item[1] }}"
+    permanent: true
+    state: enabled
+    immediate: true
+  become: true
+
+- name: Open NodePort range for Ingress Controller
+  ansible.builtin.firewalld:
+    port: 30000-32767/tcp
+    permanent: true
+    state: enabled
+    immediate: true
+
+- name: 5.1 - Deploy Nginx Smoke Test
+  command: "kubectl apply -f https://k8s.io/examples/controllers/nginx-deployment.yaml --validate=false"
+  delegate_to: localhost
+  run_once: true
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+
+- name: 5.1.5 - Wait for Deployment API to be recognized
+  shell: "kubectl get deployment nginx-deployment"
+  delegate_to: localhost
+  run_once: true
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  register: deploy_check
+  until: deploy_check.rc == 0
+  retries: 20
+  delay: 10
+
+- name: 5.2 - Scale Deployment
+  command: "kubectl scale deployment nginx-deployment --replicas=2"
+  delegate_to: localhost
+  run_once: true
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+
+- name: 5.3 - Wait for Nginx Pods to reach Running
+  shell: "kubectl get pods -l app=nginx -o jsonpath='{.items[?(@.status.phase==\"Running\")].metadata.name}' | wc -w"
+  delegate_to: localhost
+  register: pod_count
+  until: pod_count.stdout | trim | int == 2
+  retries: 30
+  delay: 10
+  run_once: true
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+
+- name: Ensure IP Forwarding is enabled in the kernel
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/99-k8s-networking.conf
+    reload: yes
+  loop:
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.conf.all.rp_filter', value: '1' }
+    - { name: 'net.ipv4.conf.default.rp_filter', value: '1' }
+
+- name: Open Firewall for CNI Traffic
+  ansible.posix.firewalld:
+    port: "{{ item }}"
+    permanent: true
+    state: enabled
+  loop:
+    - 8472/udp   # Flannel VXLAN
+    - 4789/udp   # Calico VXLAN / Geneve
+    - 179/tcp    # Calico BGP
+    - 10250/tcp  # Kubelet API
+    - 6443/tcp   # API Server (on Masters)
+    - 7946/udp   # MetalLB Memberlist
+    - 7946/tcp   # MetalLB Memberlist
+
+- name: Reload Firewalld to apply changes
+  service:
+    name: firewalld
+    state: reloaded
+
+- name: Restart CNI Pods to force re-peering
+  shell: |
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf delete pods -n kube-system -l k8s-app=flannel --force --grace-period=0 || \
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf delete pods -n kube-system -l k8s-app=calico-node --force --grace-period=0
+  delegate_to: "{{ groups['control_nodes'][0] }}"
+  run_once: true
+  become: true
+
+- name: Restart CNI Pods to force re-peering 2
+  shell: |
+    # Force delete the pods so the DaemonSet recreates them with new network rules
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf delete pods -n kube-system -l k8s-app=flannel --force --grace-period=0
+  delegate_to: "{{ groups['control_nodes'][0] }}"
+  run_once: true
+  become: true
+
+- name: 5.4 - Verify Pod Networking (The Black Hole Test)
+  shell: |
+    # Grab exactly one Pod IP from the Nginx deployment
+    TARGET_IP=$(kubectl get pods -l app=nginx -o jsonpath='{.items[0].status.podIP}')
+    
+    # Use a unique name for the probe and ensure it's removed
+    # Note: We use \${TARGET_IP} or quotes to ensure Ansible doesn't try to parse it
+    kubectl run "probe-{{ inventory_hostname_short }}" \
+      --image=busybox \
+      --restart=Never \
+      --rm -i -- wget -qO- --timeout=5 "http://$TARGET_IP"
+  delegate_to: localhost
+  run_once: true
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  register: network_verify
+
+- debug:
+    var: network_verify.stdout_lines
+
+
+# - debug:
+#     var: haproxy_config_output.stdout_lines
+
+# - name: 5.6 - Loop over Load Balancers
+#   include_tasks: update_lb_physically.yml
+#   loop: "{{ groups['hahost'] }}"
+#   loop_control:
+#     loop_var: lb_node
+#   run_once: true
+
+# - name: 5.6 - Run Stage/Move/Restart Loop
+#   include_tasks: update_lb.yml
+#   loop: "{{ groups['hahost'] }}"
+#   run_once: true
+
+# # - name: 5.7 - Restart HAProxy on Config Change
+# #   delegate_to: "{{ item }}"
+# #   loop: "{{ groups['hahost'] }}"
+# #   become: true
+# #   ansible.builtin.systemd:
+# #     name: haproxy
+# #     state: restarted
+# #   # We check the 'changed' status specifically for the host in this loop iteration
+# #   when: hostvars[item].haproxy_conf.changed

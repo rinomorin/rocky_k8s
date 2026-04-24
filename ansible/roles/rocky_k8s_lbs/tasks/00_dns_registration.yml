@@ -1,0 +1,30 @@
+# 00_dns_registration.yml
+- name: "3.0.1 - Dynamic DNS Registration for HA LB Nodes"
+  run_once: true
+  delegate_to: localhost
+  become: no
+  block:
+    - name: Authenticate with FreeIPA
+      shell: "kinit admin <<< '{{ ipa_admin_password }}'"
+      no_log: true
+
+    - name: Register DNS A and PTR Records
+      shell: |
+        SHORT_NAME=$(echo "{{ item }}" | cut -d'.' -f1)
+        PROV_IP="{{ hostvars[item].node_ip }}"
+        DATA_IP="{{ hostvars[item].ansible_host }}"
+        
+        # 1. Register in Provisioning Zone (10.0.0.x) - CRITICAL for HAProxy -> Master
+        ipa dnsrecord-add {{ p_zone }} $SHORT_NAME --a-rec=$PROV_IP
+        ipa dnsrecord-add {{ rev_prov }} ${PROV_IP##*.} --ptr-rec=$SHORT_NAME.{{ p_zone }}.
+
+        # 2. Register in Cloud Zone (192.168.100.x) - CRITICAL for User -> VIP
+        ipa dnsrecord-add {{ c_zone }} $SHORT_NAME --a-rec=$DATA_IP
+        ipa dnsrecord-add {{ rev_cloud }} ${DATA_IP##*.} --ptr-rec=$SHORT_NAME.{{ c_zone }}.
+      loop: "{{ groups['hahost'] }}"
+      register: dns_nodes
+      failed_when: 
+        - dns_nodes.rc != 0 
+        - "'already exists' not in dns_nodes.stderr"
+        - "'no modifications' not in dns_nodes.stderr"
+      when: hostvars[item].node_ip is defined

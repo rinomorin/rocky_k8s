@@ -1,0 +1,36 @@
+# --- K8S API SERVER (6443) ---
+# This remains the same: HAProxy balances the API across the 3 Masters
+frontend k8s-api
+    bind {{ k8s_api_vip }}:6443
+    default_backend k8s-masters
+
+backend k8s-masters
+    option httpchk GET /healthz
+    http-check expect status 200
+    balance roundrobin
+    {% for host in groups['control_nodes'] %}
+    server {{ host }} {{ hostvars[host].provision_ip }}:6443 check check-ssl verify none
+    {% endfor %}
+
+# --- APPLICATION TRAFFIC (HTTPS - 443) ---
+frontend k8s-ingress-https
+    bind {{ k8s_api_vip }}:443
+    default_backend k8s-ingress-backend-https
+
+backend k8s-ingress-backend-https
+    mode tcp
+    balance roundrobin
+    # CORRECTED: Point to the MetalLB VIP, not the individual hosts
+    # HAProxy just acts as a "Pass-Through" to the MetalLB VIP
+    server metallb-vip {{ metallb_vip }}:443 check
+
+# --- APPLICATION TRAFFIC (HTTP - 80) ---
+frontend k8s-ingress-http
+    bind {{ k8s_api_vip }}:80
+    default_backend k8s-ingress-backend-http
+
+backend k8s-ingress-backend-http
+    mode tcp
+    balance roundrobin
+    # CORRECTED: Point to the MetalLB VIP
+    server metallb-vip {{ metallb_vip }}:80 check

@@ -12,4 +12,48 @@
   roles:
     - role: rocky_dns_entries
 
+# ---
+# # 2. Run your environment check playbook
+# - import_playbook: ../check_env.yml
+
+# Build Golden Base (Conditional)
+# 1. Prepare Environment
+- name: Build Kubernet Images
+  vars:
+    BUILD_PROFILE: "k8s"
+  hosts: kvm
+  gather_facts: false
+  roles:
+    - role: rocky_k8s_golden
+
+# Deploy Infrastructure (LBs and Base Config)
+- name: Deploy Cluster Infrastructure
+  hosts: kvm
+  gather_facts: false
+  vars:
+    BUILD_PROFILE: "k8s"
+  roles:
+    - role: rocky_k8s_lbs
+    # You can uncomment and add rocky_k8s_base here if needed
+
+# # 4. Deploy Infrastructure (LBs and Base Config)
+# - name: Deploy Cluster nodes
+#   hosts: kvm
+#   gather_facts: false
+#   roles:
+#     - role: rocky_k8s_nodes
+
+# # 5. Initialize Kubernetes Cluster
+# - name: Initialize Kubernetes Cluster
+#   hosts: cluster_nodes:!helpers
+#   remote_user: core
+#   become: true
+#   gather_facts: true
+#   vars:
+#     # Pulling from environment script via lookup
+#     cluster_token: "{{ lookup('env', 'K8S_CLUSTER_TOKEN') }}"
+#     # Pulling from inventory.yml vars
+#     api_vip: "{{ k8s_api_vip }}"
+#   roles:
+#     - role: rocky_k8s_init
 

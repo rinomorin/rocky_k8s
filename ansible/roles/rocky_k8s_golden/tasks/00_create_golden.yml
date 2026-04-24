@@ -1,0 +1,121 @@
+---
+# -------------------------------------------------------------------------
+# 1. PRE-CHECK & CLEANUP (Conditional on 'new-image' tag or force_new_image)
+# -------------------------------------------------------------------------
+- name: Remote SSH Key Management
+  block:
+    - name: Generate SSH keypair on the KVM host
+      become: false
+      community.crypto.openssh_keypair:
+        path: "/home/{{ ansible_user }}/.ssh/id_rsa"
+        type: rsa
+        size: 4096
+        state: present
+        force: false
+      register: remote_ssh_info
+
+    - name: Slurp the public key from the KVM host
+      ansible.builtin.slurp:
+        src: "/home/{{ ansible_user }}/.ssh/id_rsa.pub"
+      register: slurped_key
+
+    - name: Decode and Load public key into core_ssh_key fact
+      set_fact:
+        core_ssh_key: "{{ slurped_key['content'] | b64decode | trim }}"
+
+    - debug:
+       msg: "Using SSH Public Key from KVM Host: {{ core_ssh_key }}"
+
+- name: Defined host {{ VM_HOST }} for golden image creation
+  debug:
+    msg: "Target KVM Host: {{ VM_HOST }} (IP: {{ VM_HOST_IP }})"
+
+
+- name: Get list of all VMs matching the prefix
+  shell: "virsh list --all --name | grep '^gi-{{ build_profile }}-{{ safe_os_version }}-'"
+  register: matching_vms
+  failed_when: false
+  changed_when: false
+
+- name: Wipe existing golden images matching prefix
+  become: true
+  shell: |
+    virsh destroy {{ item }} || true
+    virsh undefine {{ item }} --remove-all-storage --nvram || true
+  loop: "{{ matching_vms.stdout_lines }}"
+  when: 
+    - matching_vms.stdout_lines | length > 0
+    - (force_new_image | default(false) | bool) or ('new-image' in ansible_run_tags)
+
+- name: Set existing_vms fact based on check and wipe
+  set_fact:
+    existing_vms: >-
+      {{ 
+        'exists' in vm_check.stdout and 
+        not ((force_new_image | default(false)) or ('new-image' in ansible_run_tags)) 
+      }}
+
+# -------------------------------------------------------------------------
+# 2. FILE PREPARATION (Permissions & Kickstart)
+# -------------------------------------------------------------------------
+- name: Ensure Local ISO is readable by QEMU (using sudo shell)
+  become: false  # Do not use Ansible become
+  shell: |
+    # We use sudo directly in the shell string
+    sudo chown qemu:qemu "{{ iso_path }}"
+    sudo chmod 0644 "{{ iso_path }}"
+    # Verify the path is accessible to the hypervisor
+    sudo ls -la "{{ iso_path }}"
+  when: not existing_vms
+  register: iso_perms
+
+- name: Select Template type.
+  set_fact: 
+    build_template: "{{ 'golden_base.ks.j2' if build_profile == 'infra' else 'golden_k8s.ks.j2' }}"
+- debug:
+    msg: "{{ build_profile }} for {{ build_template }}"
+
+- name: Generate Kickstart from template for golden-base {{ golden_image_name }}
+  template:
+    src: "{{ build_template }}"
+    dest: "/home/{{ ansible_user }}/{{ golden_image_name }}.ks"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+    force: true
+  vars:
+    hostname: "{{ golden_image_name }}"
+    cloud_zone: "{{ cloud_zone.{{ cloud_zone }}"
+    rawcore_ssh_key: "{{ core_ssh_key }}" # Pulled from defaults/env lookup
+    my_os_variant: "{{ tos_variant }}"
+    crio_repo_ver: "{{ crio_version }}"
+    kubernetes_repo_ver: "{{ kubernetes_version }}"
+    install_disk: "sda"
+  when: not existing_vms
+
+# -------------------------------------------------------------------------
+# 3. VM INSTALLATION (Baking the Golden Image)
+# -------------------------------------------------------------------------
+- name: Execute virt-install (Baking the Golden Image)
+  become: true
+  command: >
+    virt-install
+      --name {{ golden_image_name }}
+      --ram {{ tram_size }}
+      --vcpus {{ tcpu_count }}
+      --metadata description="build_date={{ build_timestamp }},profile={{ build_profile }}"
+      --initrd-inject="/home/{{ ansible_user }}/{{ golden_image_name }}.ks"
+      --extra-args "inst.ks=file:/{{ golden_image_name }}.ks inst.repo={{ iso_path }} console=ttyS0,115200n8 {{ 'fips=1' if build_profile == 'infra' else '' }}"
+      --disk path=/var/lib/libvirt/images/{{ golden_image_name }}.qcow2,size={{ tdisk_size }},bus=sata
+      --os-variant {{ tos_name }}{{ tos_variant.split('.')[0] }}
+      --location {{ iso_path }}
+      --network network=br-nat
+      --network network=br-cluster,link_state=down
+      --network network=default,link_state=down
+      --graphics none
+      --console pty,target_type=serial
+      --noautoconsole
+      --noreboot
+      --wait=-1
+  when: not existing_vms
+

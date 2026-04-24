@@ -1,0 +1,29 @@
+# 00_pre_check.yml
+- name: 0.1 - Check if LB Nodes already exist
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    if sudo virsh list --all | grep -q "{{ item.split('.')[0] }}"; then
+      echo "exists"
+    else
+      echo "missing"
+    fi
+  register: vm_check
+  loop: "{{ groups['hahost'] }}"
+
+- name: 0.2 - Determine if Build is Required
+  set_fact:
+    # Build only if:
+    # 1. User forced it via extra-vars
+    # 2. OR any of the VMs are 'missing'
+    skip_build: "{{ not (rebuild_lbs | default(false) | bool) and ('missing' not in vm_check.results | map(attribute='stdout') | list) }}"
+
+- name: 0.3 - Cleanup for Rebuild (Only if forced)
+  delegate_to: "{{ VM_HOST_IP }}"
+  when: rebuild_lbs | default(false) | bool
+  shell: |
+    VM="{{ item.split('.')[0] }}"
+    sudo virsh destroy $VM || true
+    sudo virsh undefine $VM --remove-all-storage --nvram || true
+    sudo rm -f /var/lib/libvirt/images/${VM}.qcow2
+  loop: "{{ groups['hahost'] }}"
+

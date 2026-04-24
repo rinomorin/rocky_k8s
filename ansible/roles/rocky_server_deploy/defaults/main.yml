@@ -1,0 +1,26 @@
+build_profile: >-
+  {% if hostvars[guest_member]['provision_ip'] is defined %}
+    k8s
+  {% elif hostvars[guest_member]['provider_ip'] is defined or hostvars[guest_member]['ansible_host'] is defined %}
+    infra
+  {% else %}
+    k8s
+  {% endif %}
+build_date: "{{ lookup('pipe', 'date +%Y%m%d') }}"
+build_timestamp: "{{ lookup('pipe', 'date +%Y%m%d-%H%M') }}"
+build_loops: "{{ BUILD_LOOPS_VAR | default(lookup('env', 'build_loops')) | default(120, true) }}"
+cloud_zone: "{{ lookup('env', 'cloud_zone') | default('example.lan', true) }}"
+public_zone: "{{ lookup('env', 'public_zone') | default('example.lan', true) }}"
+provision_zone: "{{ lookup('env', 'cloud_provision') | default('example.lan', true) }}"
+tos_variant: "{{ '10' if build_profile == 'infra' else '9' }}"
+safe_os_version: "{{ tos_variant | replace('.', 'r') }}"
+golden_image_name: "gi-{{ build_profile }}-{{ safe_os_version }}-{{ build_date }}"
+net_provider: "{{ PRO_SEG| default(lookup('env', 'PRO_SEG')) | default('default', true) }}"
+net_maintenance: "{{ NAT_SEG| default(lookup('env', 'NAT_SEG')) | default('default', true) }}"
+net_provision: "{{ CLD_SEG| default(lookup('env', 'CLD_SEG')) | default('default', true) }}"
+
+# Resource Scaling based on Profile
+# Infra (Gateways) stay lean; K8s (Nodes) get more resources
+tram_size: "{{ 4096 if build_profile == 'infra' else 8192 }}"
+tcpu_count: "{{ 2 if build_profile == 'infra' else 4 }}"
+tdisk_size: "{{ 40 if build_profile == 'infra' else 60 }}"

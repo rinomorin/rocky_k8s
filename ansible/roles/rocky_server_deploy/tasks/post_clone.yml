@@ -1,0 +1,62 @@
+# get my id_rsa.pub. 
+- name: "Discover IP for {{ guest_member }}"
+  become: true
+  shell: |
+    virsh domifaddr {{ guest_member }} --source agent 2>/dev/null | \
+    grep -Evi "lo|ipv6|Name|---" | \
+    grep -oP '(\d{1,3}\.){3}\d{1,3}' | head -n 1
+  register: live_guest_ip_out
+  changed_when: false
+  
+- name: Set target IP fact
+  set_fact:
+    target_ip: "{{ live_guest_ip_out.stdout }}"
+
+- name: Set key as a fact
+  delegate_to: localhost
+  become: false
+  set_fact:
+    my_public_key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+- name: Set key as a fact
+  become: false
+  ansible.builtin.shell:
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa core@{{ target_ip }} "
+      if grep "my_public_key" ~/.ssh/authorized_keys; then 
+        echo "key already exists"; 
+      else
+        echo "{{ my_public_key }}" >> ~/.ssh/authorized_keys;
+      fi
+    "
+
+- name: "FIPS Enforcement: SSH Probe for Helper Node {{ guest_member }}"
+  become: false
+  when: guest_member in groups['helpers']
+  ansible.builtin.shell: |
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o BatchMode=yes -o ConnectTimeout=5 -i .ssh/id_rsa \
+    core@{{ guest_configs[guest_member].interfaces[pro_seg].ip }} "
+      if ! sudo -n fips-mode-setup --check | grep -q 'is enabled'; then
+        echo 'Enabling FIPS and rebooting...'
+        # Chaining with sudo -n ensures no password prompt is ever generated
+        sudo -n fips-mode-setup --enable && sudo -n reboot
+      else
+        echo 'FIPS already enabled'
+      fi
+    "
+  register: live_check
+  failed_when: false
+  changed_when: "'Enabling FIPS' in live_check.stdout"
+
+- name: Wait for SSH Key Auth to become available
+  ansible.builtin.command: >
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null 
+    -o BatchMode=yes -o ConnectTimeout=5 -i .ssh/id_rsa
+    core@{{ guest_configs[guest_member].interfaces[pro_seg].ip }} "uptime"
+  register: ssh_recovery
+  until: ssh_recovery.rc == 0
+  retries: 30
+  delay: 10
+  when: 
+    - guest_member in groups['helpers']
+    - live_check.changed

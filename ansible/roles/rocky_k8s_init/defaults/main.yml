@@ -1,0 +1,43 @@
+---
+# SSH Key Logic
+# 1. Try to get the raw string from 'secops_key' env var
+# 2. If empty, try to read the file from 'helper_ssh_pubkey_path' env var
+# 3. Fallback to the standard local path
+core_ssh_key: >-
+  {{ 
+    lookup('env', 'core_ssh_key') | default(
+      lookup('file', lookup('env', 'helper_ssh_pubkey_path') | default('~/.ssh/id_rsa.pub', true)),
+      tru
+    ) 
+  }}
+
+# Existing defaults
+cloud_helper_user: "{{ lookup('env', 'CLOUD_HELPER_USER') | default('cloud_helper', true) }}"
+vm_host: "{{ lookup('env', 'golden_image_name') | default('golden-base', true) }}"
+VM_HOST_IP: "{{ lookup('env', 'VM_HOST_IP') }}"
+
+# Infrastructure
+cloud_zone: "{{ lookup('env', 'cloud_zone') }}"
+cluster_ip_addr: "{{ lookup('env', 'cluster_ip_addr| default('morinsoft.ca', true) }}"
+ipa_admin_password: "{{ lookup('env', 'ipa_admin_password') }}"
+ipa_master_fqdn: "{{ lookup('env', 'ipa_master') | default('ipa.' ~ cloud_zone, true) }}"
+
+# Resource Defaults
+tram_size: "{{ lookup('env', 'VM_RAM') | default(4096, true) }}"
+tcpu_count: "{{ lookup('env', 'VM_CPUS') | default(2, true) }}"
+tdisk_size: "{{ lookup('env', 'VM_DISK') | default(50, true) }}"
+ssh_key_path: "{{ lookup('env', 'ssh_key_path') | default('~/.ssh/id_rsa', true) | regex_replace('\\.pub$', '') }}"
+
+# OS & Repo Versions
+tos_name: "rocky"
+# tos_variant: "{{ lookup('env', 'OS_VERSION') | default('9.4', true) }}"
+crio_version: "{{ lookup('env', 'crio_version') | default('1.34', true) }}"
+kubernetes_version: "{{ lookup('env', 'K8S_VERSION') | default('1.34', true) }}"
+# iso_path: "{{ lookup('env', 'ISO_PATH') | default('https://download.rockylinux.org/pub/rocky/9/BaseOS/x86_64/os/', true) }}"
+iso_path: "{{ lookup('env', 'ISO_PATH') | default('/var/lib/libvirt/images/Rocky-9-latest-x86_64-dvd.iso', true) }}"
+
+# Other defaults remain the same...
+tos_variant: "9"
+build_loops: "{{ bl|default(120)}}"
+ssh_key_path: "{{ lookup('env', 'ssh_key_path') | default('~/.ssh/id_rsa', true) | regex_replace('\\.pub$', '') }}"
+metallb_vip: "{{ lookup('env', 'metallb_vip') | default('192.168.100.200') }}"

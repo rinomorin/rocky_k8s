@@ -1,0 +1,10 @@
+- name: Clone K8s Nodes from Golden Image
+  delegate_to: "{{ VM_HOST_IP }}"
+  command: >
+    sudo virt-clone --original golden-base 
+    --name {{ item.split('.')[0] }} 
+    --file /var/lib/libvirt/images/{{ item.split('.')[0] }}.qcow2
+  loop: "{{ groups['cluster_nodes'] }}"
+  when: item != 'helper'
+  args:
+    creates: "/var/lib/libvirt/images/{{ item.split('.')[0] }}.qcow2"

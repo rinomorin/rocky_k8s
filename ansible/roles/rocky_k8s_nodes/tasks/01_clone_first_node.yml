@@ -1,0 +1,59 @@
+- name: 1.1 - Infrastructure Creation (Lead Master)
+  delegate_to: "{{ VM_HOST_IP }}"
+  command: >
+    sudo virt-clone 
+    --original golden-base 
+    --name {{ groups['control_nodes'][0].split('.')[0] }}
+    --file /var/lib/libvirt/images/{{ groups['control_nodes'][0].split('.')[0] }}.qcow2
+  args:
+    creates: "/var/lib/libvirt/images/{{ groups['control_nodes'][0].split('.')[0] }}.qcow2"
+  register: clone_result
+
+- name: 1.2 - Verify Clone Status
+  debug:
+    msg: "{{ groups['control_nodes'][0].split('.')[0] }} has been successfully cloned and is ready for configuration."
+  when: clone_result.changed
+
+- name: 1.3.1 - Power On Lead Master
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    if ! sudo virsh list --name | grep -q "^{{ groups['control_nodes'][0].split('.')[0] }}$"; then
+      sudo virsh start {{ groups['control_nodes'][0].split('.')[0] }}
+    else
+      echo "Already running"
+    fi
+  register: start_node
+  changed_when: "'Already running' not in start_node.stdout"
+
+- name: 1.3.2 - Wait for Lead Master to Boot
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: "sudo virsh domstate {{ groups['control_nodes'][0].split('.')[0] }}"
+  register: node_state
+  until: node_state.stdout == "running"
+  retries: 15
+  delay: 5
+  changed_when: false
+
+- name: 1.3.3 - Discover Maintenance IP (br-nat)
+  delegate_to: "{{ VM_HOST_IP }}"
+  shell: |
+    # Find the MAC address assigned to the br-nat interface for this VM
+    MAC=$(sudo virsh domiflist {{ groups['control_nodes'][0].split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    # Query the DHCP leases on that bridge
+    sudo virsh net-dhcp-leases br-nat | grep "$MAC" | awk '{print $5}' | cut -d/ -f1
+  register: lead_master_m_ip
+  until: lead_master_m_ip.stdout != ""
+  retries: 20
+  delay: 10
+
+- name: 1.3.4 - Set Lead Master Maintenance IP Fact
+  set_fact:
+    lead_m_ip: "{{ lead_master_m_ip.stdout | trim }}"
+
+- name: 1.3.5 - Wait for SSH on Maintenance Port
+  delegate_to: localhost
+  wait_for:
+    host: "{{ lead_m_ip }}"
+    port: 22
+    state: started
+    timeout: 300
