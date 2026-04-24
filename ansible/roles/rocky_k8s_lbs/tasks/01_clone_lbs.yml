@@ -17,6 +17,7 @@
     - "'already exists' not in lb_clones.stderr"
 
 - name: "Power on lb image
+  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
