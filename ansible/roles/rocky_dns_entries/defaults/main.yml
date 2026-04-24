@@ -14,5 +14,5 @@ dns_helper_hostname: "{{ hostvars[dns_helper_host_key]['hostname'] }}"
 dns_sub_zone: "{{ dns_helper_hostname.split('.')[1:] | join('.') }}"
 # Fixed trailing braces
 dns_helper_provision_ip: "{{ hostvars[dns_helper_host_key]['provision_ip'] }}"
-dns_provision_zone: "{{ dns_sub_zone.replace(dns_helper_zone.split('.')[-1], 'local')}}"
+dns_provision_zone: "{{ dns_sub_zone.replace(dns_sub_zone.split('.')[-1], 'local')}}"
 dns_provision_rev_zone: "{{ dns_helper_provision_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa."
