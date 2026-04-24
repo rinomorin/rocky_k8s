@@ -37,6 +37,27 @@
   failed_when: false
   changed_when: false
 
+- name: Power off golden image if running
+  become: yes
+  block:
+    - name: Check state of {{ golden_image_name }}
+      ansible.builtin.shell: |
+        virsh domstate "{{ golden_image_name }}"
+      register: vm_state
+      changed_when: false
+      failed_when: 
+        - vm_state.rc != 0
+        - "'not found' not in vm_state.stderr"
+
+    - name: Force power off {{ golden_image_name }}
+      ansible.builtin.shell: |
+        virsh destroy "{{ golden_image_name }}"
+      when: 
+        - vm_state.stdout is defined
+        - "'running' in vm_state.stdout or 'paused' in vm_state.stdout"
+      register: destroy_result
+      changed_when: "'destroyed' in destroy_result.stdout"
+
 - name: Wipe existing golden images matching prefix
   become: true
   shell: |
