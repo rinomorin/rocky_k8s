@@ -3,3 +3,9 @@
   become: true
   roles:
     - role: rocky_dns_cloud
+
+- name: DNS population
+  hosts: all  # Should be the IPA master
+  become: true
+  roles:
+    - role: rocky_dns_cloud

@@ -1,0 +1,70 @@
+---
+# This ensures we have a valid session for all subsequent delegated tasks
+- name: "DNS - Route Inventory Hosts to Correct Zones"
+  delegate_to: "{{ ipa_master_host }}"
+  block:
+    - name: Obtain Kerberos ticket for IPA Admin
+      delegate_to: "{{ ipa_master_host }}"
+      ansible.builtin.shell: echo "{{ ipa_admin_password }}" | kinit admin
+      run_once: true
+      changed_when: false
+      no_log: true
+
+    - name: "DNS - Register Standard Records in Primary Zone"
+      vars:
+        this_ip: "{{ provider_ip | default(ansible_host) }}"
+        ptr_val: "{{ this_ip.split('.')[-1] }}"
+        short_name: "{{ hostvars[inventory_hostname]['hostname'].split('.')[0] }}"
+        hostname: "{{ hostvars[inventory_hostname]['hostname'] }}"
+      ansible.builtin.shell: |
+        ipa dnsrecord-add "{{ dns_primary_zone }}" "{{ short_name }}" --a-rec="{{ this_ip }}"
+        ipa dnsrecord-add "{{ dns_reverse_zone }}" "{{ ptr_val }}" --ptr-rec="{{ hostname }}."
+      when: 
+        - provider_ip is defined
+        - dns_sub_zone not in hostname
+      register: res_primary
+      failed_when: 
+        - res_primary.rc != 0 
+        - "'already exists' not in res_primary.stderr"
+        - "'no modifications' not in res_primary.stderr"
+
+    - name: "DNS - Register Cloud Records in Sub-Zone"
+      vars:
+        this_ip: "{{ provider_ip | default(ansible_host) }}"
+        ptr_val: "{{ this_ip.split('.')[-1] }}"
+        short_name: "{{ hostvars[inventory_hostname]['hostname'].split('.')[0] }}"
+        hostname: "{{ hostvars[inventory_hostname]['hostname'] }}"
+      ansible.builtin.shell: |
+        ipa dnsrecord-add "{{ dns_sub_zone }}" "{{ short_name }}" --a-rec="{{ this_ip }}"
+        ipa dnsrecord-add "{{ dns_reverse_zone }}" "{{ ptr_val }}" --ptr-rec="{{ hostname }}."
+      when: 
+        - provider_ip is defined
+        - dns_sub_zone in hostname
+      register: res_sub
+      failed_when: 
+        - res_sub.rc != 0 
+        - "'already exists' not in res_sub.stderr"
+        - "'no modifications' not in res_sub.stderr"
+
+    - name: "DNS - Register Provisioning Records (10.x)"
+      vars:
+        this_ip: "{{ provision_ip }}"
+        ptr_val: "{{ this_ip.split('.')[-1] }}"
+        short_name: "{{ hostvars[inventory_hostname]['hostname'].split('.')[0] }}"
+        hostname: "{{ hostvars[inventory_hostname]['hostname'] }}"
+      ansible.builtin.shell: |
+        ipa dnsrecord-add "{{ dns_provision_zone }}" "{{ short_name }}" --a-rec="{{ this_ip }}"
+        ipa dnsrecord-add "{{ dns_provision_rev_zone }}" "{{ ptr_val }}" --ptr-rec="{{ hostname }}."
+      when: provision_ip is defined
+      register: res_prov
+      failed_when: 
+        - res_prov.rc != 0 
+        - "'already exists' not in res_prov.stderr"
+        - "'no modifications' not in res_prov.stderr"
+
+# Cleanup the ticket after all hosts have finished their turn
+- name: Destroy Kerberos ticket
+  delegate_to: "{{ ipa_master_host }}"
+  ansible.builtin.shell: kdestroy
+  run_once: true
+  changed_when: false

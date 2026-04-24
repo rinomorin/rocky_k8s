@@ -1,0 +1,18 @@
+---
+# Host and IP Discovery
+ipa_master_host: "{{ groups['ipa'][0] }}"
+ipa_master_ip: "{{ hostvars[ipa_master_host]['ansible_host'] }}"
+ipa_primary_fqdn: "{{ hostvars[ipa_master_host]['hostname'] | default(hostvars[ipa_master_host]['inventory_hostname']) }}"
+# Credential Management
+ipa_admin_password: "{{ lookup('env', 'IPA_ADMIN_PASSWORD') }}"
+# Extracts 'home.morinsoft.ca'
+dns_primary_zone: "{{ ipa_primary_fqdn.split('.')[1:] | join('.') }}"
+dns_reverse_zone: "{{ ipa_master_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa."
+# Extracts 'cloud.home.morinsoft.ca' (Fixed trailing braces)
+dns_helper_host_key: "{{ groups['helpers'][0]}}"
+dns_helper_hostname: "{{ hostvars[dns_helper_host_key]['hostname'] }}"
+dns_sub_zone: "{{ dns_helper_hostname.split('.')[1:] | join('.') }}"
+# Fixed trailing braces
+dns_helper_provision_ip: "{{ hostvars[dns_helper_host_key]['provision_ip'] }}"
+dns_provision_zone: "{{ dns_sub_zone.replace(dns_helper_zone.split('.')[-1], 'local')}}"
+dns_provision_rev_zone: "{{ dns_helper_provision_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa."
