@@ -22,7 +22,7 @@
     # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
-  shell: "visrh start {{ item.split('.')[0] }}"
+  shell: "virsh start {{ item.split('.')[0] }}"
   register: vm_start
   # We ignore the error if it's already running to be resilient
   failed_when: 
