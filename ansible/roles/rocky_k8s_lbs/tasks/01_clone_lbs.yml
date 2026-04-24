@@ -16,7 +16,7 @@
     - lb_clones.rc != 0 
     - "'already exists' not in lb_clones.stderr"
 
-- name: "Power on lb image
+- name: Power on lb image
   delegate_to: "{{ VM_HOST_IP }}"
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables
