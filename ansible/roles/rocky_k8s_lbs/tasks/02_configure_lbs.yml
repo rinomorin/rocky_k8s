@@ -125,13 +125,17 @@
 
 - name: Create Isolated Dummy Network
   delegate_to: "{{ VM_HOST_IP }}"
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
   shell: |
-    if ! sudo virsh net-info black-hole >/dev/null 2>&1; then
+    if ! virsh net-info black-hole >/dev/null 2>&1; then
       cat <<EOF > /tmp/black-hole.xml
       <network><name>black-hole</name></network>
     EOF
-      sudo virsh net-define /tmp/black-hole.xml
-      sudo virsh net-autostart black-hole
-      sudo virsh net-start black-hole
+      virsh net-define /tmp/black-hole.xml
+      virsh net-autostart black-hole
+      virsh net-start black-hole
     fi
 

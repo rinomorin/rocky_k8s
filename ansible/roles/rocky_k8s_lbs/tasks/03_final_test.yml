@@ -3,7 +3,11 @@
   block:
     - name: Hard Power Off VMs
       delegate_to: "{{ VM_HOST_IP }}"
-      shell: "sudo virsh destroy {{ item.split('.')[0] }} || true"
+      vars:
+        # This forces the connection to use 'secops' from the KVM host's variables
+        ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+      become: yes
+      shell: "virsh destroy {{ item.split('.')[0] }} || true"
       loop: "{{ groups['hahost'] }}"
 
     - name: Wait for state settlement
@@ -12,7 +16,11 @@
 
     - name: Power On VMs
       delegate_to: "{{ VM_HOST_IP }}"
-      shell: "sudo virsh start {{ item.split('.')[0] }}"
+      vars:
+        # This forces the connection to use 'secops' from the KVM host's variables
+        ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+      become: yes
+      shell: "virsh start {{ item.split('.')[0] }}"
       loop: "{{ groups['hahost'] }}"
 
     - name: Wait for SSH on Production IP

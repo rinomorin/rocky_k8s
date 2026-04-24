@@ -2,8 +2,12 @@
 ---
 - name: Clone Load Balancer nodes from Golden Image
   delegate_to: "{{ VM_HOST_IP }}"
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
   command: >
-    sudo virt-clone --original {{ golden_image_name }}
+    virt-clone --original {{ golden_image_name }}
     --name {{ item.split('.')[0] }} 
     --file /var/lib/libvirt/images/{{ item.split('.')[0] }}.qcow2
   loop: "{{ groups['hahost'] }}"
@@ -14,6 +18,7 @@
 
 - name: Start cloned VMs
   delegate_to: "{{ VM_HOST_IP }}"
+  become: yes
   community.libvirt.virt:
     name: "{{ item.split('.')[0] }}"
     state: running
@@ -21,10 +26,14 @@
 
 - name: 1.1 - Discover Maintenance IP from br-nat
   delegate_to: "{{ VM_HOST_IP }}"
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
   shell: |
-    M_MAC=$(sudo virsh domiflist {{ item.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
-    while ! sudo virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
-    sudo virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+    M_MAC=$(virsh domiflist {{ item.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
+    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
   register: maintenance_ip_raw
   loop: "{{ groups['hahost'] }}"
 
@@ -32,7 +41,7 @@
   delegate_to: localhost
   vars:
     m_ip: "{{ item.stdout }}"
-    key_path: "/home/cloud_helper/.ssh/id_rsa"
+    key_path: "~/.ssh/id_rsa"
   shell: |
     ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }} core@{{ m_ip }} "echo sshok"
   register: ssh_test
@@ -61,8 +70,12 @@
 
 - name: 2.1 - Discover Provider MAC from default network
   delegate_to: "{{ VM_HOST_IP }}"
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
   shell: |
-    sudo virsh domiflist {{ item.split('.')[0] }} | grep 'default' | awk '{print $5}'
+    virsh domiflist {{ item.split('.')[0] }} | grep 'default' | awk '{print $5}'
   register: provider_mac_raw
   loop: "{{ groups['hahost'] }}"
 
@@ -93,8 +106,12 @@
 
 - name: 2.3 - Discover Cluster MAC from br-cluster
   delegate_to: "{{ VM_HOST_IP }}"
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
   shell: |
-    sudo virsh domiflist {{ item.split('.')[0] }} | grep 'br-cluster' | awk '{print $5}'
+    virsh domiflist {{ item.split('.')[0] }} | grep 'br-cluster' | awk '{print $5}'
   register: cluster_mac_raw
   loop: "{{ groups['hahost'] }}"
 
