@@ -22,13 +22,14 @@
     # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
-  shell: "virsh start {{ golden_image_name }}"
+  shell: "visrh start {{ item.split('.')[0] }}"
   register: vm_start
   # We ignore the error if it's already running to be resilient
   failed_when: 
     - vm_start.rc != 0 
     - "'already active' not in vm_start.stderr"
   changed_when: "vm_start.rc == 0"
+  loop: "{{ groups['hahost'] }}"
 
 - name: 1.1 - Discover Maintenance IP from br-nat
   delegate_to: "{{ VM_HOST_IP }}"
