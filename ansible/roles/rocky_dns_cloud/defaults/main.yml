@@ -5,7 +5,7 @@ ipa_master_ip: "{{ hostvars[ipa_master_host]['ansible_host'] }}"
 ipa_primary_fqdn: "{{ hostvars[ipa_master_host]['hostname'] | default(hostvars[ipa_master_host]['inventory_hostname']) }}"
 
 # Credential Management
-ipa_admin_password: "{{ lookup('env', 'IPA_ADMIN_PASSWORD') }}"
+ipa_admin_password: "{{ lookup('env', 'ipa_admin_password') }}"
 
 # DNS Zone Logic
 # Helper Identity
