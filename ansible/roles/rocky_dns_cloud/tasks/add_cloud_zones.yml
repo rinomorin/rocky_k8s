@@ -22,12 +22,12 @@
 #   changed_when: "'Updating...' in gw_result.stdout"
 
 - name: DNS Delegation via IPA CLI
-  delegate_to: "{{ ipa_master_host }}"
+  delegate_to: "{{ ipa_master_ip }}"
   block:
     - name: Obtain Kerberos ticket for IPA Admin
       ansible.builtin.shell: echo "{{ ipa_admin_password }}" | kinit admin
       changed_when: false
-      no_log: true        
+      # no_log: true        
 
     # STEP 1: Create the Cloud Zone
     - name: Create the cloud sub-zone
