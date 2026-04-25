@@ -1,24 +1,24 @@
 ---
-- name: "Network - Ensure Correct Default Gateway for Ambassador"
-  become: yes
-  vars:
-    safe_helper_ip: "{{ dns_helper_provider_ip }}"
-    TGW: "{{ safe_helper_ip.split('.')[:3] | join('.') }}.1"
-  ansible.builtin.shell: |
-    TARGET_IP="{{ safe_helper_ip }}"
-    TARGET_GW="{{ TGW }}"
-    NIC_NAME=$(ip -o addr show | grep "$TARGET_IP" | awk '{print $2}' | sed 's/://')
-    CURRENT_GW=$(ip route show default | awk '/default/ {print $3}')
+# - name: "Network - Ensure Correct Default Gateway for Ambassador"
+#   become: yes
+#   vars:
+#     safe_helper_ip: "{{ dns_helper_provider_ip }}"
+#     TGW: "{{ safe_helper_ip.split('.')[:3] | join('.') }}.1"
+#   ansible.builtin.shell: |
+#     TARGET_IP="{{ safe_helper_ip }}"
+#     TARGET_GW="{{ TGW }}"
+#     NIC_NAME=$(ip -o addr show | grep "$TARGET_IP" | awk '{print $2}' | sed 's/://')
+#     CURRENT_GW=$(ip route show default | awk '/default/ {print $3}')
 
-    if [ "$CURRENT_GW" != "$TARGET_GW" ]; then
-        echo "Gateway mismatch! Current: $CURRENT_GW, Target: $TARGET_GW. Updating..."
-        nmcli connection modify "$NIC_NAME" ipv4.gateway "$TARGET_GW" ipv4.method manual
-        nmcli connection up "$NIC_NAME"
-    else
-        echo "Gateway is already correct ($CURRENT_GW). No action needed."
-    fi
-  register: gw_result
-  changed_when: "'Updating...' in gw_result.stdout"
+#     if [ "$CURRENT_GW" != "$TARGET_GW" ]; then
+#         echo "Gateway mismatch! Current: $CURRENT_GW, Target: $TARGET_GW. Updating..."
+#         nmcli connection modify "$NIC_NAME" ipv4.gateway "$TARGET_GW" ipv4.method manual
+#         nmcli connection up "$NIC_NAME"
+#     else
+#         echo "Gateway is already correct ($CURRENT_GW). No action needed."
+#     fi
+#   register: gw_result
+#   changed_when: "'Updating...' in gw_result.stdout"
 
 - name: DNS Delegation via IPA CLI
   delegate_to: "{{ ipa_master_host }}"
