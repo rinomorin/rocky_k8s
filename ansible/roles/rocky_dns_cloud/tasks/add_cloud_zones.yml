@@ -1,5 +1,4 @@
 ---
-
 # - name: "Network - Ensure Correct Default Gateway for Ambassador"
 #   become: yes
 #   vars:
