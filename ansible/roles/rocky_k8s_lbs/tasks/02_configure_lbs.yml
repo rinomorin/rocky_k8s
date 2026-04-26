@@ -1,6 +1,7 @@
 # 02_configure_lbs.yml 
 ---
 - name: "DNS Prep - clean resolve"
+  delegate_to: localhost
   become: false
   ansible.builtin.shell: |     
     ssh core@{{ hostvars[item]['provider_ip'] }} "
