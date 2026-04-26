@@ -108,7 +108,8 @@
       ipv4.dns '{{ dns_servers }}' \
       ipv4.route-metric 300 \
       ipv4.never-default yes \
-      connection.autoconnect yes"
+      connection.autoconnect yes \
+      802-3-ethernet.ignore-carrier yes"
     
     {{ ssh_base }} "sudo nmcli con up $DEV"
   loop: "{{ groups['hahost'] }}"
@@ -134,7 +135,8 @@
       ipv4.method manual ipv4.addresses {{ node_ip }}/24 \
       ipv4.route-metric 200 \
       ipv4.never-default yes \
-      connection.autoconnect yes"
+      connection.autoconnect yes\
+      802-3-ethernet.ignore-carrier yes"
 
     {{ ssh_base }} "sudo nmcli con up $DEV"
   loop: "{{ groups['hahost'] }}"
