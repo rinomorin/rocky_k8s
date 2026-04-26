@@ -98,28 +98,25 @@
   loop: "{{ groups['hahost'] }}"
 
 - name: 2.2 - Configure Provider IP via Maintenance Tunnel
-  # delegate_to: localhost
   become: false
   vars:
-    provider_ip: "{{ hostvars[item].ansible_host }}"
-    provider_gw: "{{ hostvars['kvmdc01'].libvirt_networks | selectattr('name', 'equalto', 'default') | map(attribute='cidr') | first | ansible.utils.ipaddr('net') | ansible.utils.ipaddr('1') | split('/') | first }}"
-    m_ip: "{{ maintenance_map[item] }}"
-    p_mac: "{{ (provider_mac_raw.results | selectattr('item', 'equalto', item) | first).stdout }}"
-    key_path: "/home/cloud_helper/.ssh/id_rsa"
-    dns_servers: "{{ groups['dns'] | map('extract', hostvars, 'ansible_host') | join(' ') }}"
-    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }} core@{{ m_ip }}"
+    # ... existing vars ...
+    # Use ~ to avoid hardcoded /home/cloud_helper if running as different user
+    actual_key: "~/.ssh/id_rsa" 
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ actual_key }} core@{{ m_ip }}"
   shell: |
-    # 1. Get the Device name (e.g. eth1) by looking for the line AFTER the MAC match
-    # nmcli -t output usually puts GENERAL.DEVICE right above GENERAL.HWADDR
     DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
 
-    # 2. Cleanup existing profile
     {{ ssh_cmd }} "sudo nmcli con delete provider || true"
 
-    # 3. Add and Configure the connection
-    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name provider ifname $DEV ipv4.method manual ipv4.addresses {{ provider_ip }}/24 ipv4.gateway {{ provider_gw }} ipv4.dns '{{ dns_servers }}' connection.autoconnect yes"
+    # Add with metric 300 and ensure it doesn't try to become the primary default gateway
+    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name provider ifname $DEV \
+      ipv4.method manual ipv4.addresses {{ provider_ip }}/24 \
+      ipv4.gateway {{ provider_gw }} \
+      ipv4.route-metric 300 \
+      ipv4.never-default yes \
+      connection.autoconnect yes"
 
-    # 4. Bring it up
     {{ ssh_cmd }} "sudo nmcli con up provider"
   loop: "{{ groups['hahost'] }}"
 
@@ -135,26 +132,22 @@
   loop: "{{ groups['hahost'] }}"
 
 - name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
-  # delegate_to: localhost
   become: false
   vars:
-    node_ip: "{{ hostvars[item].node_ip }}"
-    m_ip: "{{ maintenance_map[item] }}"
-    c_mac: "{{ (cluster_mac_raw.results | selectattr('item', 'equalto', item) | first).stdout }}"
-    key_path: "${HOME}/.ssh/id_rsa"
-    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }} core@{{ m_ip }}"
+    # ... existing vars ...
+    actual_key: "~/.ssh/id_rsa"
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ actual_key }} core@{{ m_ip }}"
   shell: |
-    # 1. Get the Device name (e.g. eth2) by matching the Cluster MAC
     DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ c_mac }}" | head -n 1 | cut -d: -f2)
 
-    # 2. Cleanup existing profile if it exists
     {{ ssh_cmd }} "sudo nmcli con delete cluster || true"
 
-    # 3. Add and Configure the 10.0.0.x connection
-    # Note: No gateway here, as the default GW stays on the Provider network
-    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name cluster ifname $DEV ipv4.method manual ipv4.addresses {{ node_ip }}/24 connection.autoconnect yes"
+    # Configure with metric 200
+    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name cluster ifname $DEV \
+      ipv4.method manual ipv4.addresses {{ node_ip }}/24 \
+      ipv4.route-metric 200 \
+      connection.autoconnect yes"
 
-    # 4. Bring it up
     {{ ssh_cmd }} "sudo nmcli con up cluster"
   loop: "{{ groups['hahost'] }}"
 
