@@ -62,13 +62,13 @@
 
     - name: Push and Prepare Node Configuration
       delegate_to: localhost
-      become: true  # Use root on the helper to fix permissions and modify files
-      vars:
-        # Use the specific user's key for the SCP/SSH portions
-        ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o LogLevel=ERROR -i /home/core/.ssh/id_rsa"
+      become: true
       loop: "{{ groups['hahost'] }}"
+      vars:
+        # Pointing to the specific private key
+        ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o LogLevel=ERROR -i /home/core/.ssh/id_rsa"
       shell: |
-        # 1. Fix local permissions on the helper first
+        # 1. Fix local permissions on the helper
         chown -R core:core /tmp/k8s_lb_configs/{{ item }}
         
         # 2. Update local configs
@@ -76,34 +76,32 @@
         sed -i "s|[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/24|{{ k8s_api_vip }}/24|g" /tmp/k8s_lb_configs/{{ item }}/keepalived.conf
         sed -i "s|bind .*:6443|bind {{ k8s_api_vip }}:6443|g" /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
         
-        # Ensure trailing newline (The "printf" way is more robust)
-        sed -i '$a\' /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
+        # Robust Newline Fix: Ensure a trailing LF exists for HAProxy
+        sed -i -e '$a\' /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
 
-        # 3. SCP configs to the LB node (as core user)
+        # 3. SCP configs to the LB node
         scp {{ ssh_opts }} /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg core@{{ hostvars[item].ansible_host }}:/tmp/haproxy.cfg
         scp {{ ssh_opts }} /tmp/k8s_lb_configs/{{ item }}/keepalived.conf core@{{ hostvars[item].ansible_host }}:/tmp/keepalived.conf
 
-        # 4. Apply and Start (on the guest nodes)
-        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} "
+        # 4. Apply and Start on Guest
+        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} << 'EOF'
           sudo sysctl -w net.ipv4.ip_nonlocal_bind=1
-          echo 'net.ipv4.ip_nonlocal_bind = 1' | sudo tee /etc/sysctl.d/99-haproxy.conf
+          echo 'net.ipv4.ip_nonlocal_bind = 1' | sudo tee /etc/sysctl.d/99-haproxy.conf > /dev/null
           
-          # Move and set permissions
           sudo mv /tmp/haproxy.cfg /etc/haproxy/haproxy.cfg
           sudo mv /tmp/keepalived.conf /etc/keepalived/keepalived.conf
           sudo chown root:root /etc/haproxy/haproxy.cfg /etc/keepalived/keepalived.conf
           sudo restorecon -Rv /etc/haproxy /etc/keepalived
 
-          # PRE-FLIGHT & RESTART
           if sudo haproxy -c -f /etc/haproxy/haproxy.cfg; then
             sudo systemctl restart keepalived
             sleep 2
             sudo systemctl restart haproxy
           else
-            echo 'HAProxy config still invalid'
+            echo "HAProxy config invalid on $(hostname)"
             exit 1
           fi
-        "
+        EOF
 
     - name: Start and Verify Services
       delegate_to: localhost
