@@ -110,7 +110,7 @@
       ipv4.never-default yes \
       connection.autoconnect yes"
     
-    {{ ssh_base }} "sudo nmcli con up provider"
+    {{ ssh_base }} "sudo nmcli con up $DEV"
   loop: "{{ groups['hahost'] }}"
 
 - name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
@@ -136,7 +136,7 @@
       ipv4.never-default yes \
       connection.autoconnect yes"
 
-    {{ ssh_base }} "sudo nmcli con up cluster"
+    {{ ssh_base }} "sudo nmcli con up $DEV"
   loop: "{{ groups['hahost'] }}"
 
 - name: Verify SSH reachability on Static IPs
