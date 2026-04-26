@@ -2,7 +2,6 @@
   debug:
     msg: "key {{item.key}}"
 
- "
 - name: "Set guest NIC variables for {{ guest_member }} interface"
   set_fact:
     module_value: "{{ module_item.value }}"
