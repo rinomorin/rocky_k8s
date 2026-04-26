@@ -19,7 +19,6 @@ while getopts "d:i:U:C:v:e:" opt; do
 done
 shift $((OPTIND-1))
 echo d"DEST_DIR=$DEST_DIR INVENTORY=$INVENTORY REPO_URL=$REPO_URL CHECKOUT=$CHECKOUT VENV_PATH=$VENV_PATH EXTRA_VARS=$EXTRA_VARS"
-exit 0
 
 PLAYBOOK=$1
 
@@ -29,9 +28,8 @@ if [ -z "$PLAYBOOK" ]; then
 fi
 
 # 1: Download/Sync only
-ansible-pull -d "${DEST_DIR}" -U "${REPO_URL}" -C "${CHECKOUT}" --list-hosts 2>/dev/null
+ansible-pull -d "${DEST_DIR}" -i "${INVENTORY}" -U "${REPO_URL}" -C "${CHECKOUT}" --list-hosts 2>/dev/null
 
-echo "cd to ${DEST_DIR}/ansible"
 # 2: Move to destination
 cd "${DEST_DIR}/ansible" || { echo "Failed to enter ${DEST_DIR}/ansible."; exit 1; }
 
@@ -49,4 +47,3 @@ export ANSIBLE_CONFIG="${DEST_DIR}/ansible/ansible.cfg"
 # pwd  && echo ${PLAYBOOK}
 # 4: Run the actual playbook
 ansible-playbook -i "${INVENTORY}" "${PLAYBOOK}" ${EXTRA_VARS}
-echo "extra vars ${EXTRA_VARS}"
