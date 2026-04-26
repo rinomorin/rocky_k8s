@@ -182,6 +182,46 @@
     fi"
   loop: "{{ groups['hahost'] | default([]) }}"
 
+- name: 5.2 - Network Routing Swap and Maintenance Isolation
+  become: false
+  vars:
+    m_ip: "{{ maintenance_map[item] }}"
+    p_gw: "192.168.100.1"
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@{{ m_ip }}"
+  shell: |
+    # 1. Promote Provider (enp3s0) to be the Default Route
+    {{ ssh_cmd }} "sudo nmcli connection modify enp3s0 ipv4.gateway {{ p_gw }} ipv4.route-metric 50 ipv4.never-default no"
+
+    # 2. Demote Maintenance (enp1s0) and isolate it
+    # We strip its current gateway and set a massive metric
+    {{ ssh_cmd }} "sudo nmcli connection modify enp1s0 ipv4.gateway '' ipv4.route-metric 1000 ipv4.never-default yes"
+
+    # 3. Apply changes - we do provider first so the new path is ready
+    {{ ssh_cmd }} "sudo nmcli connection up enp3s0 && sudo nmcli connection up enp1s0"
+  loop: "{{ groups['hahost'] | default([]) }}"
+
+- name: 6.1 - Reassign KVM Maintenance Interface to Black-Hole
+  delegate_to: "{{ VM_HOST_IP }}"
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  shell: |
+    VM_NAME="{{ item.split('.')[0] }}"
+    # 1. Get the MAC address of the interface currently on br-nat
+    M_MAC=$(virsh domiflist $VM_NAME | grep 'br-nat' | awk '{print $5}')
+    
+    if [ ! -z "$M_MAC" ]; then
+      # 2. Update the live configuration to move to black-hole
+      # We use --config for persistence and --live for immediate effect
+      virsh update-device $VM_NAME /dev/stdin --live --config <<EOF
+    <interface type='network'>
+      <mac address='$M_MAC'/>
+      <source network='black-hole'/>
+      <model type='virtio'/>
+    </interface>
+    EOF
+    fi
+  loop: "{{ groups['hahost'] | default([]) }}"
 - name: Verify SSH reachability on Static IPs
   wait_for:
     host: "{{ hostvars[item].ansible_host }}"
