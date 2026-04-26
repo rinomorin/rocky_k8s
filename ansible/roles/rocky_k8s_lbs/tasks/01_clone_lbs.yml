@@ -46,13 +46,11 @@
 
 - name: Who am i
   become: false
-  shell:
-    hostname
-    whoami
+  shell:  "hostname && whoami"
   register: who_am
 
 - debug:
-    msg: "who_am.stdout_lines"
+    msg: "who {{who_am.stdout_line}}"
 
 - name: 1.2 - Verify Maintenance SSH (sshok)
   # delegate_to: localhost
