@@ -13,7 +13,7 @@ while getopts "d:i:U:C:v:e:" opt; do
     U) REPO_URL="$OPTARG" ;;
     C) CHECKOUT="$OPTARG" ;;
     v) VENV_PATH="$OPTARG" ;;
-    e) EXTRA_VARS="--extra-vars \"$OPTARG\"" ;;
+    e) EXTRA_VARS="-e \"$OPTARG\"" ;;
     *) echo "Usage: ansible.execute -d dir -i inv -U url [-C checkout] [-v venv] [-e vars] playbook" && exit 1 ;;
   esac
 done
