@@ -222,6 +222,7 @@
 
 - name: local connection
   delegate_to: localhost
+  become: false
   shell: "ssh {{ hostvars[item]['provider_ip']}} ip route"
   register: node_connet
   loop: "{{ groups['hahost'] | default([]) }}"
