@@ -41,6 +41,28 @@
   register: maintenance_ip_raw
   loop: "{{ groups['hahost'] }}"
 
+- name: 1.1 - Discover Provision MAC from br-cloud
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  shell: |
+    echo $(virsh domiflist {{ item.split('.')[0] }} | grep 'br-cluster' | awk '{print $5}')
+  register: c_mac_raw
+  loop: "{{ groups['hahost'] }}"
+
+- name: 1.1.1 - Set Provision MAC from br-cloud
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  set_fact:
+    c_mac_map:
+      "{{ item.split('.')[0] }}": "{{ c_mac_raw.stdout }}"
+  register: c_mac_raw
+  loop: "{{ groups['hahost'] }}"
+
+
 - name: Who am i
   become: false
   # Added the && to separate the commands properly
@@ -143,6 +165,7 @@
     # p_mac_result: "{{ provider_mac_raw.results | selectattr('item', 'equalto', item) | first }}"
     # p_mac: "{{ p_mac_result.stdout }}"
     m_ip: "{{ maintenance_map[item] }}"
+    c_mac: "{{ c_mac_map[item] }}"
     # ssh_base: >-
     #   ssh -o StrictHostKeyChecking=no 
     #   -o UserKnownHostsFile=/dev/null 
