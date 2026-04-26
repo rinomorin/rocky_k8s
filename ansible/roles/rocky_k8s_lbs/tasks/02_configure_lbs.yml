@@ -61,64 +61,45 @@
 
     - name: Push and Prepare Node Configuration
       delegate_to: localhost
-      become: false
-      loop: "{{ groups['hahost'] }}"
+      become: true  # Use root on the helper to fix permissions and modify files
       vars:
-        ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o LogLevel=ERROR -i {{ ssh_key_path }}"
-        target_ip: "{{ hostvars[item].ansible_host }}"
+        # Use the specific user's key for the SCP/SSH portions
+        ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o LogLevel=ERROR -i /home/core/.ssh/id_rsa"
+      loop: "{{ groups['hahost'] }}"
       shell: |
-        # 1. Update local configs in /tmp
+        # 1. Fix local permissions on the helper first
+        chown -R core:core /tmp/k8s_lb_configs/{{ item }}
+        
+        # 2. Update local configs
         sed -i "s|interface .*|interface {{ hostvars[item].active_iface }}|g" /tmp/k8s_lb_configs/{{ item }}/keepalived.conf
         sed -i "s|[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/24|{{ k8s_api_vip }}/24|g" /tmp/k8s_lb_configs/{{ item }}/keepalived.conf
         sed -i "s|bind .*:6443|bind {{ k8s_api_vip }}:6443|g" /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
         
-        # CRITICAL FIX: Ensure a trailing newline exists (HAProxy fails without it)
-        echo "" >> /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
+        # Ensure trailing newline (The "printf" way is more robust)
+        sed -i '$a\' /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
 
-        # 2. SCP configs to the LB node
-        scp  /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg core@{{ target_ip }}:/tmp/haproxy.cfg
-        scp  /tmp/k8s_lb_configs/{{ item }}/keepalived.conf core@{{ target_ip }}:/tmp/keepalived.conf
+        # 3. SCP configs to the LB node (as core user)
+        scp {{ ssh_opts }} /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg core@{{ hostvars[item].ansible_host }}:/tmp/haproxy.cfg
+        scp {{ ssh_opts }} /tmp/k8s_lb_configs/{{ item }}/keepalived.conf core@{{ hostvars[item].ansible_host }}:/tmp/keepalived.conf
 
-        # 3. Apply Host-Level fixes and start services
-        ssh  core@{{ target_ip }} "
-          # Firewall: Allow VRRP (Keepalived) and K8s API
-          sudo firewall-cmd --permanent --add-port=6443/tcp
-          sudo firewall-cmd --permanent --add-rich-rule='rule protocol value=\"vrrp\" accept'
-          sudo firewall-cmd --reload
-
-          # Sysctl: Allow HAProxy to bind to the VIP even if Keepalived hasn't grabbed it yet
+        # 4. Apply and Start (on the guest nodes)
+        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} "
           sudo sysctl -w net.ipv4.ip_nonlocal_bind=1
           echo 'net.ipv4.ip_nonlocal_bind = 1' | sudo tee /etc/sysctl.d/99-haproxy.conf
-
-          # SELinux: Allow HAProxy to connect to backend Masters on 10.x network
-          sudo setsebool -P haproxy_connect_any 1 || true
-          sudo semanage port -a -t http_port_t -p tcp 6443 || sudo semanage port -m -t http_port_t -p tcp 6443
-
-          # Move configs to final destination
+          
+          # Move and set permissions
           sudo mv /tmp/haproxy.cfg /etc/haproxy/haproxy.cfg
           sudo mv /tmp/keepalived.conf /etc/keepalived/keepalived.conf
           sudo chown root:root /etc/haproxy/haproxy.cfg /etc/keepalived/keepalived.conf
-          sudo chmod 644 /etc/haproxy/haproxy.cfg /etc/keepalived/keepalived.conf
           sudo restorecon -Rv /etc/haproxy /etc/keepalived
 
-          # PRE-FLIGHT SYNTAX CHECK
-          if ! sudo haproxy -c -f /etc/haproxy/haproxy.cfg; then
-            echo 'HAProxy configuration is INVALID'
-            exit 1
-          fi
-
-          # START SEQUENCE
-          sudo systemctl daemon-reload
-          sudo systemctl enable keepalived haproxy
-          sudo systemctl restart keepalived
-          
-          # Wait for Keepalived to initialize the interface
-          sleep 5
-          
-          # Final HAProxy start
-          if ! sudo systemctl restart haproxy; then
-            echo 'HAProxy failed to start. Last 20 lines of logs:'
-            sudo journalctl -xeu haproxy --no-pager | tail -n 20
+          # PRE-FLIGHT & RESTART
+          if sudo haproxy -c -f /etc/haproxy/haproxy.cfg; then
+            sudo systemctl restart keepalived
+            sleep 2
+            sudo systemctl restart haproxy
+          else
+            echo 'HAProxy config still invalid'
             exit 1
           fi
         "
