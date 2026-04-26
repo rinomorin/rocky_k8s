@@ -47,16 +47,18 @@
       changed_when: false
       failed_when: 
         - vm_state.rc != 0
-        - "'not found' not in vm_state.stderr"
+        # Updated to match the actual libvirt error message
+        - "'failed to get domain' not in vm_state.stderr"
 
     - name: Force power off {{ golden_image_name }}
       ansible.builtin.shell: |
         virsh destroy "{{ golden_image_name }}"
+      # Check if stdout exists and the VM is in a state that requires destroying
       when: 
-        - vm_state.stdout is defined
+        - vm_state.rc == 0
         - "'running' in vm_state.stdout or 'paused' in vm_state.stdout"
       register: destroy_result
-      changed_when: "'destroyed' in destroy_result.stdout"
+      changed_when: true
 
 - name: Wipe existing golden images matching prefix
   become: true

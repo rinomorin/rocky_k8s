@@ -1,6 +1,5 @@
 # 00_pre_check.yml
 - name: 0.1 - Check if LB Nodes already exist
-  delegate_to: "{{ VM_HOST_IP }}"
   become: yes
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables
