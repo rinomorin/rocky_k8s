@@ -4,12 +4,12 @@
   delegate_to: localhost
   become: false
   ansible.builtin.shell: |     
-    ssh core@{{ hostvars[item]['provider_ip'] }} "
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null core@{{ hostvars[item]['provider_ip'] }} "
       sudo sed -i '/nameserver 172.16/d' /etc/resolv.conf && \
-      echo search {{ c_zone }} {{ p_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }} > /etc/resolv.conf && \
-      echo nameserver {{ hostvars[groups['helpers'][0]]['provider_ip'] }} >> /etc/resolv.conf && \
-      echo nameserver {{ hostvars[groups['ipa'][0]]['ansible_host'] }} >> /etc/resolv.conf && \
-      echo nameserver {{ hostvars[groups['ipa'][1]]['ansible_host'] }} >> /etc/resolv.conf"
+      echo 'search {{ c_zone }} {{ p_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }}' | sudo tee /etc/resolv.conf > /dev/null && \
+      echo 'nameserver {{ hostvars[groups['helpers'][0]]['provider_ip'] }}' | sudo tee -a /etc/resolv.conf > /dev/null && \
+      echo 'nameserver {{ hostvars[groups['ipa'][0]]['ansible_host'] }}' | sudo tee -a /etc/resolv.conf > /dev/null && \
+      echo 'nameserver {{ hostvars[groups['ipa'][1]]['ansible_host'] }}' | sudo tee -a /etc/resolv.conf > /dev/null"
   loop: "{{ groups['hahost'] }}"
 
 - name: Install HA Software Stack
