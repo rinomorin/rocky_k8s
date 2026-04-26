@@ -131,7 +131,7 @@
     node_ip: "{{ hostvars[item].node_ip }}"
     m_ip: "{{ maintenance_map[item] }}"
     c_mac: "{{ (cluster_mac_raw.results | selectattr('item', 'equalto', item) | first).stdout }}"
-    key_path: "/home/cloud_helper/.ssh/id_rsa"
+    key_path: "/home/{{ ansible_user}}/.ssh/id_rsa"
     ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }} core@{{ m_ip }}"
   shell: |
     # 1. Get the Device name (e.g. eth2) by matching the Cluster MAC
