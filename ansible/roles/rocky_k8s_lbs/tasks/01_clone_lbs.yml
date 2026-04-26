@@ -208,6 +208,7 @@
     ssh-keygen -R {{ hostvars[item]['provider_ip'] }} || true
     # Clear the VM name (short name)
     ssh-keygen -R {{ item.split('.')[0] }} || true
+    rm -f ~/.ssh/known_hosts
   loop: "{{ groups['hahost'] | default([]) }}"
   ignore_errors: yes
 
