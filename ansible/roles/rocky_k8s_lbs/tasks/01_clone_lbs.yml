@@ -87,7 +87,7 @@
   vars:
     m_ip: "{{ maintenance_map[item] }}"
     p_mac: "{{ p_mac_map[item] }}"
-    provider_ip: "{{ hostvars[item].ansible_host }}"
+    provider_ip: "{{ hostvars[item].provider_ip }}"
     # Fetches the .1 gateway from the 'default' network CIDR on kvmdc01
     provider_gw: "{{ hostvars['kvmdc01'].libvirt_networks | selectattr('name', 'equalto', 'default') | map(attribute='cidr') | first | ansible.utils.ipaddr('net') | ansible.utils.ipaddr('1') | split('/') | first }}"
     dns_servers: "{{ groups['dns'] | map('extract', hostvars, 'ansible_host') | join(' ') }}"
@@ -108,16 +108,16 @@
     {{ ssh_base }} "sudo nmcli con delete $DEV || true"
 
     # 4. Add the connection with explicit carrier ignore and autoconnect
-    {{ ssh_base }} "sudo nmcli con add type ethernet con-name $DEV ifname $DEV \
-      ipv4.method manual ipv4.addresses {{ provision_ip }}/24 \
-      ipv4.gateway {{ provision_gw }} \
+    {{ ssh_base }} "sudo nmcli con add type ethernet con-name provider ifname $DEV \
+      ipv4.method manual ipv4.addresses {{ provider_ip }}/24 \
+      ipv4.gateway {{ provider_gw }} \
       ipv4.route-metric 300 \
       ipv4.never-default yes \
       connection.autoconnect yes \
       802-3-ethernet.ignore-carrier yes"
 
     # 5. Kick the connection
-    {{ ssh_base }} "sudo nmcli con up $DEV"
+    {{ ssh_base }} "sudo nmcli con up provider"
   loop: "{{ groups['hahost'] }}"
 
 - name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
@@ -125,7 +125,7 @@
   vars:
     m_ip: "{{ maintenance_map[item] }}"
     c_mac: "{{ c_mac_map[item] }}"
-    node_ip: "{{ hostvars[item].node_ip }}"
+    node_ip: "{{ hostvars[item].provision_ip }}"
     ssh_base: >-
       ssh -o StrictHostKeyChecking=no 
       -o UserKnownHostsFile=/dev/null 
