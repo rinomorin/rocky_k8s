@@ -88,7 +88,8 @@
   loop: "{{ groups['hahost'] }}"
 
 - name: 2.2 - Configure Provider IP via Maintenance Tunnel
-  delegate_to: localhost
+  # delegate_to: localhost
+  become: false
   vars:
     provider_ip: "{{ hostvars[item].ansible_host }}"
     provider_gw: "{{ hostvars['kvmdc01'].libvirt_networks | selectattr('name', 'equalto', 'default') | map(attribute='cidr') | first | ansible.utils.ipaddr('net') | ansible.utils.ipaddr('1') | split('/') | first }}"
@@ -113,7 +114,7 @@
   loop: "{{ groups['hahost'] }}"
 
 - name: 2.3 - Discover Cluster MAC from br-cluster
-  delegate_to: "{{ VM_HOST_IP }}"
+  # delegate_to: "{{ VM_HOST_IP }}"
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -124,7 +125,8 @@
   loop: "{{ groups['hahost'] }}"
 
 - name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
-  delegate_to: localhost
+  # delegate_to: localhost
+  become: false
   vars:
     node_ip: "{{ hostvars[item].node_ip }}"
     m_ip: "{{ maintenance_map[item] }}"
