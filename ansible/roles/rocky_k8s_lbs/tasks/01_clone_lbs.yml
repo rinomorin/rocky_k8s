@@ -156,7 +156,6 @@
   loop: "{{ groups['hahost'] }}"
 
 - name: 3.1 - Force KVM Link State to UP (Host Side)
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
@@ -191,8 +190,8 @@
     done
     
     # 3. Final kick to all connections
-    {{ ssh_base }} "sudo nmcli connection up cluster || true"
-    {{ ssh_base }} "sudo nmcli connection up provider || true"
+    {{ ssh_base }} "sudo nmcli connection up enp2s0 || true"
+    {{ ssh_base }} "sudo nmcli connection up enp3s0 || true"
   loop: "{{ groups['hahost'] }}"
 
 - name: Verify SSH reachability on Static IPs
