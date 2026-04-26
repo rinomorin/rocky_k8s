@@ -65,21 +65,21 @@
   delay: 5
   loop: "{{ maintenance_ip_raw.results }}"
 
-- name: 1.1 - Discover Provision MAC from br-cloud
+- name: 1.1.2 - Discover Provision MAC from br-cloud
   delegate_to: "{{ VM_HOST_IP }}"
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
   shell: |
     virsh domiflist {{ item.split('.')[0] }} | grep 'br-cluster' | awk '{print $5}'
-  register: c_mac_results
+  register: cluster_mac_discovery
   loop: "{{ groups['hahost'] }}"
 
-- name: 1.1.1 - Build Cluster MAC Map
+- name: 1.1.3 - Build Cluster MAC Map
   set_fact:
-    # Use combine to add each VM name and MAC to the dictionary
+    # We loop through cluster_mac_discovery.results to get the stdout for EACH host
     c_mac_map: "{{ c_mac_map | default({}) | combine({ item.item: item.stdout }) }}"
-  loop: "{{ c_mac_results.results }}"
+  loop: "{{ cluster_mac_discovery.results }}"
 
 - name: 1.3 - Store Maintenance IPs
   set_fact:
@@ -155,12 +155,12 @@
   become: false
   vars:
     m_ip: "{{ maintenance_map[item] }}"
+    # This pulls the correct MAC from the map we built in 1.1.1
     c_mac: "{{ c_mac_map[item] }}"
     node_ip: "{{ hostvars[item].node_ip }}"
     actual_key: "~/.ssh/id_rsa"
     ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ actual_key }} core@{{ m_ip }}"
   shell: |
-    # Find the device name associated with our Cluster MAC
     DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ c_mac }}" | head -n 1 | cut -d: -f2)
 
     {{ ssh_cmd }} "sudo nmcli con delete cluster || true"
