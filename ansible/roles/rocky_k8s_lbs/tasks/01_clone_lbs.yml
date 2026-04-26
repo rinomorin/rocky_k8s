@@ -1,7 +1,6 @@
 # 01_clone_lbs.yml
 ---
 - name: Clone Load Balancer nodes from Golden Image
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -17,7 +16,6 @@
     - "'already exists' not in lb_clones.stderr"
 
 - name: Power on lb image
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -32,7 +30,6 @@
   loop: "{{ groups['hahost'] }}"
 
 - name: 1.1 - Discover Maintenance IP from br-nat
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -86,42 +83,42 @@
     msg: "Host {{ item }} has maintenance IP {{ hostvars[item].maintenance_lb }}"
   loop: "{{ groups['hahost'] }}"
 
-- name: 2.1 - Discover Provider MAC from default network
-  delegate_to: "{{ VM_HOST_IP }}"
-  vars:
-    # This forces the connection to use 'secops' from the KVM host's variables
-    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
-  become: yes
-  shell: |
-    virsh domiflist {{ item.split('.')[0] }} | grep 'default' | awk '{print $5}'
-  register: provider_mac_raw
-  loop: "{{ groups['hahost'] }}"
-
 - name: 2.2 - Configure Provider IP via Maintenance Tunnel
   become: false
   vars:
-    # ... existing vars ...
-    # Use ~ to avoid hardcoded /home/cloud_helper if running as different user
-    actual_key: "~/.ssh/id_rsa" 
-    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ actual_key }} core@{{ m_ip }}"
+    # Build the SSH base command once to avoid quoting hell
+    ssh_base: >-
+      ssh -o StrictHostKeyChecking=no 
+      -o UserKnownHostsFile=/dev/null 
+      -o BatchMode=yes 
+      -i ~/.ssh/id_rsa 
+      core@{{ maintenance_map[item] }}
+    provider_ip: "{{ hostvars[item].ansible_host }}"
+    # Safely get the gateway
+    provider_gw: "{{ hostvars['kvmdc01'].libvirt_networks | selectattr('name', 'equalto', 'default') | map(attribute='cidr') | first | ansible.utils.ipaddr('net') | ansible.utils.ipaddr('1') | split('/') | first }}"
+    p_mac: "{{ (provider_mac_raw.results | selectattr('item', 'equalto', item) | first).stdout }}"
+    dns_servers: "{{ groups['dns'] | map('extract', hostvars, 'ansible_host') | join(' ') }}"
   shell: |
-    DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
-
-    {{ ssh_cmd }} "sudo nmcli con delete provider || true"
-
-    # Add with metric 300 and ensure it doesn't try to become the primary default gateway
-    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name provider ifname $DEV \
+    # 1. Identify device
+    DEV=$({{ ssh_base }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
+    
+    # 2. Cleanup
+    {{ ssh_base }} "sudo nmcli con delete provider || true"
+    
+    # 3. Configure with high metric to protect the helper/management route
+    {{ ssh_base }} "sudo nmcli con add type ethernet con-name provider ifname $DEV \
       ipv4.method manual ipv4.addresses {{ provider_ip }}/24 \
       ipv4.gateway {{ provider_gw }} \
+      ipv4.dns '{{ dns_servers }}' \
       ipv4.route-metric 300 \
       ipv4.never-default yes \
       connection.autoconnect yes"
-
-    {{ ssh_cmd }} "sudo nmcli con up provider"
+    
+    # 4. Bring up
+    {{ ssh_base }} "sudo nmcli con up provider"
   loop: "{{ groups['hahost'] }}"
 
 - name: 2.3 - Discover Cluster MAC from br-cluster
-  # delegate_to: "{{ VM_HOST_IP }}"
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
