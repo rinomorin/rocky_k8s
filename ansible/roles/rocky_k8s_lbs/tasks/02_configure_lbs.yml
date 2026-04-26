@@ -1,6 +1,7 @@
 # 02_configure_lbs.yml 
 ---
 - name: "DNS Prep - clean resolve"
+  become: false
   ansible.builtin.shell: |     
     ssh core@{{ hostvars[item]['provider_ip'] }} "
       sudo sed -i '/nameserver 172.16/d' /etc/resolv.conf && \
