@@ -1,5 +1,15 @@
 # 02_configure_lbs.yml 
 ---
+- name: "DNS Prep - clean resolve"
+  ansible.builtin.shell: |     
+    ssh core@{{ hostvars[item]['provider_ip'] }} "
+    sudo sed -i '/nameserver 172.16/d' /etc/resolv.conf && \
+    echo search {{ c_zone }} {{ p_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }} > /etc/resolv.conf && \
+    echo nameserver {{ hostvars[groups['helpers'][0]]['provider_ip'] }} >> /etc/resolv.conf && \
+    echo nameserver {{ hostvars[groups['ipa'][0]]['ansible_host'] }} >> /etc/resolv.conf && \
+    echo nameserver {{ hostvars[groups['ipa'][1]]['ansible_host'] }} >> /etc/resolv.conf"
+
+
 - name: Install HA Software Stack
   delegate_to: localhost
   become: false
@@ -122,7 +132,7 @@
           sleep 2
           sudo systemctl enable --now haproxy
           systemctl is-active haproxy keepalived
-      ansible.builtin.shell: "{{ ssh_base }} core@{{ hostvars[item].ansible_host }} '{{ remote_verify }}'"
+      ansible.builtin.shell: "ssh core@{{ hostvars[item].ansible_host }} '{{ remote_verify }}'"
       register: final_verify
       failed_when: final_verify.rc != 0
 
@@ -141,4 +151,3 @@
       virsh net-autostart black-hole
       virsh net-start black-hole
     fi
-

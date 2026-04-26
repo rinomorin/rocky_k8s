@@ -2,7 +2,6 @@
 - name: Power Cycle and Connectivity Verification
   block:
     - name: Hard Power Off VMs
-      delegate_to: "{{ VM_HOST_IP }}"
       vars:
         # This forces the connection to use 'secops' from the KVM host's variables
         ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -15,7 +14,6 @@
         seconds: 5
 
     - name: Power On VMs
-      delegate_to: "{{ VM_HOST_IP }}"
       vars:
         # This forces the connection to use 'secops' from the KVM host's variables
         ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -25,6 +23,7 @@
 
     - name: Wait for SSH on Production IP
       delegate_to: localhost
+      become: false
       wait_for:
         host: "{{ hostvars[item].ansible_host }}"
         port: 22
@@ -35,6 +34,7 @@
 
     - name: Final Verification - Internal Services
       delegate_to: localhost
+      become: false
       vars:
         ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
       shell: |
@@ -45,6 +45,7 @@
 
     - name: 1.1 - Open Ports and Start Services on HA Hosts
       delegate_to: localhost
+      become: false
       vars:
         ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
       shell: |
