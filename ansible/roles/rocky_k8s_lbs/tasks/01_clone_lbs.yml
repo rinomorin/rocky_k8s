@@ -200,11 +200,32 @@
     {{ ssh_cmd }} "sudo nmcli connection up enp3s0 && sudo nmcli connection up enp1s0"
   loop: "{{ groups['hahost'] | default([]) }}"
 
+- name: 6.0 - Clean stale identities on the helper
+  delegate_to: localhost
+  become: false
+  shell: |
+    # Clear the Provider IP specifically
+    ssh-keygen -R {{ hostvars[item]['provider_ip'] }} || true
+    # Clear the VM name (short name)
+    ssh-keygen -R {{ item.split('.')[0] }} || true
+  loop: "{{ groups['hahost'] | default([]) }}"
+  ignore_errors: yes
+
+- name: 6.1 - Verify local connection via Provider IP
+  delegate_to: localhost
+  become: false
+  shell: |
+    # We use these flags as a secondary safety net
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -i ~/.ssh/id_rsa core@{{ hostvars[item]['provider_ip'] }} "ip route"
+  register: node_connect
+  loop: "{{ groups['hahost'] | default([]) }}"
+
 - name: local connection
   delegate_to: localhost
-  shell: "ssh {{ hostvars[item]['provider_ip']}} ip route"
+  shell: "ssh {{ hostvars[inventory_hostname]['provider_ip']}} ip route"
   register: node_connet
-  loop: "{{ groups['hahost'] | default([]) }}"
+  # loop: "{{ groups['hahost'] | default([]) }}"
 
 - debug:
     msg: "{{ node_connet }}"
