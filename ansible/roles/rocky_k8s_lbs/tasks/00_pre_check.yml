@@ -13,6 +13,7 @@
   register: vm_check
   loop: "{{ groups['hahost'] }}"
 
+- debug: msg="rebuild_lbs {{ rebuild_lbs | default('fails')}}"
 - name: 0.2 - Determine if Build is Required
   set_fact:
     # Build only if:
