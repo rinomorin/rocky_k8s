@@ -47,7 +47,7 @@
 - name: Who am i
   become: false
   # Added the && to separate the commands properly
-  shell: "hostname && whoami"
+  shell: "hostname && whoami && ls -l ${HOME}/.ssh"
   register: who_am
 
 - debug:
