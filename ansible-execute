@@ -1,3 +1,4 @@
+
 #!/bin/sh
 
 # Default values
@@ -17,8 +18,8 @@ while getopts "d:i:U:C:v:e:" opt; do
   esac
 done
 shift $((OPTIND-1))
-
-echo "DEST_DIR=$DEST_DIR"
+echo d"DEST_DIR=$DEST_DIR INVENTORY=$INVENTORY REPO_URL=$REPO_URL CHECKOUT=$CHECKOUT VENV_PATH=$VENV_PATH EXTRA_VARS=$EXTRA_VARS"
+exit 0
 
 PLAYBOOK=$1
 
