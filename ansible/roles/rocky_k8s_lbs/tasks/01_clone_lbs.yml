@@ -55,18 +55,17 @@
     msg: "who {{ who_am.stdout_lines }}"
 
 - name: 1.2 - Verify Maintenance SSH (sshok)
-  # delegate_to: localhost
   become: false
   vars:
     m_ip: "{{ item.stdout }}"
-    key_path: "${HOME}/.ssh/id_rsa"
-    ssh_opt: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }}"
+    # We define the options here, but let the shell find the key
+    ssh_opt: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
   shell: |
-    ssh $ssh_opt core@{{ m_ip }} "echo sshok from {{ inventory_hostname}}"
+    ssh {{ ssh_opt }} -i ~/.ssh/id_rsa core@{{ m_ip }} "echo sshok"
   register: ssh_test
-  until: "'sshok' in ssh_test.stdout"
-  retries: 5
-  delay: 3
+  until: ssh_test.rc == 0
+  retries: 15
+  delay: 5
   loop: "{{ maintenance_ip_raw.results }}"
 
 - name: 1.3 - Store Maintenance IPs
