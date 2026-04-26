@@ -18,8 +18,6 @@ while getopts "d:i:U:C:v:e:" opt; do
   esac
 done
 shift $((OPTIND-1))
-echo d"DEST_DIR=$DEST_DIR INVENTORY=$INVENTORY REPO_URL=$REPO_URL CHECKOUT=$CHECKOUT VENV_PATH=$VENV_PATH EXTRA_VARS=$EXTRA_VARS"
-
 PLAYBOOK=$1
 
 if [ -z "$PLAYBOOK" ]; then
@@ -38,7 +36,7 @@ if [ -d "${HOME}/deploy/venv" ]; then
     source "${HOME}/deploy/venv/bin/activate"
 else
     echo "--- Step 3: Sourcing environment: ${DEST_DIR}/env_build.sh"
-    exit 1 nsloohu
+    exit 1
 fi
 source "${DEST_DIR}/env_build.sh"
 
@@ -47,7 +45,6 @@ export ANSIBLE_CONFIG="${DEST_DIR}/ansible/ansible.cfg"
 # pwd  && echo ${PLAYBOOK}
 # 4: Run the actual playbook
 if [[ "${EXTRA_VARS}" != "" ]] ;  then
-    echo ansible-playbook -i "${INVENTORY}" "${PLAYBOOK}" ${EXTRA_VARS}
     ansible-playbook -i "${INVENTORY}" -e "${EXTRA_VARS}" "${PLAYBOOK}" 
 else
     ansible-playbook -i "${INVENTORY}" "${PLAYBOOK}"
