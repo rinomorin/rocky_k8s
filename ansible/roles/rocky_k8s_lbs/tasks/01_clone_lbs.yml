@@ -200,8 +200,23 @@
     {{ ssh_cmd }} "sudo nmcli connection up enp3s0 && sudo nmcli connection up enp1s0"
   loop: "{{ groups['hahost'] | default([]) }}"
 
+- name: local connection
+  delegate_to: localhost
+  shell: "ssh {{ hostvars[item].['provision_ip']}} ip route"
+  register: node_connet
+
+- debug:
+    msg: "{{ node_connet }}"
+
+- name: Verify SSH reachability on Static IPs
+  wait_for:
+    host: "{{ hostvars[item].ansible_host }}"
+    port: 22
+    state: started
+    timeout: 60
+  loop: "{{ groups['hahost'] }}"
+
 - name: 6.1 - Reassign KVM Maintenance Interface to Black-Hole
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
@@ -222,10 +237,3 @@
     EOF
     fi
   loop: "{{ groups['hahost'] | default([]) }}"
-- name: Verify SSH reachability on Static IPs
-  wait_for:
-    host: "{{ hostvars[item].ansible_host }}"
-    port: 22
-    state: started
-    timeout: 60
-  loop: "{{ groups['hahost'] }}"
