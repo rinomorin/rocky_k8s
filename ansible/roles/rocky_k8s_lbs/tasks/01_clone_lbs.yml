@@ -200,26 +200,24 @@
     {{ ssh_cmd }} "sudo nmcli connection up enp3s0 && sudo nmcli connection up enp1s0"
   loop: "{{ groups['hahost'] | default([]) }}"
 
-- name: 6.0 - Clean stale identities on the helper
+- name: 6.0 - Force helper to learn new node identities
   delegate_to: localhost
   become: false
   shell: |
-    # Clear the Provider IP specifically
+    # 1. Remove the old entry if it exists
     ssh-keygen -R {{ hostvars[item]['provider_ip'] }} || true
-    # Clear the VM name (short name)
     ssh-keygen -R {{ item.split('.')[0] }} || true
-    rm -f ~/.ssh/known_hosts
+    
+    # 2. Connect once and force-save the NEW key to known_hosts
+    ssh -o StrictHostKeyChecking=accept-new \
+        -i ~/.ssh/id_rsa core@{{ hostvars[item]['provider_ip'] }} "echo 'Key Learned'"
   loop: "{{ groups['hahost'] | default([]) }}"
-  ignore_errors: yes
 
-- name: 6.1 - Verify local connection via Provider IP
+- name: 6.1 - Verify permanent connection (no flags needed now)
   delegate_to: localhost
   become: false
-  shell: |
-    # We use these flags as a secondary safety net
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -i ~/.ssh/id_rsa core@{{ hostvars[item]['provider_ip'] }} "ip route"
-  register: node_connect
+  shell: "ssh -i ~/.ssh/id_rsa core@{{ hostvars[item]['provider_ip'] }} 'ip route'"
+  register: node_verify
   loop: "{{ groups['hahost'] | default([]) }}"
 
 - name: local connection
