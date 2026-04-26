@@ -46,11 +46,12 @@
 
 - name: 1.2 - Verify Maintenance SSH (sshok)
   # delegate_to: localhost
+  become: false
   vars:
     m_ip: "{{ item.stdout }}"
     key_path: "~/.ssh/id_rsa"
   shell: |
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }} core@{{ m_ip }} "echo sshok"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ key_path }} core@{{ m_ip }} "echo sshok from {{ inventory_hostname}}"
   register: ssh_test
   until: "'sshok' in ssh_test.stdout"
   retries: 5
