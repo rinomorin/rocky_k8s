@@ -2,6 +2,7 @@
 ---
 - name: Install HA Software Stack
   delegate_to: localhost
+  become: false
   shell: |
     ssh core@{{ hostvars[item]['provider_ip'] }} "sudo dnf install -y haproxy keepalived policycoreutils-python-utils"
   loop: "{{ groups['hahost'] }}"
@@ -34,7 +35,8 @@
 
     - name: Detect active network interface
       delegate_to: localhost
-      shell: ssh -o StrictHostKeyChecking=no -i {{ ssh_key_path }} core@{{ hostvars[item]['provider_ip'] }} "ip -4 -o addr show | grep '192.168.100.' | awk '{print \$2}' | head -n1"
+      become: false
+      shell: ssh core@{{ hostvars[item]['provider_ip'] }} "ip -4 -o addr show | grep '192.168.100.' | awk '{print \$2}' | head -n1"
       register: detected_iface
       loop: "{{ groups['hahost'] }}"
 
@@ -47,6 +49,7 @@
 
     - name: Push and Prepare Node Configuration
       delegate_to: localhost
+      become: false
       loop: "{{ groups['hahost'] }}"
       vars:
         ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o LogLevel=ERROR -i {{ ssh_key_path }}"
@@ -61,11 +64,11 @@
         echo "" >> /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
 
         # 2. SCP configs to the LB node
-        scp {{ ssh_opts }} /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg core@{{ target_ip }}:/tmp/haproxy.cfg
-        scp {{ ssh_opts }} /tmp/k8s_lb_configs/{{ item }}/keepalived.conf core@{{ target_ip }}:/tmp/keepalived.conf
+        scp  /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg core@{{ target_ip }}:/tmp/haproxy.cfg
+        scp  /tmp/k8s_lb_configs/{{ item }}/keepalived.conf core@{{ target_ip }}:/tmp/keepalived.conf
 
         # 3. Apply Host-Level fixes and start services
-        ssh {{ ssh_opts }} core@{{ target_ip }} "
+        ssh  core@{{ target_ip }} "
           # Firewall: Allow VRRP (Keepalived) and K8s API
           sudo firewall-cmd --permanent --add-port=6443/tcp
           sudo firewall-cmd --permanent --add-rich-rule='rule protocol value=\"vrrp\" accept'
