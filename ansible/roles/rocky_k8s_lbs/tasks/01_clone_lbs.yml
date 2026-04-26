@@ -155,17 +155,17 @@
     {{ ssh_base }} "sudo nmcli con up $DEV"
   loop: "{{ groups['hahost'] }}"
 
-- name: 3.1 - Force KVM Link State to UP (Host Side)
-  vars:
-    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
-  become: yes
-  shell: |
-    # Get all interface MACs for this VM and force them to 'up'
-    VM_NAME="{{ item.split('.')[0] }}"
-    for mac in $(virsh domiflist $VM_NAME | grep -v 'Interface' | grep -v '\---' | awk '{print $5}'); do
-      virsh domif-setlink $VM_NAME $mac up
-    done
-  loop: "{{ groups['hahost'] }}"
+# - name: 3.1 - Force KVM Link State to UP (Host Side)
+#   vars:
+#     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+#   become: yes
+#   shell: |
+#     # Get all interface MACs for this VM and force them to 'up'
+#     VM_NAME="{{ item.split('.')[0] }}"
+#     for mac in $(virsh domiflist $VM_NAME | grep -v 'Interface' | grep -v '\---' | awk '{print $5}'); do
+#       virsh domif-setlink $VM_NAME $mac up
+#     done
+#   loop: "{{ groups['hahost'] }}"
 
 - name: 3.2 - Force Guest Link State and Autoconnect (Guest Side)
   become: false
