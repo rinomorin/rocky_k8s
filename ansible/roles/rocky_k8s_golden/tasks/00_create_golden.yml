@@ -133,8 +133,8 @@
       --os-variant {{ tos_name }}{{ tos_variant.split('.')[0] }}
       --location {{ iso_path }}
       --network network=br-nat
-      --network network=br-cluster,link_state=down
-      --network network=default,link_state=down
+      --network network=br-cluster
+      --network network=default
       --graphics none
       --console pty,target_type=serial
       --noautoconsole
