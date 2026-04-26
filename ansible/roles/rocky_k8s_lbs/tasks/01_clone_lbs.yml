@@ -140,7 +140,20 @@
   vars:
     # ... existing vars ...
     actual_key: "~/.ssh/id_rsa"
+    # p_mac_result: "{{ provider_mac_raw.results | selectattr('item', 'equalto', item) | first }}"
+    # p_mac: "{{ p_mac_result.stdout }}"
+    m_ip: "{{ maintenance_map[item] }}"
+    # ssh_base: >-
+    #   ssh -o StrictHostKeyChecking=no 
+    #   -o UserKnownHostsFile=/dev/null 
+    #   -o BatchMode=yes 
+    #   -i ~/.ssh/id_rsa 
+    #   core@{{ m_ip }}
+    # provider_ip: "{{ hostvars[item].ansible_host }}"
+    # provider_gw: "{{ hostvars['kvmdc01'].libvirt_networks | selectattr('name', 'equalto', 'default') | map(attribute='cidr') | first | ansible.utils.ipaddr('net') | ansible.utils.ipaddr('1') | split('/') | first }}"
+    # dns_servers: "{{ groups['dns'] | map('extract', hostvars, 'ansible_host') | join(' ') }}"
     ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ actual_key }} core@{{ m_ip }}"
+
   shell: |
     DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ c_mac }}" | head -n 1 | cut -d: -f2)
 
