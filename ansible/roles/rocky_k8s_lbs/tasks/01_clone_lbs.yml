@@ -104,8 +104,8 @@
     # 2. Force the hardware link state to UP
     {{ ssh_base }} "sudo ip link set $DEV up"
 
-    # 3. Delete any old ghost connections
-    {{ ssh_base }} "sudo nmcli con delete $DEV || true"
+    # # 3. Delete any old ghost connections
+    # {{ ssh_base }} "sudo nmcli con delete $DEV || true"
 
     # 4. Add the connection with explicit carrier ignore and autoconnect
     {{ ssh_base }} "sudo nmcli con add type ethernet con-name provider ifname $DEV \
@@ -113,11 +113,10 @@
       ipv4.gateway {{ provider_gw }} \
       ipv4.route-metric 300 \
       ipv4.never-default yes \
-      connection.autoconnect yes \
-      802-3-ethernet.ignore-carrier yes"
-
+      connection.autoconnect yes
+      
     # 5. Kick the connection
-    {{ ssh_base }} "sudo nmcli con up provider"
+    {{ ssh_base }} "sudo nmcli con up $DEV"
   loop: "{{ groups['hahost'] }}"
 
 - name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
@@ -148,8 +147,7 @@
       ipv4.gateway {{ provision_gw }} \
       ipv4.route-metric 300 \
       ipv4.never-default yes \
-      connection.autoconnect yes \
-      802-3-ethernet.ignore-carrier yes"
+      connection.autoconnect yes
 
     # 5. Kick the connection
     {{ ssh_base }} "sudo nmcli con up $DEV"
