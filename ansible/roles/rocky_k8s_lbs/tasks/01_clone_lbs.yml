@@ -170,29 +170,22 @@
 - name: 3.2 - Force Guest Link State and Autoconnect (Guest Side)
   become: false
   vars:
+    # Use a simpler SSH base without the extra vars inside the shell block
     m_ip: "{{ maintenance_map[item] }}"
-    ssh_base: >-
-      ssh -o StrictHostKeyChecking=no 
-      -o UserKnownHostsFile=/dev/null 
-      -o BatchMode=yes 
-      -i ~/.ssh/id_rsa 
-      core@{{ m_ip }}
+    ssh_target: "core@{{ m_ip }}"
+    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
   shell: |
-    # 1. Force the physical kernel state of all interfaces to UP
-    # We ignore enp1s0 since it's already working
-    for dev in enp2s0 enp3s0; do
-      {{ ssh_base }} "sudo ip link set \$dev up"
-      
-      # 2. Update NetworkManager to ensure autoconnect and ignore carrier
-      # This fixes the "linkdown" issue on reboot
-      {{ ssh_base }} "sudo nmcli device set \$dev autoconnect yes"
-      {{ ssh_base }} "sudo nmcli device set \$dev managed yes"
-    done
-    
-    # 3. Final kick to all connections
-    {{ ssh_base }} "sudo nmcli connection up cluster || true"
-    {{ ssh_base }} "sudo nmcli connection up provider || true"
-  loop: "{{ groups['hahost'] }}"
+    # We send the entire logic block as a single remote command
+    ssh {{ ssh_opts }} {{ ssh_target }} '
+      for dev in enp2s0 enp3s0; do
+        sudo ip link set $dev up
+        sudo nmcli device set $dev autoconnect yes
+        sudo nmcli device set $dev managed yes
+      done
+      sudo nmcli connection up cluster || true
+      sudo nmcli connection up provider || true
+    '
+  loop: "{{ groups['hahost'] | default([]) }}"
 
 - name: Verify SSH reachability on Static IPs
   wait_for:
