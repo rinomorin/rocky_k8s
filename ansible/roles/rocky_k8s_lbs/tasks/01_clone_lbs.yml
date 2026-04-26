@@ -107,39 +107,30 @@
     # 4. Final Activation
     {{ ssh_cmd }} "sudo nmcli con up provider"
   loop: "{{ groups['hahost'] | default([]) }}"
+
 - name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
   become: false
   vars:
     m_ip: "{{ maintenance_map[item] }}"
     c_mac: "{{ c_mac_map[item] }}"
     node_ip: "{{ hostvars[item].provision_ip }}"
-    ssh_base: >-
-      ssh -o StrictHostKeyChecking=no 
-      -o UserKnownHostsFile=/dev/null 
-      -o BatchMode=yes 
-      -i ~/.ssh/id_rsa 
-      core@{{ m_ip }}
+    # standardized the ssh command to avoid nested quote errors
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@{{ m_ip }}"
   shell: |
-    # 1. Identify the device (same as before)
-    DEV=$({{ ssh_base }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
+    # 1. Identify the device
+    DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ c_mac }}" | head -n 1 | cut -d: -f2)
 
-    # # 2. Force the hardware link state to UP
-    # {{ ssh_base }} "sudo ip link set $DEV up"
+    # 2. Force hardware state and clean old profiles
+    {{ ssh_cmd }} "sudo ip link set $DEV up"
+    {{ ssh_cmd }} "sudo nmcli con delete cluster || true"
+    {{ ssh_cmd }} "sudo nmcli con delete $DEV || true"
 
-    # # 3. Delete any old ghost connections
-    # {{ ssh_base }} "sudo nmcli con delete $DEV || true"
+    # 3. Add the connection (Single line to prevent YAML splitting errors)
+    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name cluster ifname $DEV ipv4.method manual ipv4.addresses {{ node_ip }}/24 ipv4.route-metric 200 ipv4.never-default yes connection.autoconnect yes"
 
-    # 4. Add the connection with explicit carrier ignore and autoconnect
-    {{ ssh_base }} "sudo nmcli con add type ethernet con-name $DEV ifname $DEV \
-      ipv4.method manual ipv4.addresses {{ provision_ip }}/24 \
-      ipv4.gateway {{ provision_gw }} \
-      ipv4.route-metric 300 \
-      ipv4.never-default yes \
-      connection.autoconnect yes
-
-    # 5. Kick the connection
-    {{ ssh_base }} "sudo nmcli con up $DEV"
-  loop: "{{ groups['hahost'] }}"
+    # 4. Kick the connection
+    {{ ssh_cmd }} "sudo nmcli con up cluster"
+  loop: "{{ groups['hahost'] | default([]) }}"
 
 - name: 3.1 - Force KVM Link State to UP (Host Side)
   vars:
