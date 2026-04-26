@@ -1,8 +1,7 @@
-# 01_clone_lbs.yml
 ---
 - name: Clone Load Balancer nodes from Golden Image
+  delegate_to: "{{ VM_HOST_IP }}"
   vars:
-    # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
   command: >
@@ -16,13 +15,12 @@
     - "'already exists' not in lb_clones.stderr"
 
 - name: Power on lb image
+  delegate_to: "{{ VM_HOST_IP }}"
   vars:
-    # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
   shell: "virsh start {{ item.split('.')[0] }}"
   register: vm_start
-  # We ignore the error if it's already running to be resilient
   failed_when: 
     - vm_start.rc != 0 
     - "'already active' not in vm_start.stderr"
@@ -30,8 +28,8 @@
   loop: "{{ groups['hahost'] }}"
 
 - name: 1.1 - Discover Maintenance IP from br-nat
+  delegate_to: "{{ VM_HOST_IP }}"
   vars:
-    # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
   shell: |
@@ -41,21 +39,10 @@
   register: maintenance_ip_raw
   loop: "{{ groups['hahost'] }}"
 
-- name: Who am i
-  become: false
-  # Added the && to separate the commands properly
-  shell: "hostname && whoami && ls -l ${HOME}/.ssh"
-  register: who_am
-
-- debug:
-    # Changed to stdout (singular) or stdout_lines
-    msg: "who {{ who_am.stdout_lines }}"
-
 - name: 1.2 - Verify Maintenance SSH (sshok)
   become: false
   vars:
     m_ip: "{{ item.stdout }}"
-    # We define the options here, but let the shell find the key
     ssh_opt: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
   shell: |
     ssh {{ ssh_opt }} -i ~/.ssh/id_rsa core@{{ m_ip }} "echo sshok"
@@ -65,7 +52,12 @@
   delay: 5
   loop: "{{ maintenance_ip_raw.results }}"
 
-- name: 1.1.2 - Discover Provision MAC from br-cloud
+- name: 1.3 - Store Maintenance IPs in Map
+  set_fact:
+    maintenance_map: "{{ maintenance_map | default({}) | combine({ item.item: item.stdout }) }}"
+  loop: "{{ maintenance_ip_raw.results }}"
+
+- name: 1.1.2 - Discover Provision MAC from br-cluster
   delegate_to: "{{ VM_HOST_IP }}"
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -77,54 +69,39 @@
 
 - name: 1.1.3 - Build Cluster MAC Map
   set_fact:
-    # We loop through cluster_mac_discovery.results to get the stdout for EACH host
     c_mac_map: "{{ c_mac_map | default({}) | combine({ item.item: item.stdout }) }}"
   loop: "{{ cluster_mac_discovery.results }}"
-
-- name: 1.3 - Store Maintenance IPs
-  set_fact:
-    maintenance_map: "{{ maintenance_map | default({}) | combine({ item.item: item.stdout }) }}"
-  loop: "{{ maintenance_ip_raw.results }}"
-
-- name: 1.3b - Store Maintenance IPs directly on HAProxy hosts
-  ansible.builtin.set_fact:
-    maintenance_lb: "{{ item.stdout }}"
-  # This matches the loop item (e.g. msrlv9l01) to the actual inventory host
-  delegate_to: "{{ item.item }}"
-  delegate_facts: true
-  loop: "{{ maintenance_ip_raw.results }}"
-
-- name: 1.4 - Debug Verification (Optional)
-  ansible.builtin.debug:
-    msg: "Host {{ item }} has maintenance IP {{ hostvars[item].maintenance_lb }}"
-  loop: "{{ groups['hahost'] }}"
 
 - name: 2.1 - Discover Provider MAC from default network
   delegate_to: "{{ VM_HOST_IP }}"
   vars:
-    ansible_user: "secops" # Or your kvm user
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
   shell: |
     virsh domiflist {{ item.split('.')[0] }} | grep 'default' | awk '{print $5}'
-  register: provider_mac_raw
+  register: provider_mac_discovery
   loop: "{{ groups['hahost'] }}"
+
+- name: 2.1.1 - Build Provider MAC Map
+  set_fact:
+    p_mac_map: "{{ p_mac_map | default({}) | combine({ item.item: item.stdout }) }}"
+  loop: "{{ provider_mac_discovery.results }}"
 
 - name: 2.2 - Configure Provider IP via Maintenance Tunnel
   become: false
   vars:
-    # Use hostvars to pull the registered result if we are on a different delegate host
-    p_mac_result: "{{ provider_mac_raw.results | selectattr('item', 'equalto', item) | first }}"
-    p_mac: "{{ p_mac_result.stdout }}"
     m_ip: "{{ maintenance_map[item] }}"
+    p_mac: "{{ p_mac_map[item] }}"
+    provider_ip: "{{ hostvars[item].ansible_host }}"
+    # Fetches the .1 gateway from the 'default' network CIDR on kvmdc01
+    provider_gw: "{{ hostvars['kvmdc01'].libvirt_networks | selectattr('name', 'equalto', 'default') | map(attribute='cidr') | first | ansible.utils.ipaddr('net') | ansible.utils.ipaddr('1') | split('/') | first }}"
+    dns_servers: "{{ groups['dns'] | map('extract', hostvars, 'ansible_host') | join(' ') }}"
     ssh_base: >-
       ssh -o StrictHostKeyChecking=no 
       -o UserKnownHostsFile=/dev/null 
       -o BatchMode=yes 
       -i ~/.ssh/id_rsa 
       core@{{ m_ip }}
-    provider_ip: "{{ hostvars[item].ansible_host }}"
-    provider_gw: "{{ hostvars['kvmdc01'].libvirt_networks | selectattr('name', 'equalto', 'default') | map(attribute='cidr') | first | ansible.utils.ipaddr('net') | ansible.utils.ipaddr('1') | split('/') | first }}"
-    dns_servers: "{{ groups['dns'] | map('extract', hostvars, 'ansible_host') | join(' ') }}"
   shell: |
     DEV=$({{ ssh_base }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
     
@@ -141,38 +118,30 @@
     {{ ssh_base }} "sudo nmcli con up provider"
   loop: "{{ groups['hahost'] }}"
 
-- name: 2.3 - Discover Cluster MAC from br-cluster
-  vars:
-    # This forces the connection to use 'secops' from the KVM host's variables
-    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
-  become: yes
-  shell: |
-    virsh domiflist {{ item.split('.')[0] }} | grep 'br-cluster' | awk '{print $5}'
-  register: cluster_mac_raw
-  loop: "{{ groups['hahost'] }}"
-
 - name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
   become: false
   vars:
     m_ip: "{{ maintenance_map[item] }}"
-    # This pulls the correct MAC from the map we built in 1.1.1
     c_mac: "{{ c_mac_map[item] }}"
     node_ip: "{{ hostvars[item].node_ip }}"
-    actual_key: "~/.ssh/id_rsa"
-    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ actual_key }} core@{{ m_ip }}"
+    ssh_base: >-
+      ssh -o StrictHostKeyChecking=no 
+      -o UserKnownHostsFile=/dev/null 
+      -o BatchMode=yes 
+      -i ~/.ssh/id_rsa 
+      core@{{ m_ip }}
   shell: |
-    DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ c_mac }}" | head -n 1 | cut -d: -f2)
+    DEV=$({{ ssh_base }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ c_mac }}" | head -n 1 | cut -d: -f2)
 
-    {{ ssh_cmd }} "sudo nmcli con delete cluster || true"
+    {{ ssh_base }} "sudo nmcli con delete cluster || true"
 
-    # Add the connection with metric 200 and never-default to protect the helper route
-    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name cluster ifname \$DEV \
+    {{ ssh_base }} "sudo nmcli con add type ethernet con-name cluster ifname $DEV \
       ipv4.method manual ipv4.addresses {{ node_ip }}/24 \
       ipv4.route-metric 200 \
       ipv4.never-default yes \
       connection.autoconnect yes"
 
-    {{ ssh_cmd }} "sudo nmcli con up cluster"
+    {{ ssh_base }} "sudo nmcli con up cluster"
   loop: "{{ groups['hahost'] }}"
 
 - name: Verify SSH reachability on Static IPs
