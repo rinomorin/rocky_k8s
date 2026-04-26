@@ -127,18 +127,26 @@
       -i ~/.ssh/id_rsa 
       core@{{ m_ip }}
   shell: |
-    DEV=$({{ ssh_base }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ c_mac }}" | head -n 1 | cut -d: -f2)
+    # 1. Identify the device (same as before)
+    DEV=$({{ ssh_base }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
 
-    {{ ssh_base }} "sudo nmcli con delete cluster || true"
+    # 2. Force the hardware link state to UP
+    {{ ssh_base }} "sudo ip link set $DEV up"
 
-    {{ ssh_base }} "sudo nmcli con add type ethernet con-name cluster ifname $DEV \
-      ipv4.method manual ipv4.addresses {{ node_ip }}/24 \
-      ipv4.route-metric 200 \
+    # 3. Delete any old ghost connections
+    {{ ssh_base }} "sudo nmcli con delete provider || true"
+
+    # 4. Add the connection with explicit carrier ignore and autoconnect
+    {{ ssh_base }} "sudo nmcli con add type ethernet con-name provider ifname $DEV \
+      ipv4.method manual ipv4.addresses {{ provider_ip }}/24 \
+      ipv4.gateway {{ provider_gw }} \
+      ipv4.route-metric 300 \
       ipv4.never-default yes \
-      connection.autoconnect yes\
+      connection.autoconnect yes \
       802-3-ethernet.ignore-carrier yes"
 
-    {{ ssh_base }} "sudo nmcli con up $DEV"
+    # 5. Kick the connection
+    {{ ssh_base }} "sudo nmcli con up provider"
   loop: "{{ groups['hahost'] }}"
 
 - name: Verify SSH reachability on Static IPs
