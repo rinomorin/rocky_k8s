@@ -59,6 +59,7 @@
       delegate_facts: true
       loop: "{{ detected_iface.results }}"
 
+
     - name: Push and Prepare Node Configuration
       delegate_to: localhost
       become: true  # Use root on the helper to fix permissions and modify files
