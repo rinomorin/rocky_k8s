@@ -47,5 +47,5 @@ export ANSIBLE_CONFIG="${DEST_DIR}/ansible/ansible.cfg"
 # pwd  && echo ${PLAYBOOK}
 # 4: Run the actual playbook
 echo ansible-playbook -i "${INVENTORY}" "${PLAYBOOK}" ${EXTRA_VARS}
-"ansible-playbook -i ${INVENTORY} ${EXTRA_VARS} ${PLAYBOOK}" 
+ansible-playbook -i ${INVENTORY} ${EXTRA_VARS} ${PLAYBOOK} 
 
