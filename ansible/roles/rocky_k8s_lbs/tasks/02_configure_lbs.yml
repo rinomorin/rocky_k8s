@@ -3,7 +3,7 @@
 - name: Install HA Software Stack
   delegate_to: localhost
   shell: |
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }} core@{{ hostvars[item]['provider_ip'] }} "sudo dnf install -y haproxy keepalived policycoreutils-python-utils"
+    ssh core@{{ hostvars[item]['provider_ip'] }} "sudo dnf install -y haproxy keepalived policycoreutils-python-utils"
   loop: "{{ groups['hahost'] }}"
 
 - name: Configure Load Balancer Infrastructure
