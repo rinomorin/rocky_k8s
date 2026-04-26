@@ -46,11 +46,13 @@
 
 - name: Who am i
   become: false
-  shell:  "hostname && whoami"
+  # Added the && to separate the commands properly
+  shell: "hostname && whoami"
   register: who_am
 
 - debug:
-    msg: "who {{who_am.stdout_line}}"
+    # Changed to stdout (singular) or stdout_lines
+    msg: "who {{ who_am.stdout_lines }}"
 
 - name: 1.2 - Verify Maintenance SSH (sshok)
   # delegate_to: localhost
