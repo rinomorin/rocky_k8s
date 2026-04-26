@@ -1,6 +1,5 @@
 ---
 - name: Clone Load Balancer nodes from Golden Image
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
@@ -15,7 +14,6 @@
     - "'already exists' not in lb_clones.stderr"
 
 - name: Power on lb image
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
@@ -28,7 +26,6 @@
   loop: "{{ groups['hahost'] }}"
 
 - name: 1.1 - Discover Maintenance IP from br-nat
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
@@ -58,7 +55,6 @@
   loop: "{{ maintenance_ip_raw.results }}"
 
 - name: 1.1.2 - Discover Provision MAC from br-cluster
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
@@ -73,7 +69,6 @@
   loop: "{{ cluster_mac_discovery.results }}"
 
 - name: 2.1 - Discover Provider MAC from default network
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
   become: yes
