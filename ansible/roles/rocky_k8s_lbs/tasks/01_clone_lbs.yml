@@ -44,6 +44,17 @@
   register: maintenance_ip_raw
   loop: "{{ groups['hahost'] }}"
 
+- name: Who am i
+  become: false
+  shell:
+    hostname
+    whoami
+  register: who_am
+
+- debug:
+    msg: "who_am.stdout_lines"
+  
+
 - name: 1.2 - Verify Maintenance SSH (sshok)
   # delegate_to: localhost
   become: false
