@@ -98,19 +98,25 @@
       -i ~/.ssh/id_rsa 
       core@{{ m_ip }}
   shell: |
+    # 1. Identify the device (same as before)
     DEV=$({{ ssh_base }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
-    
-    {{ ssh_base }} "sudo nmcli con delete provider || true"
-    
-    {{ ssh_base }} "sudo nmcli con add type ethernet con-name provider ifname $DEV \
-      ipv4.method manual ipv4.addresses {{ provider_ip }}/24 \
-      ipv4.gateway {{ provider_gw }} \
-      ipv4.dns '{{ dns_servers }}' \
+
+    # 2. Force the hardware link state to UP
+    {{ ssh_base }} "sudo ip link set $DEV up"
+
+    # 3. Delete any old ghost connections
+    {{ ssh_base }} "sudo nmcli con delete $DEV || true"
+
+    # 4. Add the connection with explicit carrier ignore and autoconnect
+    {{ ssh_base }} "sudo nmcli con add type ethernet con-name $DEV ifname $DEV \
+      ipv4.method manual ipv4.addresses {{ provision_ip }}/24 \
+      ipv4.gateway {{ provision_gw }} \
       ipv4.route-metric 300 \
       ipv4.never-default yes \
       connection.autoconnect yes \
       802-3-ethernet.ignore-carrier yes"
-    
+
+    # 5. Kick the connection
     {{ ssh_base }} "sudo nmcli con up $DEV"
   loop: "{{ groups['hahost'] }}"
 
@@ -134,19 +140,19 @@
     {{ ssh_base }} "sudo ip link set $DEV up"
 
     # 3. Delete any old ghost connections
-    {{ ssh_base }} "sudo nmcli con delete provider || true"
+    {{ ssh_base }} "sudo nmcli con delete $DEV || true"
 
     # 4. Add the connection with explicit carrier ignore and autoconnect
-    {{ ssh_base }} "sudo nmcli con add type ethernet con-name provider ifname $DEV \
-      ipv4.method manual ipv4.addresses {{ provider_ip }}/24 \
-      ipv4.gateway {{ provider_gw }} \
+    {{ ssh_base }} "sudo nmcli con add type ethernet con-name $DEV ifname $DEV \
+      ipv4.method manual ipv4.addresses {{ provision_ip }}/24 \
+      ipv4.gateway {{ provision_gw }} \
       ipv4.route-metric 300 \
       ipv4.never-default yes \
       connection.autoconnect yes \
       802-3-ethernet.ignore-carrier yes"
 
     # 5. Kick the connection
-    {{ ssh_base }} "sudo nmcli con up provider"
+    {{ ssh_base }} "sudo nmcli con up $DEV"
   loop: "{{ groups['hahost'] }}"
 
 - name: Verify SSH reachability on Static IPs
