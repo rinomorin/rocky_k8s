@@ -45,7 +45,7 @@
   loop: "{{ groups['hahost'] }}"
 
 - name: 1.2 - Verify Maintenance SSH (sshok)
-  delegate_to: localhost
+  # delegate_to: localhost
   vars:
     m_ip: "{{ item.stdout }}"
     key_path: "~/.ssh/id_rsa"
