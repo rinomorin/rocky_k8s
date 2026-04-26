@@ -223,9 +223,9 @@
 
 - name: local connection
   delegate_to: localhost
-  shell: "ssh {{ hostvars[inventory_hostname]['provider_ip']}} ip route"
+  shell: "ssh {{ hostvars[item]['provider_ip']}} ip route"
   register: node_connet
-  # loop: "{{ groups['hahost'] | default([]) }}"
+  loop: "{{ groups['hahost'] | default([]) }}"
 
 - debug:
     msg: "{{ node_connet }}"
