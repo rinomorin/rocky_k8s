@@ -230,13 +230,6 @@
 - debug:
     msg: "{{ node_connet }}"
 
-- name: Verify SSH reachability on Static IPs
-  wait_for:
-    host: "{{ hostvars[item]['provider_ip'] }}"
-    port: 22
-    state: started
-    timeout: 60
-  loop: "{{ groups['hahost'] }}"
 
 - name: 6.1 - Reassign KVM Maintenance Interface to Black-Hole
   vars:
@@ -259,3 +252,13 @@
     EOF
     fi
   loop: "{{ groups['hahost'] | default([]) }}"
+
+
+- name: Verify SSH reachability on Static IPs
+  become: false
+  wait_for:
+    host: "{{ hostvars[item]['provider_ip'] }}"
+    port: 22
+    state: started
+    timeout: 60
+  loop: "{{ groups['hahost'] }}"

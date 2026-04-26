@@ -3,7 +3,7 @@
 - name: Install HA Software Stack
   delegate_to: localhost
   shell: |
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }} core@{{ hostvars[item].ansible_host }} "sudo dnf install -y haproxy keepalived policycoreutils-python-utils"
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }} core@{{ hostvars[item]['provider_ip'] }} "sudo dnf install -y haproxy keepalived policycoreutils-python-utils"
   loop: "{{ groups['hahost'] }}"
 
 - name: Configure Load Balancer Infrastructure
@@ -34,7 +34,7 @@
 
     - name: Detect active network interface
       delegate_to: localhost
-      shell: ssh -o StrictHostKeyChecking=no -i {{ ssh_key_path }} core@{{ hostvars[item].ansible_host }} "ip -4 -o addr show | grep '192.168.100.' | awk '{print \$2}' | head -n1"
+      shell: ssh -o StrictHostKeyChecking=no -i {{ ssh_key_path }} core@{{ hostvars[item]['provider_ip'] }} "ip -4 -o addr show | grep '192.168.100.' | awk '{print \$2}' | head -n1"
       register: detected_iface
       loop: "{{ groups['hahost'] }}"
 
