@@ -87,38 +87,26 @@
   vars:
     m_ip: "{{ maintenance_map[item] }}"
     p_mac: "{{ p_mac_map[item] }}"
-    provider_ip: "{{ hostvars[item].provider_ip }}"
-    # Fetches the .1 gateway from the 'default' network CIDR on kvmdc01
-    provider_gw: "{{ hostvars['kvmdc01'].libvirt_networks | selectattr('name', 'equalto', 'default') | map(attribute='cidr') | first | ansible.utils.ipaddr('net') | ansible.utils.ipaddr('1') | split('/') | first }}"
-    dns_servers: "{{ groups['dns'] | map('extract', hostvars, 'ansible_host') | join(' ') }}"
-    ssh_base: >-
-      ssh -o StrictHostKeyChecking=no 
-      -o UserKnownHostsFile=/dev/null 
-      -o BatchMode=yes 
-      -i ~/.ssh/id_rsa 
-      core@{{ m_ip }}
+    p_ip: "{{ hostvars[item].ansible_host }}"
+    # Generic placeholder for gateway
+    p_gw: "192.168.100.1" 
+    # SSH parameters defined simply
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@{{ m_ip }}"
   shell: |
-    # 1. Identify the device (same as before)
-    DEV=$({{ ssh_base }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
+    # 1. Get Device Name
+    DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
+    
+    # 2. Force Link Up and Clean old connections
+    {{ ssh_cmd }} "sudo ip link set $DEV up"
+    {{ ssh_cmd }} "sudo nmcli con delete provider || true"
+    {{ ssh_cmd }} "sudo nmcli con delete $DEV || true"
 
-    # 2. Force the hardware link state to UP
-    {{ ssh_base }} "sudo ip link set $DEV up"
-
-    # # 3. Delete any old ghost connections
-    # {{ ssh_base }} "sudo nmcli con delete $DEV || true"
-
-    # 4. Add the connection with explicit carrier ignore and autoconnect
-    {{ ssh_base }} "sudo nmcli con add type ethernet con-name provider ifname $DEV \
-      ipv4.method manual ipv4.addresses {{ provider_ip }}/24 \
-      ipv4.gateway {{ provider_gw }} \
-      ipv4.route-metric 300 \
-      ipv4.never-default yes \
-      connection.autoconnect yes
-      
-    # 5. Kick the connection
-    {{ ssh_base }} "sudo nmcli con up $DEV"
-  loop: "{{ groups['hahost'] }}"
-
+    # 3. Add Connection
+    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name provider ifname $DEV ipv4.method manual ipv4.addresses {{ p_ip }}/24 ipv4.gateway {{ p_gw }} ipv4.route-metric 300 ipv4.never-default yes connection.autoconnect yes"
+    
+    # 4. Final Activation
+    {{ ssh_cmd }} "sudo nmcli con up provider"
+  loop: "{{ groups['hahost'] | default([]) }}"
 - name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
   become: false
   vars:
