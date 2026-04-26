@@ -136,11 +136,11 @@
     # 1. Identify the device (same as before)
     DEV=$({{ ssh_base }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
 
-    # 2. Force the hardware link state to UP
-    {{ ssh_base }} "sudo ip link set $DEV up"
+    # # 2. Force the hardware link state to UP
+    # {{ ssh_base }} "sudo ip link set $DEV up"
 
-    # 3. Delete any old ghost connections
-    {{ ssh_base }} "sudo nmcli con delete $DEV || true"
+    # # 3. Delete any old ghost connections
+    # {{ ssh_base }} "sudo nmcli con delete $DEV || true"
 
     # 4. Add the connection with explicit carrier ignore and autoconnect
     {{ ssh_base }} "sudo nmcli con add type ethernet con-name $DEV ifname $DEV \
@@ -153,6 +153,46 @@
 
     # 5. Kick the connection
     {{ ssh_base }} "sudo nmcli con up $DEV"
+  loop: "{{ groups['hahost'] }}"
+
+- name: 3.1 - Force KVM Link State to UP (Host Side)
+  delegate_to: "{{ VM_HOST_IP }}"
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  shell: |
+    # Get all interface MACs for this VM and force them to 'up'
+    VM_NAME="{{ item.split('.')[0] }}"
+    for mac in $(virsh domiflist $VM_NAME | grep -v 'Interface' | grep -v '\---' | awk '{print $5}'); do
+      virsh domif-setlink $VM_NAME $mac up
+    done
+  loop: "{{ groups['hahost'] }}"
+
+- name: 3.2 - Force Guest Link State and Autoconnect (Guest Side)
+  become: false
+  vars:
+    m_ip: "{{ maintenance_map[item] }}"
+    ssh_base: >-
+      ssh -o StrictHostKeyChecking=no 
+      -o UserKnownHostsFile=/dev/null 
+      -o BatchMode=yes 
+      -i ~/.ssh/id_rsa 
+      core@{{ m_ip }}
+  shell: |
+    # 1. Force the physical kernel state of all interfaces to UP
+    # We ignore enp1s0 since it's already working
+    for dev in enp2s0 enp3s0; do
+      {{ ssh_base }} "sudo ip link set \$dev up"
+      
+      # 2. Update NetworkManager to ensure autoconnect and ignore carrier
+      # This fixes the "linkdown" issue on reboot
+      {{ ssh_base }} "sudo nmcli device set \$dev autoconnect yes"
+      {{ ssh_base }} "sudo nmcli device set \$dev managed yes"
+    done
+    
+    # 3. Final kick to all connections
+    {{ ssh_base }} "sudo nmcli connection up cluster || true"
+    {{ ssh_base }} "sudo nmcli connection up provider || true"
   loop: "{{ groups['hahost'] }}"
 
 - name: Verify SSH reachability on Static IPs
