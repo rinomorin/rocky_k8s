@@ -19,103 +19,109 @@
     ssh core@{{ hostvars[item]['provider_ip'] }} "sudo dnf install -y haproxy keepalived policycoreutils-python-utils"
   loop: "{{ groups['hahost'] }}"
 
-- name: Configure Load Balancer Infrastructure
-  block:
-    - name: Create local staging directories
-      delegate_to: localhost
-      file:
-        path: "/tmp/k8s_lb_configs/{{ item }}"
-        state: directory
-        mode: '0755'
-      loop: "{{ groups['hahost'] }}"
+- name: Process Load Balancer configurations
+  include_tasks: haproxy_cfg.yml
+  loop: "{{ groups['hahosts'] }}"
+  loop_control:
+    loop_var: lb_node
 
-    - name: Template HAProxy Config
-      delegate_to: localhost
-      template:
-        src: haproxy.cfg.j2
-        dest: "/tmp/k8s_lb_configs/{{ item }}/haproxy.cfg"
-        force: true
-      loop: "{{ groups['hahost'] }}"
+# - name: Configure Load Balancer Infrastructure
+#   block:
+#     - name: Create local staging directories
+#       delegate_to: localhost
+#       file:
+#         path: "/tmp/k8s_lb_configs/{{ item }}"
+#         state: directory
+#         mode: '0755'
+#       loop: "{{ groups['hahost'] }}"
 
-    - name: Template Keepalived Config
-      delegate_to: localhost
-      template:
-        src: keepalived.conf.j2
-        dest: "/tmp/k8s_lb_configs/{{ item }}/keepalived.conf"
-        force: true
-      loop: "{{ groups['hahost'] }}"
+#     - name: Template HAProxy Config
+#       delegate_to: localhost
+#       template:
+#         src: haproxy.cfg.j2
+#         dest: "/tmp/k8s_lb_configs/{{ item }}/haproxy.cfg"
+#         force: true
+#       loop: "{{ groups['hahost'] }}"
 
-    - name: Detect active network interface
-      delegate_to: localhost
-      become: false
-      shell: ssh core@{{ hostvars[item]['provider_ip'] }} "ip -4 -o addr show | grep '192.168.100.' | awk '{print \$2}' | head -n1"
-      register: detected_iface
-      loop: "{{ groups['hahost'] }}"
+#     - name: Template Keepalived Config
+#       delegate_to: localhost
+#       template:
+#         src: keepalived.conf.j2
+#         dest: "/tmp/k8s_lb_configs/{{ item }}/keepalived.conf"
+#         force: true
+#       loop: "{{ groups['hahost'] }}"
 
-    - name: Set interface fact
-      set_fact:
-        active_iface: "{{ item.stdout }}"
-      delegate_to: "{{ item.item }}"
-      delegate_facts: true
-      loop: "{{ detected_iface.results }}"
+#     - name: Detect active network interface
+#       delegate_to: localhost
+#       become: false
+#       shell: ssh core@{{ hostvars[item]['provider_ip'] }} "ip -4 -o addr show | grep '192.168.100.' | awk '{print \$2}' | head -n1"
+#       register: detected_iface
+#       loop: "{{ groups['hahost'] }}"
 
-    - name: Push and Prepare Node Configuration
-      delegate_to: localhost
-      become: true
-      loop: "{{ groups['hahost'] | default([]) }}"
-      vars:
-        # Ensure this path is correct for the user running the playbook
-        ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o LogLevel=ERROR -i /home/core/.ssh/id_rsa"
-      shell: |
-        # 1. Fix local permissions
-        chown -R core:core /tmp/k8s_lb_configs/{{ item }}
+#     - name: Set interface fact
+#       set_fact:
+#         active_iface: "{{ item.stdout }}"
+#       delegate_to: "{{ item.item }}"
+#       delegate_facts: true
+#       loop: "{{ detected_iface.results }}"
+
+#     - name: Push and Prepare Node Configuration
+#       delegate_to: localhost
+#       become: true
+#       loop: "{{ groups['hahost'] | default([]) }}"
+#       vars:
+#         # Ensure this path is correct for the user running the playbook
+#         ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o LogLevel=ERROR -i /home/core/.ssh/id_rsa"
+#       shell: |
+#         # 1. Fix local permissions
+#         chown -R core:core /tmp/k8s_lb_configs/{{ item }}
         
-        # 2. Update local configs
-        sed -i "s|interface .*|interface {{ hostvars[item].active_iface }}|g" /tmp/k8s_lb_configs/{{ item }}/keepalived.conf
-        sed -i "s|[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/24|{{ k8s_api_vip }}/24|g" /tmp/k8s_lb_configs/{{ item }}/keepalived.conf
-        sed -i "s|bind .*:6443|bind {{ k8s_api_vip }}:6443|g" /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
+#         # 2. Update local configs
+#         sed -i "s|interface .*|interface {{ hostvars[item].active_iface }}|g" /tmp/k8s_lb_configs/{{ item }}/keepalived.conf
+#         sed -i "s|[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/24|{{ k8s_api_vip }}/24|g" /tmp/k8s_lb_configs/{{ item }}/keepalived.conf
+#         sed -i "s|bind .*:6443|bind {{ k8s_api_vip }}:6443|g" /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
         
-        # Robust Newline Fix: Use printf to avoid trailing backslash YAML issues
-        [ -n "$(tail -c1 /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg)" ] && printf '\n' >> /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
+#         # Robust Newline Fix: Use printf to avoid trailing backslash YAML issues
+#         [ -n "$(tail -c1 /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg)" ] && printf '\n' >> /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg
 
-        # 3. SCP configs to the LB node
-        scp {{ ssh_opts }} /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg core@{{ hostvars[item].ansible_host }}:/tmp/haproxy.cfg
-        scp {{ ssh_opts }} /tmp/k8s_lb_configs/{{ item }}/keepalived.conf core@{{ hostvars[item].ansible_host }}:/tmp/keepalived.conf
+#         # 3. SCP configs to the LB node
+#         scp {{ ssh_opts }} /tmp/k8s_lb_configs/{{ item }}/haproxy.cfg core@{{ hostvars[item].ansible_host }}:/tmp/haproxy.cfg
+#         scp {{ ssh_opts }} /tmp/k8s_lb_configs/{{ item }}/keepalived.conf core@{{ hostvars[item].ansible_host }}:/tmp/keepalived.conf
 
-        # 4. Apply and Start on Guest via Heredoc
-        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} << 'EOF'
-          sudo sysctl -w net.ipv4.ip_nonlocal_bind=1
-          echo 'net.ipv4.ip_nonlocal_bind = 1' | sudo tee /etc/sysctl.d/99-haproxy.conf > /dev/null
+#         # 4. Apply and Start on Guest via Heredoc
+#         ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} << 'EOF'
+#           sudo sysctl -w net.ipv4.ip_nonlocal_bind=1
+#           echo 'net.ipv4.ip_nonlocal_bind = 1' | sudo tee /etc/sysctl.d/99-haproxy.conf > /dev/null
           
-          sudo mv /tmp/haproxy.cfg /etc/haproxy/haproxy.cfg
-          sudo mv /tmp/keepalived.conf /etc/keepalived/keepalived.conf
-          sudo chown root:root /etc/haproxy/haproxy.cfg /etc/keepalived/keepalived.conf
-          sudo restorecon -Rv /etc/haproxy /etc/keepalived
+#           sudo mv /tmp/haproxy.cfg /etc/haproxy/haproxy.cfg
+#           sudo mv /tmp/keepalived.conf /etc/keepalived/keepalived.conf
+#           sudo chown root:root /etc/haproxy/haproxy.cfg /etc/keepalived/keepalived.conf
+#           sudo restorecon -Rv /etc/haproxy /etc/keepalived
 
-          if sudo haproxy -c -f /etc/haproxy/haproxy.cfg; then
-            sudo systemctl restart keepalived
-            sleep 2
-            sudo systemctl restart haproxy
-          else
-            echo "HAProxy config invalid on $(hostname)"
-            exit 1
-          fi
-        EOF
+#           if sudo haproxy -c -f /etc/haproxy/haproxy.cfg; then
+#             sudo systemctl restart keepalived
+#             sleep 2
+#             sudo systemctl restart haproxy
+#           else
+#             echo "HAProxy config invalid on $(hostname)"
+#             exit 1
+#           fi
+#         EOF
 
-    - name: Start and Verify Services
-      delegate_to: localhost
-      loop: "{{ groups['hahost'] }}"
-      vars:
-        ssh_base: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
-        # We use a literal block here for the multi-line remote command
-        remote_verify: |
-          sudo systemctl restart keepalived
-          sleep 2
-          sudo systemctl enable --now haproxy
-          systemctl is-active haproxy keepalived
-      ansible.builtin.shell: "ssh core@{{ hostvars[item].ansible_host }} '{{ remote_verify }}'"
-      register: final_verify
-      failed_when: final_verify.rc != 0
+#     - name: Start and Verify Services
+#       delegate_to: localhost
+#       loop: "{{ groups['hahost'] }}"
+#       vars:
+#         ssh_base: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
+#         # We use a literal block here for the multi-line remote command
+#         remote_verify: |
+#           sudo systemctl restart keepalived
+#           sleep 2
+#           sudo systemctl enable --now haproxy
+#           systemctl is-active haproxy keepalived
+#       ansible.builtin.shell: "ssh core@{{ hostvars[item].ansible_host }} '{{ remote_verify }}'"
+#       register: final_verify
+#       failed_when: final_verify.rc != 0
 
 - name: Create Isolated Dummy Network
   delegate_to: "{{ VM_HOST_IP }}"

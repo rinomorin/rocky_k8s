@@ -1,0 +1,29 @@
+- name: "Deployment for {{ lb_node }}"
+  delegate_to: "{{ hostvars[lb_node].ansible_host }}"
+  remote_user: "core"  # Ensuring we use the correct user for the LB nodes
+  block:
+    - name: Push HAProxy and Keepalived configurations
+      template:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - { src: 'haproxy.cfg.j2', dest: '/etc/haproxy/haproxy.cfg' }
+        - { src: 'keepalived.conf.j2', dest: '/etc/keepalived/keepalived.conf' }
+
+    - name: Validate HAProxy Configuration
+      command: haproxy -c -f /etc/haproxy/haproxy.cfg
+      register: haproxy_check
+      changed_when: false
+
+    - name: Restart Load Balancer Services
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+      loop:
+        - keepalived
+        - haproxy
+      when: haproxy_check.rc == 0
