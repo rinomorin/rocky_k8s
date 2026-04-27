@@ -40,7 +40,8 @@
         ssh core@{{ hostvars[item].ansible_host }} "systemctl is-active haproxy keepalived"
       loop: "{{ groups['hahost'] }}"
       register: service_status
-            retries: 12
+      until: service_status.rc == 0
+      retries: 12
       delay: 5
       # We only care if it fails after all retries are exhausted
       failed_when: service_status.rc != 0
