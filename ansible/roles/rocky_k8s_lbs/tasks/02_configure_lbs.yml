@@ -21,7 +21,7 @@
 
 - name: Process Load Balancer configurations
   include_tasks: haproxy_cfg.yml
-  loop: "{{ groups['hahosts'] }}"
+  loop: "{{ groups['hahost'] }}"
   loop_control:
     loop_var: lb_node
 
@@ -124,7 +124,6 @@
 #       failed_when: final_verify.rc != 0
 
 - name: Create Isolated Dummy Network
-  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
