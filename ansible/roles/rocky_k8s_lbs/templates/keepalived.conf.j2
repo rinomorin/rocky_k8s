@@ -1,14 +1,14 @@
 vrrp_instance VI_1 {
     # Use 'lb_node' because that is our loop variable from the parent task
-    state {{ 'MASTER' if lb_node == groups['hahosts'][0] else 'BACKUP' }}
+    state {{ 'MASTER' if lb_node == groups['hahost'][0] else 'BACKUP' }}
     
     # Pull facts specifically for the 'lb_node' host
     interface {{ hostvars[lb_node].provider_interface | default('enp3s0') }}
     
     virtual_router_id 51
     
-    # Calculate priority based on the lb_node's position in the hahosts group
-    priority {{ 100 - (groups['hahosts'].index(lb_node) * 10) }}
+    # Calculate priority based on the lb_node's position in the hahost group
+    priority {{ 100 - (groups['hahost'].index(lb_node) * 10) }}
     
     advert_int 1
     nopreempt
@@ -21,7 +21,7 @@ vrrp_instance VI_1 {
     # Unicast needs to know the IP of the host we are templating (lb_node)
     unicast_src_ip {{ hostvars[lb_node].provider_ip }}
     unicast_peer {
-        {% for host in groups['hahosts'] %}
+        {% for host in groups['hahost'] %}
         {% if host != lb_node %}
         {{ hostvars[host].provider_ip }}
         {% endif %}
