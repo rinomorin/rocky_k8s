@@ -31,15 +31,20 @@
         timeout: 120
       loop: "{{ groups['hahost'] }}"
 
-    - name: Final Verification - haproxy`
+    - name: Final Verification - HAProxy & Keepalived
       delegate_to: localhost
       become: false
       vars:
         ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
       shell: |
-        ssh core@{{ hostvars[item].ansible_host }} "systemctl is-active haproxy keepalived"
+        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} "systemctl is-active haproxy keepalived"
       loop: "{{ groups['hahost'] }}"
       register: service_status
+      # Retry for 2 minutes (24 * 5 seconds)
+      until: service_status.rc == 0
+      retries: 24
+      delay: 5
+      # We only care if it fails after all retries are exhausted
       failed_when: service_status.rc != 0
 
     - name: 1.1 - Open Ports and Start Services on HA Hosts
