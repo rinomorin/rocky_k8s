@@ -14,7 +14,6 @@
     - "'already exists' not in lb_clones.stderr"
 
 - name: Fix stuck virtual NIC link state on KVM host
-  delegate_to: "example-kvm-host" # Replace with your KVM host name/IP
   become: yes
   shell: |
     # Check if the 'link state=down' exists in the VM XML
