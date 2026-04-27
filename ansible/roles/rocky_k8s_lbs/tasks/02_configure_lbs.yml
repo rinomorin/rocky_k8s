@@ -25,17 +25,17 @@
   loop_control:
     loop_var: lb_node
 
-# - name: Create Isolated Dummy Network
-#   vars:
-#     # This forces the connection to use 'secops' from the KVM host's variables
-#     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
-#   become: yes
-#   shell: |
-#     if ! virsh net-info black-hole >/dev/null 2>&1; then
-#       cat <<EOF > /tmp/black-hole.xml
-#       <network><name>black-hole</name></network>
-#     EOF
-#       virsh net-define /tmp/black-hole.xml
-#       virsh net-autostart black-hole
-#       virsh net-start black-hole
-#     fi
+- name: Create Isolated Dummy Network
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  shell: |
+    if ! virsh net-info black-hole >/dev/null 2>&1; then
+      cat <<EOF > /tmp/black-hole.xml
+      <network><name>black-hole</name></network>
+    EOF
+      virsh net-define /tmp/black-hole.xml
+      virsh net-autostart black-hole
+      virsh net-start black-hole
+    fi
