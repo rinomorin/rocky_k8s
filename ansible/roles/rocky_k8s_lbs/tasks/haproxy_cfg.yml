@@ -18,6 +18,7 @@
 
     - name: Push HAProxy and Keepalived configurations
       delegate_to: "{{ hostvars[lb_node]['ansible_host'] }}"
+      become: yes
       template:
         src: "{{ item.src }}"
         dest: "{{ item.dest }}"
@@ -25,8 +26,8 @@
         group: root
         mode: '0644'
       loop:
-        - { src: 'haproxy.cfg.j2', dest: '/tmp/haproxy.cfg' }
-        - { src: 'keepalived.conf.j2', dest: '/tmp/keepalived.conf' }
+        - { src: 'haproxy.cfg.j2', dest: '/etc/haproxy/haproxy.cfg' }
+        - { src: 'keepalived.conf.j2', dest: '/etc/keepalived/keepalived.conf' }
 
     - name: Validate HAProxy Configuration
       command: haproxy -c -f /etc/haproxy/haproxy.cfg
