@@ -17,7 +17,7 @@
       become: yes
 
     - name: Push HAProxy and Keepalived configurations
-      delegate_to: localhost
+      delegate_to: "{{ hostvars[lb_node]['ansible_host'] }}"
       template:
         src: "{{ item.src }}"
         dest: "{{ item.dest }}"
