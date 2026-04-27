@@ -46,19 +46,19 @@
       # We only care if it fails after all retries are exhausted
       failed_when: service_status.rc != 0
 
-
     - name: 1.1 - Open Ports and Start Services on HA Hosts
       delegate_to: localhost
       become: false
       vars:
         ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
       shell: |
-        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --permanent --add-port=6443/tcp 
-        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --permanent --add-rich-rule='rule protocol value=\"vrrp\" accept'
-        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --reload
-        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} sudo systemctl enable --now haproxy keepalived
+        ssh core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --permanent --add-port=6443/tcp 
+        ssh core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --permanent --add-rich-rule='rule protocol value=\"vrrp\" accept'
+        ssh core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --reload
+        ssh core@{{ hostvars[item].ansible_host }} sudo systemctl enable --now haproxy keepalived
       # loop: "{{ groups['hahost'] }}"
       register: lb_bootstrap
+      loop: "{{ groups['hahost'] }}"
       failed_when: lb_bootstrap.rc != 0
 
     - name: 1.2 - Verify VIP is now active (Ping Test)
