@@ -39,11 +39,11 @@
   register: virsh_fix_output
   changed_when: "'changed' in virsh_fix_output.stdout"
 
-- name: Ensure VMs are set to Autostart
-  delegate_to: "example-kvm-host"
-  become: yes
-  command: "virsh autostart {{ item }}"
-  loop: "{{ groups['hahost'] }}"
+# - name: Ensure VMs are set to Autostart
+#   delegate_to: "example-kvm-host"
+#   become: yes
+#   command: "virsh autostart {{ item }}"
+#   loop: "{{ groups['hahost'] }}"
 
 - name: Power on lb image
   vars:
