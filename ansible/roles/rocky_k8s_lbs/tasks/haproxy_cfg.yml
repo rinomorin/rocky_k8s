@@ -4,20 +4,17 @@
     ansible_user: "{{ hostvars[lb_node]['ansible_user'] | default('core') }}"
   # Use the user from hostvars or fallback to 'core'
   block:
-    - name: Allow HAProxy to bind to any IP (Non-local bind)
-      sysctl:
-        name: net.ipv4.ip_nonlocal_bind
-        value: '1'
-        sysctl_set: yes
-        state: present
-
-    - name: Allow HAProxy to bind to K8s API port (SELinux)
-      seport:
-        ports: 6443
-        proto: tcp
-        setype: http_port_t
-        state: present
-      when: ansible_selinux.status == "enabled"
+    - name: System level tweaks for HAProxy
+      shell: |
+        # 1. Enable non-local binding (allow binding to the VIP)
+        sysctl -w net.ipv4.ip_nonlocal_bind=1
+        echo "net.ipv4.ip_nonlocal_bind = 1" > /etc/sysctl.d/99-haproxy.conf
+        
+        # 2. Update SELinux to allow HAProxy on K8s API port
+        if [ "$(getenforce)" != "Disabled" ]; then
+          semanage port -a -t http_port_t -p tcp 6443 || semanage port -m -t http_port_t -p tcp 6443
+        fi
+      become: yes
 
     - name: Push HAProxy and Keepalived configurations
       template:
