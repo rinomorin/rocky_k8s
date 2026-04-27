@@ -5,8 +5,6 @@
   # Use the user from hostvars or fallback to 'core'
   block:
     - name: Push HAProxy and Keepalived configurations
-      ansible_user: "{{ hostvars[lb_node]['ansible_user'] | default('core') }}"
-
       template:
         src: "{{ item.src }}"
         dest: "{{ item.dest }}"
