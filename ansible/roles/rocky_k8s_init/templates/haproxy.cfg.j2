@@ -13,7 +13,6 @@ defaults
     timeout server  1m
 
 # --- K8S API SERVER (6443) ---
-# We balance the API across the control nodes
 frontend k8s-api
     bind {{ k8s_api_vip }}:6443
     mode tcp
@@ -30,7 +29,6 @@ backend k8s-masters
     {% endfor %}
 
 # --- INGRESS TRAFFIC (HTTPS - 443) ---
-# Pass-through to the Ingress Controller (via MetalLB or NodePorts)
 frontend k8s-ingress-https
     bind {{ k8s_api_vip }}:443
     mode tcp
@@ -39,9 +37,9 @@ frontend k8s-ingress-https
 backend k8s-ingress-backend-https
     mode tcp
     balance roundrobin
-    # If we are using MetalLB as the entry point:
+    # Primary: Point to the MetalLB VIP (Part 1 Logic)
     server metallb-vip {{ metallb_vip }}:443 check
-    # OR if we want to point directly to NodePorts (Part 2 style):
+    # Secondary/Alternative: Point to NodePorts (Part 2 Logic) if preferred
     {% for host in groups['control_nodes'] %}
     # server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_https_nodeport | default('30443') }} check
     {% endfor %}
@@ -58,3 +56,4 @@ backend k8s-ingress-backend-http
     server metallb-vip {{ metallb_vip }}:80 check
 
 # MANDATORY EMPTY LINE BELOW
+
