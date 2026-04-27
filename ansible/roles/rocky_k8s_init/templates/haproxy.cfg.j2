@@ -1,53 +1,60 @@
 global
     log /dev/log local0
-    group haproxy
-    user haproxy
+    log /dev/log local1 notice
     daemon
 
 defaults
-    log global
-    mode tcp
-    option tcplog
-    timeout connect 5000ms
-    timeout client 50000ms
-    timeout server 50000ms
+    log     global
+    mode    tcp
+    option  tcplog
+    option  dontlognull
+    timeout connect 10s
+    timeout client  1m
+    timeout server  1m
 
 # --- K8S API SERVER (6443) ---
+# We balance the API across the control nodes
 frontend k8s-api
     bind {{ k8s_api_vip }}:6443
+    mode tcp
+    option tcplog
     default_backend k8s-masters
 
 backend k8s-masters
+    mode tcp
+    balance roundrobin
     option httpchk GET /healthz
     http-check expect status 200
-    balance roundrobin
     {% for host in groups['control_nodes'] %}
-    # USE PROVISION_IP (10.x) for reliable internal discovery
     server {{ host }} {{ hostvars[host].provision_ip }}:6443 check check-ssl verify none
     {% endfor %}
 
-# --- APPLICATION TRAFFIC (HTTPS - 443) ---
+# --- INGRESS TRAFFIC (HTTPS - 443) ---
+# Pass-through to the Ingress Controller (via MetalLB or NodePorts)
 frontend k8s-ingress-https
     bind {{ k8s_api_vip }}:443
-    default_backend k8s-workers-https
+    mode tcp
+    default_backend k8s-ingress-backend-https
 
-# --- APPLICATION TRAFFIC (HTTPS - 443) ---
-backend k8s-workers-https
+backend k8s-ingress-backend-https
+    mode tcp
     balance roundrobin
+    # If we are using MetalLB as the entry point:
+    server metallb-vip {{ metallb_vip }}:443 check
+    # OR if we want to point directly to NodePorts (Part 2 style):
     {% for host in groups['control_nodes'] %}
-    server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_https_nodeport | default('30443') }} check
+    # server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_https_nodeport | default('30443') }} check
     {% endfor %}
 
-# --- APPLICATION TRAFFIC (HTTP - 80) ---
+# --- INGRESS TRAFFIC (HTTP - 80) ---
 frontend k8s-ingress-http
     bind {{ k8s_api_vip }}:80
-    default_backend k8s-workers-http
+    mode tcp
+    default_backend k8s-ingress-backend-http
 
-# --- APPLICATION TRAFFIC (HTTP - 80) ---
-backend k8s-workers-http
+backend k8s-ingress-backend-http
+    mode tcp
     balance roundrobin
-    {% for host in groups['control_nodes'] %}
-    server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_http_nodeport | default('30080') }} check
-    {% endfor %}
+    server metallb-vip {{ metallb_vip }}:80 check
 
-# last line N
+# MANDATORY EMPTY LINE BELOW
