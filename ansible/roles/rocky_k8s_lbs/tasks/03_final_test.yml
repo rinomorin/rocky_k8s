@@ -22,7 +22,7 @@
       loop: "{{ groups['hahost'] }}"
 
     - name: Wait for SSH on Production IP
-      delegate_to: localhost
+      # delegate_to: localhost
       become: false
       wait_for:
         host: "{{ hostvars[item].ansible_host }}"

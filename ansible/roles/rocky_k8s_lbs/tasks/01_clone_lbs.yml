@@ -285,7 +285,6 @@
     fi
   loop: "{{ groups['hahost'] | default([]) }}"
 
-
 - name: Verify SSH reachability on Static IPs
   become: false
   wait_for:
