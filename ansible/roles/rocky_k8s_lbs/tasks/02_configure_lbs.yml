@@ -25,6 +25,17 @@
   loop_control:
     loop_var: lb_node
 
+- name: Set HAProxy and Keepalived to SELinux permissive mode
+  become: yes
+  shell: |
+    # Check if they are already permissive to avoid errors
+    if ! semodule -l | grep -q "permissive_haproxy_t"; then
+      semanage permissive -a haproxy_t
+    fi
+    if ! semodule -l | grep -q "permissive_keepalived_t"; then
+      semanage permissive -a keepalived_t
+    fi
+
 - name: Create Isolated Dummy Network
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables

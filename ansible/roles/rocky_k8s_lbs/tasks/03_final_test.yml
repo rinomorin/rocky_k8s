@@ -38,7 +38,7 @@
       vars:
         ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
       shell: |
-        ssh {{ ssh_opts }} core@{{ hostvars[item].ansible_host }} "systemctl is-active haproxy keepalived"
+        ssh core@{{ hostvars[item].ansible_host }} "systemctl is-active haproxy keepalived"
       loop: "{{ groups['hahost'] }}"
       register: service_status
       failed_when: service_status.rc != 0
