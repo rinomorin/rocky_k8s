@@ -16,7 +16,7 @@
   delegate_to: localhost
   become: false
   shell: |
-    ssh core@{{ hostvars[item]['provider_ip'] }} "sudo dnf install -y haproxy keepalived policycoreutils-python-utils"
+    ssh core@{{ hostvars[item]['provider_ip'] }} "sudo dnf install --nobest -y haproxy keepalived policycoreutils-python-utils"
   loop: "{{ groups['hahost'] }}"
 
 - name: Process Load Balancer configurations
