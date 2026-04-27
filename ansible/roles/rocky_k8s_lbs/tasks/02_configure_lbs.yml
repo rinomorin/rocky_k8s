@@ -36,6 +36,12 @@
       semanage permissive -a keepalived_t
     fi
 
+- name: Force disk sync inside VMs
+  become: yes
+  command: sync
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['hahost'] }}"
+
 - name: Create Isolated Dummy Network
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables

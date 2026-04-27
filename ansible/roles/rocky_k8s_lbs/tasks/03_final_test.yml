@@ -22,7 +22,6 @@
       loop: "{{ groups['hahost'] }}"
 
     - name: Wait for SSH on Production IP
-      # delegate_to: localhost
       become: false
       wait_for:
         host: "{{ hostvars[item].ansible_host }}"
@@ -32,7 +31,7 @@
         timeout: 120
       loop: "{{ groups['hahost'] }}"
 
-    - name: Final Verification - haproxy
+    - name: Final Verification - haproxy`
       delegate_to: localhost
       become: false
       vars:
