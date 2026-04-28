@@ -10,6 +10,10 @@
     ansible_user: "{{ hostvars[cloud_node]['ansible_user'] | default('core') }}"
   # Use the user from hostvars or fallback to 'core'
   block:
+    - name: set hostname
+      shell:
+        sudo hostnamectl set-hostname {{ hostvars[cloud_node]['hostname']}}
+
     ###############################################################
     # 1. Configure CRI‑O Repository
     ###############################################################
@@ -20,7 +24,6 @@
         crio_repo_ver: "{{ lookup('env','kubetnet_version') | default('1.34', true) }}"
 
     - name: Set CRI-O repository versions from environment or defaults
-      delegate_to: localhost
       become: false
       set_fact:
         crio_repo_url: "https://download.opensuse.org/repositories/isv:/cri-o:/stable:/v{{ crio_repo_ver }}/rpm/"
@@ -44,17 +47,16 @@
       register: add_repo
       # gpgkey=https://download.opensuse.org/repositories/isv:/cri-o:/stable:/$CRIO_VERSION/rpm/repodata/repomd.xml.key
 
+
     ###############################################################
     # 2. Configure Kubernetes Repository
     ###############################################################
     - name: Set repository versions from environment or defaults
-      delegate_to: localhost
       become: false
       set_fact:
         kubernetes_repo_ver: "{{ lookup('env','kubetnet_version') | default('1.34', true) }}"
 
     - name: Set repository versions from environment or defaults
-      delegate_to: localhost
       become: false
       set_fact:
         kubernetes_repo_url: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_repo_ver }}/rpm/"
@@ -77,6 +79,7 @@
       become: true
     #  gpgkey=https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/rpm/repodata/repomd.xml.key
 
+
     ###############################################################
     # 3. Ensure repo metadata is refreshed
     ###############################################################
@@ -84,3 +87,8 @@
       command: dnf clean all
       become: true
       changed_when: false
+
+- name: Force disk sync inside VMs
+  become: yes
+  command: sync
+  loop: "{{ groups['cluster_nodes'] | default([]) }}"
