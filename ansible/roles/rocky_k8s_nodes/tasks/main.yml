@@ -16,6 +16,7 @@
       include_tasks: repo.yml  
       loop: "{{ groups['control_nodes'] + groups['worker_nodes'] + localhost | default([]) }}"
 
+
     - name: Add Repos configurations
       include_tasks: repo.yml  
     # - import_tasks: repo.yml
