@@ -7,7 +7,7 @@
     virt-clone --original {{ golden_image_name }}
     --name {{ item.split('.')[0] }} 
     --file /var/lib/libvirt/images/{{ item.split('.')[0] }}.qcow2
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] }}"
   register: nodes_clones
   failed_when: 
     - nodes_clones.rc != 0 
@@ -55,7 +55,7 @@
     - vm_start.rc != 0 
     - "'already active' not in vm_start.stderr"
   changed_when: "vm_start.rc == 0"
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] }}"
 
 - name: 1.1 - Discover Maintenance IP from br-nat
   vars:
@@ -66,7 +66,7 @@
     while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
   register: maintenance_ip_raw
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] }}"
 
 - name: 1.2 - Verify Maintenance SSH (sshok)
   become: false
@@ -93,7 +93,7 @@
   shell: |
     virsh domiflist {{ item.split('.')[0] }} | grep 'br-cluster' | awk '{print $5}'
   register: cluster_mac_discovery
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] }}"
 
 - name: 1.1.3 - Build Cluster MAC Map
   set_fact:
@@ -107,7 +107,7 @@
   shell: |
     virsh domiflist {{ item.split('.')[0] }} | grep 'default' | awk '{print $5}'
   register: provider_mac_discovery
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] }}"
 
 - name: 2.1.1 - Build Provider MAC Map
   set_fact:
@@ -138,7 +138,7 @@
     
     # 4. Final Activation
     {{ ssh_cmd }} "sudo nmcli con up $DEV"
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+  loop: "{{ groups['control_nodes'] | default([]) }}"
 
 - name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
   become: false
@@ -162,7 +162,7 @@
 
     # 4. Kick the connection
     {{ ssh_cmd }} "sudo nmcli con up $DEV"
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
 - name: 3.1 - Force KVM Link State to UP (Host Side)
   vars:
@@ -174,7 +174,7 @@
     for mac in $(virsh domiflist $VM_NAME | grep -v 'Interface' | grep -v '\---' | awk '{print $5}'); do
       sudo virsh domif-setlink $VM_NAME $mac up
     done
-  loop: "{{ groups['hahost'] }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
 - name: 3.2 - Force Guest Link State and Autoconnect (Guest Side)
   become: false
@@ -194,7 +194,7 @@
       sudo nmcli connection up cluster || true
       sudo nmcli connection up provider || true
     '
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
 - name: 4.1a - Get local public key as a fact
   delegate_to: localhost
@@ -212,7 +212,7 @@
     if ! grep -q '{{ my_public_key }}' ~/.ssh/authorized_keys; then \
       echo '{{ my_public_key }}' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys; \
     fi"
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
 - name: 5.2 - Network Routing Swap and Maintenance Isolation
   become: false
@@ -230,7 +230,7 @@
 
     # 3. Apply changes - we do provider first so the new path is ready
     {{ ssh_cmd }} "sudo nmcli connection up enp3s0 && sudo nmcli connection up enp1s0"
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
 - name: 6.0 - Force helper to learn new node identities
   delegate_to: localhost
@@ -243,21 +243,21 @@
     # 2. Connect once and force-save the NEW key to known_hosts
     ssh -o StrictHostKeyChecking=accept-new \
         -i ~/.ssh/id_rsa core@{{ hostvars[item]['provider_ip'] }} "echo 'Key Learned'"
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
 - name: 6.1 - Verify permanent connection (no flags needed now)
   delegate_to: localhost
   become: false
   shell: "ssh -i ~/.ssh/id_rsa core@{{ hostvars[item]['provider_ip'] }} 'ip route'"
   register: node_verify
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
 - name: local connection
   delegate_to: localhost
   become: false
   shell: "ssh {{ hostvars[item]['provider_ip']}} ip route"
   register: node_connet
-  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
 - debug:
     msg: "{{ node_connet }}"
