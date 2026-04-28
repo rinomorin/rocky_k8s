@@ -1,0 +1,79 @@
+---
+#
+# cloud_helper_prep — Repository Configuration
+# Installs CRI‑O and Kubernetes repositories using inventory/env‑driven versions.
+#
+###############################################################
+# 1. Configure CRI‑O Repository
+###############################################################
+- name: Set CRI-O repository versions from environment
+  delegate_to: localhost
+  become: false
+  set_fact:
+    crio_repo_ver: "{{ lookup('env','kubetnet_version') | default('1.34', true) }}"
+
+- name: Set CRI-O repository versions from environment or defaults
+  delegate_to: localhost
+  become: false
+  set_fact:
+    crio_repo_url: "https://download.opensuse.org/repositories/isv:/cri-o:/stable:/v{{ crio_repo_ver }}/rpm/"
+    crio_repo_gpg: "https://download.opensuse.org/repositories/isv:/cri-o:/stable:/v{{ crio_repo_ver }}/rpm/repodata/repomd.xml.key"
+
+- name: Install CRI‑O repository
+  copy:
+    dest: /etc/yum.repos.d/crio.repo
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [crio]
+      name=CRI-O {{ crio_repo_ver }}
+      baseurl={{ crio_repo_url }}
+      enabled=1
+      gpgcheck=1
+      gpgkey={{ crio_repo_gpg }}
+  notify: refresh_repos
+  become: true
+  register: add_repo
+  # gpgkey=https://download.opensuse.org/repositories/isv:/cri-o:/stable:/$CRIO_VERSION/rpm/repodata/repomd.xml.key
+
+###############################################################
+# 2. Configure Kubernetes Repository
+###############################################################
+- name: Set repository versions from environment or defaults
+  delegate_to: localhost
+  become: false
+  set_fact:
+    kubernetes_repo_ver: "{{ lookup('env','kubetnet_version') | default('1.34', true) }}"
+
+- name: Set repository versions from environment or defaults
+  delegate_to: localhost
+  become: false
+  set_fact:
+    kubernetes_repo_url: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_repo_ver }}/rpm/"
+    kubernetes_repo_gpg: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_repo_ver }}/rpm/repodata/repomd.xml.key"
+
+- name: Install Kubernetes repository
+  copy:
+    dest: /etc/yum.repos.d/kubernetes.repo
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [kubernetes]
+      name=Kubernetes {{ kubernetes_repo_ver }}
+      baseurl={{ kubernetes_repo_url }}
+      enabled=1
+      gpgcheck=1
+      gpgkey={{ kubernetes_repo_gpg }}
+  # notify: refresh_repos
+  become: true
+#  gpgkey=https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/rpm/repodata/repomd.xml.key
+
+###############################################################
+# 3. Ensure repo metadata is refreshed
+###############################################################
+- name: Force metadata refresh (first run only)
+  command: dnf clean all
+  become: true
+  changed_when: false

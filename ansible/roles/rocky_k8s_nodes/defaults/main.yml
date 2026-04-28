@@ -33,10 +33,15 @@ rev_prov:  "{{ prov_cidr | ansible.utils.ipaddr('revdns') | regex_replace('^0\\.
 # ------------------------------------------------------------
 # Service Configuration
 # ------------------------------------------------------------
-k8s_api_vip: "{{ lookup('env', 'K8S_API_VIP') | default('192.168.100.30', true) }}"
-ipa_master_fqdn: "ipa.{{ c_zone }}"
-build_loops: "{{ lookup('env', 'build_loops') | default(120, true) }}"
+# k8s_api_vip: "{{ lookup('env', 'K8S_API_VIP') | default('192.168.100.30', true) }}"
+# ipa_master_fqdn: "ipa.{{ c_zone }}"
 
 # Hypervisor & Credentials
 # VM_HOST_IP: "{{ hostvars[kvm_host].ansible_host | default(kvm_host) }}"
 ipa_admin_password: "{{ lookup('env', 'IPA_ADMIN_PASSWORD') }}"
+load_helper_packages: "{{ lookup('env','HELPER_PACKAGES') | default('jq,curl,qemu-img', true) }}"
+cloud_helper_packages: "{{ load_helper_packages.split(',') }}"
+
+kvm_packages: >-
+  {{ (lookup('env','KVM_PACKAGES') | default('qemu-img,libvirt-client',true)).split(',') }}
+
