@@ -14,7 +14,7 @@
       shell:
         sudo hostnamectl set-hostname {{ hostvars[cloud_node]['hostname'] }}
       when:
-        cloud_node not in groups['helpers']
+        "{{ hostvars[cloud_node] not in groups['helpers'] }}"
 
     ###############################################################
     # 1. Configure CRI‑O Repository
