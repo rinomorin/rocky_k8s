@@ -4,6 +4,7 @@
 # Installs CRI‑O and Kubernetes repositories using inventory/env‑driven versions.
 #
 # delegate to nodes
+- name: process nodes
   delegate_to: "{{ hostvars[cloud_node]['provision_ip'] }}"
   vars:
     ansible_user: "{{ hostvars[lb_node]['ansible_user'] | default('core') }}"

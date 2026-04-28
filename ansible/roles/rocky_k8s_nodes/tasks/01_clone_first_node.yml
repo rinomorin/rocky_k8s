@@ -293,3 +293,8 @@
     state: started
     timeout: 60
   loop: "{{ groups['cluster_nodes'] | default([]) }}"
+
+- name: Force disk sync inside VMs
+  become: yes
+  command: sync
+  loop: "{{ groups['cluster_nodes'] | default([]) }}"
