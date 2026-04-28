@@ -10,9 +10,15 @@
   block:
     - import_tasks: 00_dns_register.yml
     - import_tasks: 01_clone_first_node.yml
+
+    - name: Process Load Balancer configurations
+      include_tasks: haproxy_cfg.yml  
+      loop: "{{ groups['cluster_nodes'] | default([]) }}"
+      loop_control:
+        loop_var: cloud_node
     - import_tasks: repo.yml
-    - import_tasks: 02_final_golden_touch.yml
-    - import_tasks: 03_clone_them_all.yml
+    # - import_tasks: 02_final_golden_touch.yml
+    # - import_tasks: 03_clone_them_all.yml
     # - import_tasks: 01_poweron_golden.yml
     # - import_tasks: 04_clone_nodes.yml
     # - import_tasks: 05_prep_os.yml

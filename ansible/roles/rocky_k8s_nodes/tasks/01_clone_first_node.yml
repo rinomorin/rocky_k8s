@@ -1,55 +1,295 @@
-- name: 1.1 - Infrastructure Creation (Lead Master)
+---
+- name: Clone Load Balancer nodes from Golden Image
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
   command: >
-    sudo virt-clone 
-    --original {{ golden_image_name }} 
-    --name {{ groups['control_nodes'][0].split('.')[0] }}
-    --file /var/lib/libvirt/images/{{ groups['control_nodes'][0].split('.')[0] }}.qcow2
-  args:
-    creates: "/var/lib/libvirt/images/{{ groups['control_nodes'][0].split('.')[0] }}.qcow2"
-  register: clone_result
+    virt-clone --original {{ golden_image_name }}
+    --name {{ item.split('.')[0] }} 
+    --file /var/lib/libvirt/images/{{ item.split('.')[0] }}.qcow2
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] }}"
+  register: nodes_clones
+  failed_when: 
+    - nodes_clones.rc != 0 
+    - "'already exists' not in nodes_clones.stderr"
 
-- name: 1.2 - Verify Clone Status
-  debug:
-    msg: "{{ groups['control_nodes'][0].split('.')[0] }} has been successfully cloned and is ready for configuration."
-  when: clone_result.changed
+# - name: Fix stuck virtual NIC link state on KVM host
+#   become: yes
+#   shell: |
+#     # Check if the 'link state=down' exists in the VM XML
+#     if virsh dumpxml {{ item }} | grep -q "<link state='down'/>"; then
+#       echo "Fixing link state for {{ item }}..."
+      
+#       # Dump, strip the down state line, and redefine
+#       virsh dumpxml {{ item }} > /tmp/{{ item }}_fix.xml
+#       sed -i "/<link state='down'\/>/d" /tmp/{{ item }}_fix.xml
+#       virsh define /tmp/{{ item }}_fix.xml
+      
+#       # Force the link up immediately without rebooting if the VM is running
+#       # This handles the immediate state vs the boot state
+#       for mac in $(virsh dumpxml {{ item }} | grep "<mac address=" | sed "s/.*address='\(.*\)'.*/\1/"); do
+#         virsh domif-setlink {{ item }} $mac up || true
+#       done
+      
+#       echo "changed"
+#     else
+#       echo "Link state already healthy"
+#     fi
+#   loop: "{{ groups['worker_nodes'] }}"
+#   register: virsh_fix_output
+#   changed_when: "'changed' in virsh_fix_output.stdout"
 
-- name: 1.3.1 - Power On Lead Master
+# - name: Ensure VMs are set to Autostart
+#   delegate_to: "example-kvm-host"
+#   become: yes
+#   command: "virsh autostart {{ item }}"
+#   loop: "{{ groups['hahost'] }}"
+
+- name: Power on nodes images
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  shell: "virsh start {{ item.split('.')[0] }}"
+  register: vm_start
+  failed_when: 
+    - vm_start.rc != 0 
+    - "'already active' not in vm_start.stderr"
+  changed_when: "vm_start.rc == 0"
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] }}"
+
+- name: 1.1 - Discover Maintenance IP from br-nat
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
   shell: |
-    if ! sudo virsh list --name | grep -q "^{{ groups['control_nodes'][0].split('.')[0] }}$"; then
-      sudo virsh start {{ groups['control_nodes'][0].split('.')[0] }}
-    else
-      echo "Already running"
-    fi
-  register: start_node
-  changed_when: "'Already running' not in start_node.stdout"
+    M_MAC=$(virsh domiflist {{ item.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
+    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+  register: maintenance_ip_raw
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] }}"
 
-- name: 1.3.2 - Wait for Lead Master to Boot
-  shell: "sudo virsh domstate {{ groups['control_nodes'][0].split('.')[0] }}"
-  register: node_state
-  until: node_state.stdout == "running"
+- name: 1.2 - Verify Maintenance SSH (sshok)
+  become: false
+  vars:
+    m_ip: "{{ item.stdout }}"
+    ssh_opt: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
+  shell: |
+    ssh {{ ssh_opt }} -i ~/.ssh/id_rsa core@{{ m_ip }} "echo sshok"
+  register: ssh_test
+  until: ssh_test.rc == 0
   retries: 15
   delay: 5
-  changed_when: false
+  loop: "{{ maintenance_ip_raw.results }}"
 
-- name: 1.3.3 - Discover Maintenance IP (br-nat)
-  shell: |
-    # Find the MAC address assigned to the br-nat interface for this VM
-    MAC=$(sudo virsh domiflist {{ groups['control_nodes'][0].split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
-    # Query the DHCP leases on that bridge
-    sudo virsh net-dhcp-leases br-nat | grep "$MAC" | awk '{print $5}' | cut -d/ -f1
-  register: lead_master_m_ip
-  until: lead_master_m_ip.stdout != ""
-  retries: 20
-  delay: 10
-
-- name: 1.3.4 - Set Lead Master Maintenance IP Fact
+- name: 1.3 - Store Maintenance IPs in Map
   set_fact:
-    lead_m_ip: "{{ lead_master_m_ip.stdout | trim }}"
+    maintenance_map: "{{ maintenance_map | default({}) | combine({ item.item: item.stdout }) }}"
+  loop: "{{ maintenance_ip_raw.results }}"
 
-- name: 1.3.5 - Wait for SSH on Maintenance Port
+- name: 1.1.2 - Discover Provision MAC from br-cluster
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  shell: |
+    virsh domiflist {{ item.split('.')[0] }} | grep 'br-cluster' | awk '{print $5}'
+  register: cluster_mac_discovery
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] }}"
+
+- name: 1.1.3 - Build Cluster MAC Map
+  set_fact:
+    c_mac_map: "{{ c_mac_map | default({}) | combine({ item.item: item.stdout }) }}"
+  loop: "{{ cluster_mac_discovery.results }}"
+
+- name: 2.1 - Discover Provider MAC from default network
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  shell: |
+    virsh domiflist {{ item.split('.')[0] }} | grep 'default' | awk '{print $5}'
+  register: provider_mac_discovery
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] }}"
+
+- name: 2.1.1 - Build Provider MAC Map
+  set_fact:
+    p_mac_map: "{{ p_mac_map | default({}) | combine({ item.item: item.stdout }) }}"
+  loop: "{{ provider_mac_discovery.results }}"
+
+- name: 2.2 - Configure Provider IP via Maintenance Tunnel
+  become: false
+  vars:
+    m_ip: "{{ maintenance_map[item] }}"
+    p_mac: "{{ p_mac_map[item] }}"
+    p_ip: "{{ hostvars[item].ansible_host }}"
+    # Generic placeholder for gateway
+    p_gw: "192.168.100.1" 
+    # SSH parameters defined simply
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@{{ m_ip }}"
+  shell: |
+    # 1. Get Device Name
+    DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ p_mac }}" | head -n 1 | cut -d: -f2)
+    
+    # 2. Force Link Up and Clean old connections
+    {{ ssh_cmd }} "sudo ip link set $DEV up"
+    {{ ssh_cmd }} "sudo nmcli con delete provider || true"
+    {{ ssh_cmd }} "sudo nmcli con delete $DEV || true"
+
+    # 3. Add Connection
+    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name $DEV ifname $DEV ipv4.method manual ipv4.addresses {{ p_ip }}/24 ipv4.gateway {{ p_gw }} ipv4.route-metric 300 ipv4.never-default yes connection.autoconnect yes"
+    
+    # 4. Final Activation
+    {{ ssh_cmd }} "sudo nmcli con up $DEV"
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+
+- name: 2.4 - Configure Cluster IP (10.x) via Maintenance Tunnel
+  become: false
+  vars:
+    m_ip: "{{ maintenance_map[item] }}"
+    c_mac: "{{ c_mac_map[item] }}"
+    node_ip: "{{ hostvars[item].provision_ip }}"
+    # standardized the ssh command to avoid nested quote errors
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@{{ m_ip }}"
+  shell: |
+    # 1. Identify the device
+    DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ c_mac }}" | head -n 1 | cut -d: -f2)
+
+    # 2. Force hardware state and clean old profiles
+    {{ ssh_cmd }} "sudo ip link set $DEV up"
+    {{ ssh_cmd }} "sudo nmcli con delete cluster || true"
+    {{ ssh_cmd }} "sudo nmcli con delete $DEV || true"
+
+    # 3. Add the connection (Single line to prevent YAML splitting errors)
+    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name $DEV ifname $DEV ipv4.method manual ipv4.addresses {{ node_ip }}/24 ipv4.route-metric 200 ipv4.never-default yes connection.autoconnect yes"
+
+    # 4. Kick the connection
+    {{ ssh_cmd }} "sudo nmcli con up $DEV"
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+
+- name: 3.1 - Force KVM Link State to UP (Host Side)
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  shell: |
+    # Get all interface MACs for this VM and force them to 'up'
+    VM_NAME="{{ item.split('.')[0] }}"
+    for mac in $(virsh domiflist $VM_NAME | grep -v 'Interface' | grep -v '\---' | awk '{print $5}'); do
+      sudo virsh domif-setlink $VM_NAME $mac up
+    done
+  loop: "{{ groups['hahost'] }}"
+
+- name: 3.2 - Force Guest Link State and Autoconnect (Guest Side)
+  become: false
+  vars:
+    # Use a simpler SSH base without the extra vars inside the shell block
+    m_ip: "{{ maintenance_map[item] }}"
+    ssh_target: "core@{{ m_ip }}"
+    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
+  shell: |
+    # We send the entire logic block as a single remote command
+    ssh {{ ssh_opts }} {{ ssh_target }} '
+      for dev in enp2s0 enp3s0; do
+        sudo ip link set $dev up
+        sudo nmcli device set $dev autoconnect yes
+        sudo nmcli device set $dev managed yes
+      done
+      sudo nmcli connection up cluster || true
+      sudo nmcli connection up provider || true
+    '
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+
+- name: 4.1a - Get local public key as a fact
   delegate_to: localhost
+  become: false
+  set_fact:
+    my_public_key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+- name: 4.1b - Authorize local key on guests
+  become: false
+  vars:
+    m_ip: "{{ maintenance_map[item] }}"
+    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
+  shell: |
+    ssh {{ ssh_opts }} core@{{ m_ip }} "mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
+    if ! grep -q '{{ my_public_key }}' ~/.ssh/authorized_keys; then \
+      echo '{{ my_public_key }}' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys; \
+    fi"
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+
+- name: 5.2 - Network Routing Swap and Maintenance Isolation
+  become: false
+  vars:
+    m_ip: "{{ maintenance_map[item] }}"
+    p_gw: "192.168.100.1"
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@{{ m_ip }}"
+  shell: |
+    # 1. Promote Provider (enp3s0) to be the Default Route
+    {{ ssh_cmd }} "sudo nmcli connection modify enp3s0 ipv4.gateway {{ p_gw }} ipv4.route-metric 50 ipv4.never-default no"
+
+    # 2. Demote Maintenance (enp1s0) and isolate it
+    # We strip its current gateway and set a massive metric
+    {{ ssh_cmd }} "sudo nmcli connection modify enp1s0 ipv4.gateway '' ipv4.route-metric 1000 ipv4.never-default yes"
+
+    # 3. Apply changes - we do provider first so the new path is ready
+    {{ ssh_cmd }} "sudo nmcli connection up enp3s0 && sudo nmcli connection up enp1s0"
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+
+- name: 6.0 - Force helper to learn new node identities
+  delegate_to: localhost
+  become: false
+  shell: |
+    # 1. Remove the old entry if it exists
+    ssh-keygen -R {{ hostvars[item]['provider_ip'] }} || true
+    ssh-keygen -R {{ item.split('.')[0] }} || true
+    
+    # 2. Connect once and force-save the NEW key to known_hosts
+    ssh -o StrictHostKeyChecking=accept-new \
+        -i ~/.ssh/id_rsa core@{{ hostvars[item]['provider_ip'] }} "echo 'Key Learned'"
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+
+- name: 6.1 - Verify permanent connection (no flags needed now)
+  delegate_to: localhost
+  become: false
+  shell: "ssh -i ~/.ssh/id_rsa core@{{ hostvars[item]['provider_ip'] }} 'ip route'"
+  register: node_verify
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+
+- name: local connection
+  delegate_to: localhost
+  become: false
+  shell: "ssh {{ hostvars[item]['provider_ip']}} ip route"
+  register: node_connet
+  loop: "{{ groups['controller_nodes'] + groups['worker_nodes'] | default([]) }}"
+
+- debug:
+    msg: "{{ node_connet }}"
+
+
+- name: 6.1 - Reassign KVM Provider Interface to Black-Hole
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  shell: |
+    VM_NAME="{{ item.split('.')[0] }}"
+    # 1. Get the MAC address of the interface currently on default
+    P_MAC=$(virsh domiflist $VM_NAME | grep 'default' | awk '{print $5}')
+    
+    if [ ! -z "$P_MAC" ]; then
+      # 2. Update the live configuration to move to black-hole
+      # We use --config for persistence and --live for immediate effect
+      virsh update-device $VM_NAME /dev/stdin --live --config <<EOF
+    <interface type='network'>
+      <mac address='$P_MAC'/>
+      <source network='black-hole'/>
+      <model type='virtio'/>
+    </interface>
+    EOF
+    fi
+  loop: "{{ groups['worker_nodes'] | default([]) }}"
+
+- name: Verify SSH reachability on Static IPs
+  become: false
   wait_for:
-    host: "{{ lead_m_ip }}"
+    host: "{{ hostvars[item]['provision_ip'] }}"
     port: 22
     state: started
-    timeout: 300
+    timeout: 60
+  loop: "{{ groups['cluster_nodes'] | default([]) }}"
