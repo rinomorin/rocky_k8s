@@ -12,7 +12,7 @@
   block:
     - name: set hostname
       shell:
-        sudo hostnamectl set-hostname {{ hostvars[cloud_node]['hostname'] }}
+        sudo hostnamectl set-hostname "{{ hostvars[cloud_node]['hostname'] }}"
       when:
         "{{ hostvars[cloud_node] not in groups['helpers'] }}"
 
