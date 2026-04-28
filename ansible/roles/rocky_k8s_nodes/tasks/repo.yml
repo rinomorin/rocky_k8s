@@ -7,7 +7,7 @@
 - name: process nodes
   delegate_to: "{{ hostvars[cloud_node]['provision_ip'] }}"
   vars:
-    ansible_user: "{{ hostvars[lb_node]['ansible_user'] | default('core') }}"
+    ansible_user: "{{ hostvars[cloud_node]['ansible_user'] | default('core') }}"
   # Use the user from hostvars or fallback to 'core'
   block:
     ###############################################################
