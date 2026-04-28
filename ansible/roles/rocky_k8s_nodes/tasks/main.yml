@@ -11,10 +11,11 @@
     - import_tasks: 00_dns_register.yml
     - import_tasks: 01_clone_first_node.yml
     - name: Add Repos configurations
+      vars:
+        cloud_node: "{{item}}"
       include_tasks: repo.yml  
       loop: "{{ groups['control_nodes'] + groups['worker_nodes'] + localhost | default([]) }}"
-      loop_control:
-        label: "cloud_node"
+
     - name: Add Repos configurations
       include_tasks: repo.yml  
     # - import_tasks: repo.yml

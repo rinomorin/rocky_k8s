@@ -14,13 +14,12 @@
       shell:
         sudo hostnamectl set-hostname {{ hostvars[cloud_node]['hostname'] }}
       when:
-        cloud_node is not localhost
+        cloud_node not in groups['helpers']
 
     ###############################################################
     # 1. Configure CRI‑O Repository
     ###############################################################
     - name: Set CRI-O repository versions from environment
-      delegate_to: localhost
       become: false
       set_fact:
         crio_repo_ver: "{{ lookup('env','kubetnet_version') | default('1.34', true) }}"
