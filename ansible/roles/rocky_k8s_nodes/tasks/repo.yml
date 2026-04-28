@@ -6,16 +6,17 @@
 # delegate to nodes
 # test.yml
 - name: process nodes
-  delegate_to: "{{ hostvars[cloud_node]['provision_ip'] }}"
+  delegate_to: "{{ hostvars[cloud_node]['provision_ip'] | default('127.0.0.1') }}"
   vars:
-    # Use cloud_node to find the user
     ansible_user: "{{ hostvars[cloud_node]['ansible_user'] | default('core') }}"
   block:
     - name: set hostname
       become: yes
       command: hostnamectl set-hostname "{{ hostvars[cloud_node]['hostname'] | default(cloud_node) }}"
-      # Correct syntax: no curly braces, check the name string
-      when: cloud_node not in groups['helpers']
+      # Double check that we aren't trying to set hostname on the local controller
+      when: 
+        - cloud_node not in groups['helpers']
+        - cloud_node != 'localhost'
 
     ###############################################################
     # 1. Configure CRI‑O Repository
