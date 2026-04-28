@@ -1,5 +1,4 @@
 - name: Check for existing K8s Nodes
-  delegate_to: "{{ VM_HOST_IP }}"
   shell: |
     if sudo virsh list --all | grep -q "{{ item.split('.')[0] }}"; then
       echo "exists"
@@ -16,7 +15,6 @@
     skip_build: "{{ not (rebuild_nodes | default(false) | bool) and ('missing' not in node_check.results | selectattr('stdout', 'defined') | map(attribute='stdout') | list) }}"
 
 - name: Cleanup for Rebuild
-  delegate_to: "{{ VM_HOST_IP }}"
   when: 
     - rebuild_nodes | default(false) | bool
     - item != 'helper'

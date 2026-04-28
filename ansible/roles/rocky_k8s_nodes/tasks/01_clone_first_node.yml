@@ -1,5 +1,4 @@
 - name: 1.1 - Infrastructure Creation (Lead Master)
-  delegate_to: "{{ VM_HOST_IP }}"
   command: >
     sudo virt-clone 
     --original golden-base 
@@ -15,7 +14,6 @@
   when: clone_result.changed
 
 - name: 1.3.1 - Power On Lead Master
-  delegate_to: "{{ VM_HOST_IP }}"
   shell: |
     if ! sudo virsh list --name | grep -q "^{{ groups['control_nodes'][0].split('.')[0] }}$"; then
       sudo virsh start {{ groups['control_nodes'][0].split('.')[0] }}
@@ -26,7 +24,6 @@
   changed_when: "'Already running' not in start_node.stdout"
 
 - name: 1.3.2 - Wait for Lead Master to Boot
-  delegate_to: "{{ VM_HOST_IP }}"
   shell: "sudo virsh domstate {{ groups['control_nodes'][0].split('.')[0] }}"
   register: node_state
   until: node_state.stdout == "running"
@@ -35,7 +32,6 @@
   changed_when: false
 
 - name: 1.3.3 - Discover Maintenance IP (br-nat)
-  delegate_to: "{{ VM_HOST_IP }}"
   shell: |
     # Find the MAC address assigned to the br-nat interface for this VM
     MAC=$(sudo virsh domiflist {{ groups['control_nodes'][0].split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
