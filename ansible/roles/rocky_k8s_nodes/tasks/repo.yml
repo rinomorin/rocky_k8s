@@ -8,11 +8,12 @@
   delegate_to: "{{ hostvars[cloud_node]['provision_ip'] }}"
   vars:
     ansible_user: "{{ hostvars[cloud_node]['ansible_user'] | default('core') }}"
+    this_host: "{{ hostvars[cloud_node]['hostname'] }}"
   # Use the user from hostvars or fallback to 'core'
   block:
     - name: set hostname
       shell:
-        sudo hostnamectl set-hostname {{ hostvars[cloud_node]['hostname']}}
+        sudo hostnamectl set-hostname {{ this_host }}
 
     ###############################################################
     # 1. Configure CRI‑O Repository
