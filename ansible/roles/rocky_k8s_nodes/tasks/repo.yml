@@ -88,7 +88,6 @@
       become: true
       changed_when: false
 
-- name: Force disk sync inside VMs
-  become: yes
-  command: sync
-  loop: "{{ groups['cluster_nodes'] | default([]) }}"
+    - name: Force disk sync inside VMs
+      become: yes
+      command: sync
