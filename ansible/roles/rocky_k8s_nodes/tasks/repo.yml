@@ -6,7 +6,7 @@
 # delegate to nodes
 # test.yml
 - name: process nodes
-  delegate_to: "{{ hostvars[cloud_node]['provision_ip'] | default('127.0.0.1') }}"
+  delegate_to: "{{ hostvars[cloud_node]['provision_ip'] }}"
   vars:
     # Use cloud_node to find the user
     ansible_user: "{{ hostvars[cloud_node]['ansible_user'] | default('core') }}"
