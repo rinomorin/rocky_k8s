@@ -13,38 +13,6 @@
     - nodes_clones.rc != 0 
     - "'already exists' not in nodes_clones.stderr"
 
-# - name: Fix stuck virtual NIC link state on KVM host
-#   become: yes
-#   shell: |
-#     # Check if the 'link state=down' exists in the VM XML
-#     if virsh dumpxml {{ item }} | grep -q "<link state='down'/>"; then
-#       echo "Fixing link state for {{ item }}..."
-      
-#       # Dump, strip the down state line, and redefine
-#       virsh dumpxml {{ item }} > /tmp/{{ item }}_fix.xml
-#       sed -i "/<link state='down'\/>/d" /tmp/{{ item }}_fix.xml
-#       virsh define /tmp/{{ item }}_fix.xml
-      
-#       # Force the link up immediately without rebooting if the VM is running
-#       # This handles the immediate state vs the boot state
-#       for mac in $(virsh dumpxml {{ item }} | grep "<mac address=" | sed "s/.*address='\(.*\)'.*/\1/"); do
-#         virsh domif-setlink {{ item }} $mac up || true
-#       done
-      
-#       echo "changed"
-#     else
-#       echo "Link state already healthy"
-#     fi
-#   loop: "{{ groups['worker_nodes'] }}"
-#   register: virsh_fix_output
-#   changed_when: "'changed' in virsh_fix_output.stdout"
-
-# - name: Ensure VMs are set to Autostart
-#   delegate_to: "example-kvm-host"
-#   become: yes
-#   command: "virsh autostart {{ item }}"
-#   loop: "{{ groups['hahost'] }}"
-
 - name: Power on nodes images
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -258,10 +226,6 @@
   shell: "ssh {{ hostvars[item]['provision_ip']}} ip route"
   register: node_connet
   loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
-
-- debug:
-    msg: "{{ node_connet }}"
-
 
 - name: 6.1 - Reassign KVM Provider Interface to Black-Hole
   vars:

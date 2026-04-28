@@ -39,8 +39,8 @@
           enabled=1
           gpgcheck=1
           gpgkey={{ crio_repo_gpg }}
-      notify: refresh_repos
-      become: true
+      # notify: refresh_repos
+      become: yes
       register: add_repo
       # gpgkey=https://download.opensuse.org/repositories/isv:/cri-o:/stable:/$CRIO_VERSION/rpm/repodata/repomd.xml.key
 
