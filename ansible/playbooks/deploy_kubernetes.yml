@@ -40,6 +40,8 @@
 - name: Deploy Cluster nodes
   hosts: kvm
   gather_facts: false
+  vars:
+    BUILD_PROFILE: "k8s"
   roles:
     - role: rocky_k8s_nodes
 

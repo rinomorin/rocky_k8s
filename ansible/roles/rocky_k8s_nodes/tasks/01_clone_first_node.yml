@@ -1,7 +1,7 @@
 - name: 1.1 - Infrastructure Creation (Lead Master)
   command: >
     sudo virt-clone 
-    --original golden-base 
+    --original {{ golden_image_name }} 
     --name {{ groups['control_nodes'][0].split('.')[0] }}
     --file /var/lib/libvirt/images/{{ groups['control_nodes'][0].split('.')[0] }}.qcow2
   args:

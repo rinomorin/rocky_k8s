@@ -1,4 +1,12 @@
 ---
+build_profile: "{{ BUILD_PROFILE | default(lookup('env', 'BUILD_PROFILE')) | default('k8s', true) }}"
+build_date: "{{ lookup('pipe', 'date +%Y%m%d') }}"
+build_timestamp: "{{ lookup('pipe', 'date +%Y%m%d-%H%M') }}"
+build_loops: "{{ BUILD_LOOPS_VAR | default(lookup('env', 'build_loops')) | default(120, true) }}"
+tos_variant: "{{ '10' if build_profile == 'infra' else '9' }}"
+safe_os_version: "{{ tos_variant | replace('.', 'r') }}"
+golden_image_name: "gi-{{ build_profile }}-{{ safe_os_version }}-{{ build_date }}"
+
 # ------------------------------------------------------------
 # Infrastructure Identity
 # ------------------------------------------------------------
@@ -30,5 +38,5 @@ ipa_master_fqdn: "ipa.{{ c_zone }}"
 build_loops: "{{ lookup('env', 'build_loops') | default(120, true) }}"
 
 # Hypervisor & Credentials
-VM_HOST_IP: "{{ hostvars[kvm_host].ansible_host | default(kvm_host) }}"
+# VM_HOST_IP: "{{ hostvars[kvm_host].ansible_host | default(kvm_host) }}"
 ipa_admin_password: "{{ lookup('env', 'IPA_ADMIN_PASSWORD') }}"
