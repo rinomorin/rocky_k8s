@@ -21,7 +21,7 @@
   args:
     creates: /etc/kubernetes/admin.con
 
-- name: 4.1 - Join Worker Nodes
+- name: 3.2 - Join Worker Nodes
   command: >
     kubeadm join {{ k8s_api_vip }}:6443 
     --token {{ cluster_token }}

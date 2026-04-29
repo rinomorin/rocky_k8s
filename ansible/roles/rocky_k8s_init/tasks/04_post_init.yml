@@ -8,12 +8,27 @@
     flat: yes
   when: inventory_hostname == groups['control_nodes'][0]
 
+- name: insure folder in home all belongs to core
+  delegate_to: localhost
+  run_once: true
+  become: yes
+  file:
+    path: "{{ item }}"
+    owner: "core"
+    group: "core"
+    mode: '0600'
+    state: directory
+  loop:
+    - "/home/core"
+    - "/home/core/.kube"
+
 - name: 4.1b - Ensure KUBECONFIG is present on localhost
   become: false
   shell:
-    cp /tmp/admin.conf ~/.kube/config
+    cp /tmp/admin.conf ~/.kubes/config
   delegate_to: localhost
-
+  run_once: true
+  
 # 2. Push the config to all nodes in the cluster
 - name: 4.2 - Distribute kubeconfig to all nodes
   become: yes

@@ -30,14 +30,20 @@
     permanent: yes
     immediate: yes
 
-- name: Set Bridge and Routing Sysctls
-  ansible.posix.sysctl:
-    name: "{{ item.name }}"
-    value: "{{ item.value }}"
-    state: present
-    reload: yes
-  loop:
-    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
-    - { name: 'net.ipv4.ip_forward', value: '1' }
-    - { name: 'net.ipv4.conf.all.rp_filter', value: '2' }
-    - { name: 'net.ipv4.conf.default.rp_filter', value: '2' }
+- name: 4.b - Set Sysctl Parameters for K8s (Shell Version)
+  shell: |
+    # Ensure the directory exists
+    mkdir -p /etc/sysctl.d/
+    
+    # Create or overwrite the k8s.conf file
+    cat <<EOF > /etc/sysctl.d/k8s.conf
+    net.bridge.bridge-nf-call-iptables = 1
+    net.bridge.bridge-nf-call-ip6tables = 1
+    net.ipv4.conf.all.rp_filter = 2
+    net.ipv4.conf.default.rp_filter = 2
+    net.ipv4.ip_forward = 1
+    EOF
+    
+    # Load the parameters into the living kernel
+    sysctl --system
+  become: yes
