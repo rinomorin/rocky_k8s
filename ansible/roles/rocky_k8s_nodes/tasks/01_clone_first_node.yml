@@ -13,26 +13,6 @@
     - nodes_clones.rc != 0 
     - "'already exists' not in nodes_clones.stderr"
 
-- name: Move last NIC to black-hole network
-  vars:
-    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
-  become: yes
-  delegate_to: "{{ kvm_host }}"
-  shell: |
-    # 1. Get the MAC address of the last interface
-    MAC=$(virsh dumpxml {{ item }} | xmllint --xpath "string(//interface[last()]/mac/@address)" -)
-    
-    # 2. Update that specific interface to use the black-hole network
-    # --config makes it persistent, --live makes it immediate
-    virsh detach-interface {{ item }} bridge --mac $MAC --config --live
-    virsh attach-interface {{ item }} network black-hole --mac $MAC --model virtio --config --live
-  loop: "{{ groups['worker_nodes'] }}"
-  register: nic_update
-  changed_when: "'Interface attached successfully' in nic_update.stdout"
-  failed_when: 
-    - nic_update.rc != 0
-    - "'already exists' not in nic_update.stderr"
-
 - name: Power on nodes images
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -96,6 +76,25 @@
     virsh domiflist {{ item.split('.')[0] }} | grep 'default' | awk '{print $5}'
   register: provider_mac_discovery
   loop: "{{ groups['control_nodes'] + groups['worker_nodes'] }}"
+
+- name: Move last NIC to black-hole network
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
+  become: yes
+  shell: |
+    # 1. Get the MAC address of the last interface
+    MAC=$(virsh dumpxml {{ item }} | xmllint --xpath "string(//interface[last()]/mac/@address)" -)
+    
+    # 2. Update that specific interface to use the black-hole network
+    # --config makes it persistent, --live makes it immediate
+    virsh detach-interface {{ item }} bridge --mac $MAC --config --live
+    virsh attach-interface {{ item }} network black-hole --mac $MAC --model virtio --config --live
+  loop: "{{ groups['worker_nodes'] }}"
+  register: nic_update
+  changed_when: "'Interface attached successfully' in nic_update.stdout"
+  failed_when: 
+    - nic_update.rc != 0
+    - "'already exists' not in nic_update.stderr"
 
 - name: 2.1.1 - Build Provider MAC Map
   set_fact:
