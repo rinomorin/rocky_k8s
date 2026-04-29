@@ -1,4 +1,20 @@
 ---
+- name: Ensure we have facts from control nodes for comparison
+  setup:
+  delegate_to: "{{ item }}"
+  delegate_facts: yes
+  loop: "{{ groups['control_nodes'] }}"
+  # Only run this if we don't already have the machine_id for that host
+  when: hostvars[item]['ansible_facts']['machine_id'] is undefined
+
+- name: 1.2 - Verify machine IDs are unique
+  assert:
+    that:
+      - ansible_facts['machine_id'] != hostvars[item]['ansible_facts']['machine_id']
+    fail_msg: "Duplicate machine-id detected: {{ inventory_hostname }} matches {{ item }}"
+  loop: "{{ groups['control_nodes'] }}"
+  when: inventory_hostname != item
+
 # 1. Run verification on ALL nodes first
 - import_tasks: 01_k8s_verify.yml
 
