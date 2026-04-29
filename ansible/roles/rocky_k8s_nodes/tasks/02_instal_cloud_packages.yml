@@ -67,16 +67,6 @@
         ln -s /usr/local/bin/crictl /usr/bin/crictl
         rm -f /tmp/crictl.tar.gz
         
-    - name: setup kube config permissions and placeholder
-      become: false
-      shell: |
-        "{{item}}"
-      loop:
-        - "mkdir -p /home/core/.kube"
-        - "chmod 750 /home/core/.kube"
-        - "echo 'kubeconfig will be populated after cluster bootstrap' > /home/core/.kube/config"
-        - "chmod 600 /home/core/.kube/config"    
-
     # Install cri-o
     # --------------------------------------------------------
     - name: Install cri-o
@@ -115,14 +105,14 @@
         owner: core
         group: core
 
-    - name: create kubeconfig placeholder
-      become: false
-      copy:
-        dest: /home/core/.kube/config
-        content: "kubeconfig will be populated after cluster bootstrap\n"
-        mode: '0600'
-        owner: core
-        group: core
+    # - name: create kubeconfig placeholder
+    #   become: false
+    #   copy:
+    #     dest: /home/core/.kube/config
+    #     content: "kubeconfig will be populated after cluster bootstrap\n"
+    #     mode: '0600'
+    #     owner: core
+    #     group: core
 
     - name: set etcd_ver
       set_fact:
