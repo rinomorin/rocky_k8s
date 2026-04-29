@@ -146,26 +146,34 @@
     done
   loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
-- name: Move last NIC to black-hole network
+
+- name: Switch default NIC to black-hole
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
   become: yes
+  delegate_to: "{{ kvm_host }}"
   shell: |
-    # 1. Get the MAC address of the last interface
-    MAC=$(virsh dumpxml {{ item }} | xmllint --xpath "string(//interface[last()]/mac/@address)" -)
-    
-    # 2. Update that specific interface to use the black-hole network
-    # --config makes it persistent, --live makes it immediat
-    virsh detach-interface {{ item }} bridge --mac $MAC --config --live
-    virsh attach-interface {{ item }} network black-hole --mac $MAC --model virtio --config --live
+    # 1. Find the MAC address of the NIC currently on the 'default' network
+    MAC=$(virsh dumpxml {{ item }} | xmllint --xpath "string(//interface[source/@network='default' or source/@bridge='default']/mac/@address)" -)
+
+    if [ -z "$MAC" ]; then
+      echo "No NIC found on default network for {{ item }}"
+      exit 0
+    fi
+
+    # 2. Extract that specific NIC's XML
+    NIC_XML=$(virsh dumpxml {{ item }} | xmllint --xpath "//interface[mac/@address='$MAC']" -)
+
+    # 3. Swap 'default' for 'black-hole' in the XML string
+    NEW_NIC_XML=$(echo "$NIC_XML" | sed "s/source network='default'/source network='black-hole'/;s/source bridge='default'/source network='black-hole'/")
+
+    # 4. Update the device in place
+    echo "$NEW_NIC_XML" > /tmp/{{ item }}_swap.xml
+    virsh update-device {{ item }} /tmp/{{ item }}_swap.xml --config --live
+    rm -f /tmp/{{ item }}_swap.xml
   loop: "{{ groups['worker_nodes'] }}"
-  register: nic_update
-  changed_when: "'Interface attached successfully' in nic_update.stdout"
-  failed_when: 
-    - nic_update.rc != 0
-    - "'already exists' not in nic_update.stderr
-
-
+  register: switch_result
+  changed_when: "'Device updated successfully' in switch_result.stdout"
 
 
 - name: 3.2 - Force Guest Link State and Autoconnect (Guest Side)
