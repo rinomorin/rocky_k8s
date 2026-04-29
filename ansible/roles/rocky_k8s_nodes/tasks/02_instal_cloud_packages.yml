@@ -113,9 +113,10 @@
         mode: '0600'
         owner: core
         group: core
-        - name: set etcd_ver
-          set_fact:
-            etcd_ver: "{{ lookup('env','etcd_ver') | default('v3.5.12', true) }}"
+
+    - name: set etcd_ver
+      set_fact:
+        etcd_ver: "{{ lookup('env','etcd_ver') | default('v3.5.12', true) }}"
 
     - name: Download ectd
       become: false
