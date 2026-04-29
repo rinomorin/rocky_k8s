@@ -1,7 +1,3 @@
-- name: Show keys
-  debug:
-    msg: "key {{item.key}}"
-
 - name: "Set guest NIC variables for {{ guest_member }} interface"
   set_fact:
     module_value: "{{ module_item.value }}"
@@ -34,15 +30,6 @@
     - vnet_result.stdout | length > 0
     - module_item.key == vnet_result.stdout.split(',')[0] | trim
 
-# - name: "Update module_value with discovered vnet for {{ module_item.key }}"
-#   set_fact:
-#     module_value: "{{ module_value | combine({ 
-#         'vnet': vnet_result.stdout.split(',')[1] | trim
-#       }) }}"
-#   when:
-#     - module_value.mac is defined
-#     - module_value.mac != 'N/A'
-    
 - name: "initial vnet_out for {{ guest_member }}"
   set_fact:
     vnet_out: "N/A"
@@ -88,14 +75,6 @@
   when: 
     - module_value.devname is not defined or module_value.devname | trim | upper == 'N/A'
     - module_value.mac is search(':') 
-
-- debug:
-    msg: 
-      - "DevName result for {{ guest_member }} on {{ module_zone }}"
-      - "stdout: {{ devname_result.stdout }}"
-  when: 
-    - devname_result.stdout is defined
-    - devname_result.stdout | trim | length > 0
 
 - name: "Update DevName in module_value"
   set_fact:
