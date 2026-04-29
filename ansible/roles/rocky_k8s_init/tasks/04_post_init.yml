@@ -8,6 +8,12 @@
     flat: yes
   when: inventory_hostname == groups['control_nodes'][0]
 
+- name: 4.1b - Ensure KUBECONFIG is present on localhost
+  become: false
+  shell::
+    cp /tmp/admin.conf ~/.kube/config
+  delegate_to: localhost
+
 # 2. Push the config to all nodes in the cluster
 - name: 4.2 - Distribute kubeconfig to all nodes
   become: yes
@@ -23,39 +29,34 @@
 - name: insure folder in home all belongs to core
   become: yes
   file:
-    path: "/home/core"
+    path: "{{ item }}"
     owner: "core"
     group: "core"
+    mode: '0600'
     state: directory
-    recursive: yes
+  loop:
+    - "/home/core"
+    - "/home/core/.kube/config"
 
-# 2. Fix permissions locally
-- name: 4.2 - Fix local kubeconfig permissions
-  delegate_to: localhost
-  become: yes
-  run_once: true
-  file:
-    path: "/home/core/.kube/config"
-    owner: "core"
-    mode: '0600'
-    state: file
+# # 2. Fix permissions locally
+# - name: 4.2 - Fix local kubeconfig permissions
+#   delegate_to: localhost
+#   become: yes
+#   run_once: true
+#   file:
+#     path: "/home/core/.kube/config"
+#     owner: "core"
+#     mode: '0600'
+#     state: file
 
-- name: 4.2b - Ensure KUBECONFIG is present on localhost
-  become: yes
-  fetch:
-    src: /etc/kubernetes/admin.conf
-    dest: "{{ lookup('env', 'HOME') }}/.kube/config"
-    flat: yes
-  # delegate_to: "{{ groups['control_nodes'][0] }}"
-
-- name: update local kubeconfig permissions
-  delegate_to: localhost
-  become: yes
-  file:
-    path: "/home/core/.kube/config"
-    owner: "core"
-    mode: '0600'
-    state: file
+# - name: update local kubeconfig permissions
+#   delegate_to: localhost
+#   become: yes
+#   file:
+#     path: "/home/core/.kube/config"
+#     owner: "core"
+#     mode: '0600'
+#     state: file
 
 - name: 4.4 - Apply Flannel Pod Network (Fixed Interface)
   shell: |

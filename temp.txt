@@ -1,0 +1,8 @@
+TASK [rocky_dns_cloud : let prep dns for cloud deploy] *************************
+Origin: /opt/ansible_work/cloud/ansible/roles/rocky_k8s_init/defaults/main.yml:42:1
+
+40 tos_variant: "9"
+41 build_loops: "{{ bl|default(120)}}"
+42 ssh_key_path: "{{ lookup('env', 'ssh_key_path') | default('~/.ssh/id_rsa', true) | regex_replace('\\.pub$', '') }}"
+   ^ column 1
+

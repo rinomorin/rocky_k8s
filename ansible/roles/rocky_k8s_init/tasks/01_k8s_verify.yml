@@ -38,17 +38,21 @@
       overlay
       br_netfilter
 
-- name: 1.7 - Set Sysctl Parameters for K8s
-  sysctl:
-    name: "{{ item.key }}"
-    value: "{{ item.value }}"
-    state: present
-    sysctl_file: /etc/sysctl.d/k8s.conf
-    reload: yes
-  loop:
-    - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
-    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
-    - { key: 'net.ipv4.ip_forward', value: '1' }
+- name: 1.7 - Set Sysctl Parameters for K8s (Shell Version)
+  shell: |
+    # Ensure the directory exists
+    mkdir -p /etc/sysctl.d/
+    
+    # Create or overwrite the k8s.conf file
+    cat <<EOF > /etc/sysctl.d/k8s.conf
+    net.bridge.bridge-nf-call-iptables = 1
+    net.bridge.bridge-nf-call-ip6tables = 1
+    net.ipv4.ip_forward = 1
+    EOF
+    
+    # Load the parameters into the living kernel
+    sysctl --system
+  become: yes
 
 - name: 1.8 - Ensure full cluster hostname resolution in /etc/hosts
   lineinfile:

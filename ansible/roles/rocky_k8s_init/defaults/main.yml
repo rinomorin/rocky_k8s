@@ -39,5 +39,4 @@ iso_path: "{{ lookup('env', 'ISO_PATH') | default('/var/lib/libvirt/images/Rocky
 # Other defaults remain the same...
 tos_variant: "9"
 build_loops: "{{ bl|default(120)}}"
-ssh_key_path: "{{ lookup('env', 'ssh_key_path') | default('~/.ssh/id_rsa', true) | regex_replace('\\.pub$', '') }}"
 metallb_vip: "{{ lookup('env', 'metallb_vip') | default('192.168.100.200') }}"
