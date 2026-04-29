@@ -198,7 +198,7 @@
 
     # 3. Apply changes - we do provider first so the new path is ready
     {{ ssh_cmd }} "sudo nmcli connection up enp3s0 && sudo nmcli connection up enp1s0"
-  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
+  loop: "{{ groups['control_nodes'] | default([]) }}"
 
 - name: 6.0 - Force helper to learn new node identities
   delegate_to: localhost
