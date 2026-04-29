@@ -12,15 +12,13 @@
   delegate_to: localhost
   run_once: true
   become: yes
-  file:
-    path: "{{ item }}"
-    owner: "core"
-    group: "core"
-    mode: '0600'
-    state: directory
-  loop:
-    - "/home/core"
-    - "/home/core/.kube"
+  shell:
+      chown -R core:core /home/core  
+
+- name: insure folder in home all belongs to core
+  become: yes
+  shell:
+      chown -R core:core /home/core  
 
 - name: 4.1b - Ensure KUBECONFIG is present on localhost
   become: false
