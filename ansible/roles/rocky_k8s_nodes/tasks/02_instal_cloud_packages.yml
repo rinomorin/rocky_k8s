@@ -97,7 +97,7 @@
       failed_when: crictl_check.rc != 0
 
     - name: setup kube config directory
-      become: yes
+      become: false
       file:
         path: /home/core/.kube
         state: directory
@@ -106,7 +106,7 @@
         group: core
 
     - name: create kubeconfig placeholder
-      become: yes
+      become: false
       copy:
         dest: /home/core/.kube/config
         content: "kubeconfig will be populated after cluster bootstrap\n"
