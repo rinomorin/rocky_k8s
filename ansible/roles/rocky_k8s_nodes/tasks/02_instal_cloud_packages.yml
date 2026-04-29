@@ -141,52 +141,52 @@
       command: sync
       loop: "{{ groups['cluster_nodes'] | default([]) }}"
 
-    # --------------------------------------------------------
-    # Power off the golden image
-    # --------------------------------------------------------
-    - name: Power off golden image
-      ignore_errors: true
-      failed_when: false
-      changed_when: false
-      shell: |
-        shutdown -h now
-      when: 
-        - cloud_node not in groups['helpers']
-        - cloud_node != 'localhost'
+    # # --------------------------------------------------------
+    # # Power off the golden image
+    # # --------------------------------------------------------
+    # - name: Power off golden image
+    #   ignore_errors: true
+    #   failed_when: false
+    #   changed_when: false
+    #   shell: |
+    #     shutdown -h now
+    #   when: 
+    #     - cloud_node not in groups['helpers']
+    #     - cloud_node != 'localhost'
 
 
-    # --------------------------------------------------------
-    # Power off the golden image (via KVM host, not SSH)
-    # --------------------------------------------------------
-    - name: Power off golden image
-      shell: sudo virsh shutdown golden-base
-      delegate_to: "{{ VM_HOST_IP }}"
-      failed_when: false
-      changed_when: false
-      ignore_errors: true
-      when: 
-        - cloud_node not in groups['helpers']
-        - cloud_node != 'localhost'
+    # # --------------------------------------------------------
+    # # Power off the golden image (via KVM host, not SSH)
+    # # --------------------------------------------------------
+    # - name: Power off golden image
+    #   shell: sudo virsh shutdown golden-base
+    #   delegate_to: "{{ VM_HOST_IP }}"
+    #   failed_when: false
+    #   changed_when: false
+    #   ignore_errors: true
+    #   when: 
+    #     - cloud_node not in groups['helpers']
+    #     - cloud_node != 'localhost'
 
-    - name: Wait for golden image to be powered off
-      shell: sudo virsh domstate golden-base
-      register: golden_power
-      until: golden_power.stdout == "shut off"
-      retries: 30
-      delay: 2
-      delegate_to: "{{ VM_HOST_IP }}"
-      when: 
-        - cloud_node not in groups['helpers']
-        - cloud_node != 'localhost'
+    # - name: Wait for golden image to be powered off
+    #   shell: sudo virsh domstate golden-base
+    #   register: golden_power
+    #   until: golden_power.stdout == "shut off"
+    #   retries: 30
+    #   delay: 2
+    #   delegate_to: "{{ VM_HOST_IP }}"
+    #   when: 
+    #     - cloud_node not in groups['helpers']
+    #     - cloud_node != 'localhost'
 
-    - name: Sysprep the Master (On Hypervisor)
-      delegate_to: "{{ VM_HOST_IP }}"
-      become: true
-      shell: |
-        # We run this on the KVM host while the VM is OFF
-        virt-sysprep -d {{ groups['control_nodes'][0].split('.')[0]}} \
-          --operations machine-id,net-hostname,net-hwaddr,ssh-hostkeys,customize \
-          --hostname {{ groups['control_nodes'][0].split('.')[0]}}.{{ c_zone }}
-      when: 
-        - cloud_node not in groups['helpers']
-        - cloud_node != 'localhost'
+    # - name: Sysprep the Master (On Hypervisor)
+    #   delegate_to: "{{ VM_HOST_IP }}"
+    #   become: true
+    #   shell: |
+    #     # We run this on the KVM host while the VM is OFF
+    #     virt-sysprep -d {{ cloud_node }} \
+    #       --operations machine-id,net-hostname,net-hwaddr,ssh-hostkeys,customize \
+    #       --hostname {{ {{ hostvars[cloud_node]['hostname'] }}
+    #   when: 
+    #     - cloud_node not in groups['helpers']
+    #     - cloud_node != 'localhost'
