@@ -1,5 +1,6 @@
 # 1. Fetch the config
 - name: 4.1 - Fetch admin.conf to local kubeconfig
+  become: yes
   fetch:
     src: /etc/kubernetes/admin.conf
     dest: "/home/{{ lookup('env', 'USER') }}/.kube/config"
