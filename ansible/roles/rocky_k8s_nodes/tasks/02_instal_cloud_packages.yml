@@ -56,7 +56,7 @@
     # --------------------------------------------------------
     - name: Install kubeadm, kubelet, kubectl
       shell: |
-        dnf install -y kubeadm kubelet   kubectl
+        dnf install -y kubeadm kubelet kubectl bind-utils
 
     # --------------------------------------------------------
     # Install crictl

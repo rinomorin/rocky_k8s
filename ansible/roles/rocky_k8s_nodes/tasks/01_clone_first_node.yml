@@ -146,30 +146,30 @@
     done
   loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
-- name: Switch default NIC to black-hole
-  become: yes
-  delegate_to: "{{ kvm_host }}"
-  shell:
-    cmd: |
-      # 1. Find the MAC address
-      MAC=$(virsh dumpxml "{{ item }}" | xmllint --xpath "string(//interface[source/@network='default' or source/@bridge='default']/mac/@address)" -)
+# - name: Switch default NIC to black-hole
+#   become: yes
+#   delegate_to: "{{ kvm_host }}"
+#   shell:
+#     cmd: |
+#       # 1. Find the MAC address
+#       MAC=$(virsh dumpxml "{{ item }}" | xmllint --xpath "string(//interface[source/@network='default' or source/@bridge='default']/mac/@address)" -)
 
-      if [ -z "$MAC" ]; then
-        echo "No NIC found on default network for {{ item }}"
-        exit 0
-      fi
+#       if [ -z "$MAC" ]; then
+#         echo "No NIC found on default network for {{ item }}"
+#         exit 0
+#       fi
 
-      # 2. Extract that specific NIC's XML and swap the source
-      NIC_XML=$(virsh dumpxml "{{ item }}" | xmllint --xpath "//interface[mac/@address='$MAC']" -)
-      NEW_NIC_XML=$(echo "$NIC_XML" | sed "s/source [network|bridge]*='br0'/source network='black-hole'/g")
+#       # 2. Extract that specific NIC's XML and swap the source
+#       NIC_XML=$(virsh dumpxml "{{ item }}" | xmllint --xpath "//interface[mac/@address='$MAC']" -)
+#       NEW_NIC_XML=$(echo "$NIC_XML" | sed "s/source [network|bridge]*='br0'/source network='black-hole'/g")
 
-      # 3. Update the device
-      echo "$NEW_NIC_XML" > "/tmp/{{ item }}_swap.xml"
-      virsh update-device "{{ item }}" "/tmp/{{ item }}_swap.xml" --config --live
-      rm -f "/tmp/{{ item }}_swap.xml"
-  loop: "{{ groups['worker_nodes'] }}"
-  register: switch_result
-  changed_when: "'Device updated successfully' in switch_result.stdout"
+#       # 3. Update the device
+#       echo "$NEW_NIC_XML" > "/tmp/{{ item }}_swap.xml"
+#       virsh update-device "{{ item }}" "/tmp/{{ item }}_swap.xml" --config --live
+#       rm -f "/tmp/{{ item }}_swap.xml"
+#   loop: "{{ groups['worker_nodes'] }}"
+#   register: switch_result
+#   changed_when: "'Device updated successfully' in switch_result.stdout"
 
 - name: 3.2 - Force Guest Link State and Autoconnect (Guest Side)
   become: false
