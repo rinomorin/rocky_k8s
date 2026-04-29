@@ -96,14 +96,14 @@
       changed_when: false
       failed_when: crictl_check.rc != 0
 
-    - name: setup kube config directory
-      become: false
-      file:
-        path: /home/core/.kube
-        state: directory
-        mode: '0750'
-        owner: core
-        group: core
+    # - name: setup kube config directory
+    #   become: false
+    #   file:
+    #     path: /home/core/.kube
+    #     state: directory
+    #     mode: '0750'
+    #     owner: core
+    #     group: core
 
     # - name: create kubeconfig placeholder
     #   become: false
