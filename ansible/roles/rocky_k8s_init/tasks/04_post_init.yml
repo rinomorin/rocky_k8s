@@ -11,19 +11,32 @@
 - name: insure folder in home all belongs to core
   delegate_to: localhost
   run_once: true
-  become: yes
-  shell:
-      chown -R core:core /home/core  
+  become: yesre
+  shell: |
+    # Create the directories if they don't exist
+    mkdir -p /home/core/.kube
+    # Recursively set ownership to core:core
+    chown -R core:core /home/core
+    # Set proper directory permissions
+    chmod 700 /home/core /home/core/.kube
 
 - name: insure folder in home all belongs to core
   become: yes
-  shell:
-      chown -R core:core /home/core  
+  shell: |
+    # Create the directories if they don't exist
+    mkdir -p /home/core/.kube
+    # Recursively set ownership to core:core
+    chown -R core:core /home/core
+    # Set proper directory permissions
+    chmod 700 /home/core /home/core/.kube
 
 - name: 4.1b - Ensure KUBECONFIG is present on localhost
   become: false
   shell:
+    mkdir -p /home/core/.kube
     cp /tmp/admin.conf ~/.kubes/config
+    chown -R core:core /home/core
+    chmod 700 /home/core /home/core/.kube
   delegate_to: localhost
   run_once: true
   
