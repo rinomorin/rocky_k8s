@@ -81,7 +81,6 @@
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
   become: yes
-  delegate_to: "{{ kvm_host }}"
   shell: |
     # 1. Get the MAC address of the last interface
     MAC=$(virsh dumpxml {{ item }} | xmllint --xpath "string(//interface[last()]/mac/@address)" -)
