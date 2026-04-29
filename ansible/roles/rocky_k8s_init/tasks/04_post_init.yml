@@ -1,11 +1,43 @@
 # 1. Fetch the config
-- name: 4.1 - Fetch admin.conf to local kubeconfig
+- name: insure folder in home all belongs to core
+  become: yes
+  file:
+    path: "/home/core"
+    owner: "core"
+    group: "core"
+    state: directory
+    recursive: yes
+
+# 1. Fetch the config to the Ansible controller (helper)
+- name: 4.1 - Fetch admin.conf to controller temp
   become: yes
   fetch:
     src: /etc/kubernetes/admin.conf
-    dest: "/home/core/.kube/config"
+    # We save it to a temp path on the helper where we have guaranteed access
+    dest: "/tmp/admin.conf"
     flat: yes
   when: inventory_hostname == groups['control_nodes'][0]
+
+# 2. Push the config to all nodes in the cluster
+- name: 4.2 - Distribute kubeconfig to all nodes
+  become: yes
+  copy:
+    src: "/tmp/admin.conf"
+    dest: "/home/core/.kube/config"
+    owner: core
+    group: core
+    mode: '0600'
+  # We run this on everyone except the controller itself (if needed)
+  # Or just 'all' if we want it everywhere.
+
+- name: insure folder in home all belongs to core
+  become: yes
+  file:
+    path: "/home/core"
+    owner: "core"
+    group: "core"
+    state: directory
+    recursive: yes
 
 # 2. Fix permissions locally
 - name: 4.2 - Fix local kubeconfig permissions

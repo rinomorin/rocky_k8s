@@ -1,0 +1,6 @@
+anonymous-auth: "false"
+authorization-mode: "RBAC,Node"
+enable-admission-plugins: "NodeRestriction,PodSecurity"
+audit-log-path: "{{ k8s_audit_log_path }}"
+audit-policy-file: "{{ k8s_audit_policy_path }}"
+profiling: "false"

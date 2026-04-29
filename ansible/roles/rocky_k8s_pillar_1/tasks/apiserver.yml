@@ -1,0 +1,8 @@
+---
+- name: Drop kube-apiserver hardening args
+  template:
+    src: kube-apiserver-extra-args.j2
+    dest: /etc/kubernetes/kube-apiserver-extra-args.yaml
+    owner: root
+    mode: '0644'
+  when: inventory_hostname in groups['control_nodes']

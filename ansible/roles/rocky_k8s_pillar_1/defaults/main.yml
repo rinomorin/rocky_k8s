@@ -1,0 +1,3 @@
+---
+k8s_audit_log_path: /var/log/kubernetes/audit.log
+k8s_audit_policy_path: /etc/kubernetes/audit-policy.yaml

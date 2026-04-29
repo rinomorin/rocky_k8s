@@ -1,0 +1,8 @@
+---
+- name: Install Kubernetes audit policy
+  copy:
+    src: audit-policy.yaml
+    dest: "{{ k8s_audit_policy_path }}"
+    owner: root
+    mode: '0600'
+  when: inventory_hostname in groups['control_nodes']

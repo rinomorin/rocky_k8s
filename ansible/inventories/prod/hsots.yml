@@ -1,0 +1,187 @@
+all:
+  vars:
+    k8s_api_vip: "192.168.100.30"
+    vip_interface: "enp1s0"
+
+  hosts:
+    helper: 
+      ansible_host: 192.168.100.20 
+      hostname: helper.cloud.home.morinsoft.ca 
+      provider_ip: 192.168.100.20
+      provision_ip: 10.0.0.20
+      ipa_cluster_role: replica
+      ansible_user: core
+
+    msrlv9l01:
+      ansible_user: core
+      ansible_host: 192.168.100.21
+      provision_ip: 10.0.0.21
+      node_ip: 10.0.0.21
+      hostname: msrlv9l01.cloud.home.morinsoft.ca 
+      provider_ip: 192.168.100.21
+
+    msrlv9l02:
+      ansible_user: core
+      ansible_host: 192.168.100.22
+      provision_ip: 10.0.0.22
+      node_ip: 10.0.0.22 
+      hostname: msrlv9l02.cloud.home.morinsoft.ca 
+      provider_ip: 192.168.100.22
+
+    msrlv9l03:
+      ansible_user: core
+      ansible_host: 192.168.100.23
+      provision_ip: 10.0.0.23
+      node_ip: 10.0.0.23 
+      hostname: msrlv9l03.cloud.home.morinsoft.ca 
+      provider_ip: 192.168.100.23
+
+
+    msrlv9mast01: 
+      ansible_user: core
+      ansible_host: 192.168.100.31 
+      hostname: msrlv9mast01.cloud.home.morinsoft.ca 
+      provider_ip: 192.168.100.31 
+      provision_ip: 10.0.0.31
+      node_ip: 10.0.0.31
+      keepalived_state: MASTER
+      keepalived_priority: 200
+
+    msrlv9mast02: 
+      ansible_user: core
+      ansible_host: 192.168.100.32
+      hostname: msrlv9mast02.cloud.home.morinsoft.ca 
+      provider_ip: 192.168.100.32
+      provision_ip: 10.0.0.32
+      node_ip: 10.0.0.32
+      keepalived_state: BACKUP
+      keepalived_priority: 150
+
+    msrlv9mast03: 
+      ansible_user: core
+      ansible_host: 192.168.100.33
+      hostname: msrlv9mast03.cloud.home.morinsoft.ca 
+      provider_ip: 192.168.100.33
+      provision_ip: 10.0.0.33
+      node_ip: 10.0.0.33
+      cluster_role: member
+      keepalived_state: BACKUP
+      keepalived_priority: 100
+
+    msrlv9wrk01: 
+      ansible_user: core
+      ansible_host: 10.0.0.41 
+      hostname: msrlv9wrk01.cloud.home.morinsoft.ca 
+      provision_ip: 10.0.0.41
+      node_ip: 10.0.0.41
+
+    msrlv9wrk02: 
+      ansible_user: core
+      ansible_host: 10.0.0.42 
+      hostname: msrlv9wrk02.cloud.home.morinsoft.ca 
+      provision_ip: 10.0.0.42
+      node_ip: 10.0.0.42
+
+    kvmdc01:
+      ansible_host: 192.168.100.3
+      hostname: kvmdc01.home.morinsoft.ca
+      ansible_user: secops
+      ansible_ssh_user: secops
+      
+    ipa01:
+      ansible_host: 192.168.100.10
+      ansible_user: core
+      ipa_cluster_role: primary
+      hostname: ipa01.home.morinsoft.ca
+
+    ipa02:
+      ansible_host: 192.168.100.11
+      ansible_user: core
+      ipa_cluster_role: replica
+      hostname: ipa02.home.morinsoft.ca
+
+  children:
+    control_nodes:
+      hosts:
+        msrlv9mast01:
+        msrlv9mast02:
+        msrlv9mast03:
+
+    hahost:
+      hosts:
+        msrlv9l01:
+        msrlv9l02:
+        msrlv9l03:
+
+    helper_nodes:
+      hosts:
+        helper:
+
+    worker_nodes:
+      hosts:
+        msrlv9wrk01:
+        msrlv9wrk02:
+
+    infrastructure:
+      hosts:
+        kvmdc01:
+        ipa01:
+        ipa02:
+        helper:
+
+    ipa:
+      hosts:
+        ipa01:
+        ipa02:
+
+    cluster_nodes:
+      hosts:
+        helper:
+        msrlv9mast01:
+        msrlv9mast02:
+        msrlv9mast03:
+        msrlv9wrk01:
+        msrlv9wrk02:
+
+    dns:
+      hosts:
+        ipa01:
+        ipa02:
+
+    ldap:
+      hosts:
+        ipa01:
+        ipa02:
+
+    ca:
+      hosts:
+        ipa01:
+
+    ca_intermediate:
+      hosts:
+        ipa02:
+
+    helpers:
+      hosts:
+        helper:
+
+    ipa_servers:
+      hosts:
+        ipa01:
+        ipa02:
+
+    ntp:
+      hosts:
+        ipa01:
+        ipa02:
+
+    kvm:
+      hosts:
+        kvmdc01:
+          libvirt_networks:
+            - name: default
+              cidr: 192.168.100.0/24
+            - name: br-cluster
+              cidr: 10.0.0.0/24
+            - name: br-nat
+              cidr: 172.16.0.0/24

@@ -59,3 +59,11 @@
   roles:
     - role: rocky_k8s_init
 
+
+# - name: Pillar 1 - Base Kubernetes Hardening
+#   hosts: cluster_nodes
+#   become: true
+#   gather_facts: true
+
+#   roles:
+#     - ocky_k8s_pillar_1

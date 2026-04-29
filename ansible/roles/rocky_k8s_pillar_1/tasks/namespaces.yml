@@ -1,0 +1,7 @@
+---
+- name: Create secured workloads namespace
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', 'namespace-workloads.yaml') }}"
+  run_once: true
+  delegate_to: "{{ groups['control_nodes'][0] }}"

@@ -1,0 +1,21 @@
+---
+- name: Run kube-bench CIS validation
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: kube-bench
+        namespace: kube-system
+      spec:
+        template:
+          spec:
+            hostPID: true
+            containers:
+            - name: kube-bench
+              image: aquasec/kube-bench:latest
+              command: ["kube-bench", "run"]
+            restartPolicy: Never
+  run_once: true
+  delegate_to: "{{ groups['control_nodes'][0] }}"

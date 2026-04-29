@@ -1,0 +1,7 @@
+---
+- name: Apply platform-admin ClusterRole
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('file', 'rbac-platform-admin.yaml') }}"
+  run_once: true
+  delegate_to: "{{ groups['control_nodes'][0] }}"
