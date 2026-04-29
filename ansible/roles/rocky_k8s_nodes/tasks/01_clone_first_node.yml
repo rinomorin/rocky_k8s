@@ -81,12 +81,13 @@
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
   become: yes
+  delegate_to: "{{ kvm_host }}"
   shell: |
     # 1. Get the MAC address of the last interface
     MAC=$(virsh dumpxml {{ item }} | xmllint --xpath "string(//interface[last()]/mac/@address)" -)
     
     # 2. Update that specific interface to use the black-hole network
-    # --config makes it persistent, --live makes it immediate
+    # --config makes it persistent, --live makes it immediat
     virsh detach-interface {{ item }} bridge --mac $MAC --config --live
     virsh attach-interface {{ item }} network black-hole --mac $MAC --model virtio --config --live
   loop: "{{ groups['worker_nodes'] }}"
@@ -94,7 +95,7 @@
   changed_when: "'Interface attached successfully' in nic_update.stdout"
   failed_when: 
     - nic_update.rc != 0
-    - "'already exists' not in nic_update.stderr"
+    - "'already exists' not in nic_update.stderr
 
 - name: 2.1.1 - Build Provider MAC Map
   set_fact:
