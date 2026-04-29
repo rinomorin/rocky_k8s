@@ -96,18 +96,26 @@
       changed_when: false
       failed_when: crictl_check.rc != 0
 
-    - name: setup kube config permissions and placeholder
-      shell: |
-        "{{item}}"
-      loop:
-        - "mkdir -p /home/core/.kube"
-        - "chmod 750 /home/core/.kube"
-        - "echo 'kubeconfig will be populated after cluster bootstrap' > /home/core/.kube/config"
-        - "chmod 600 /home/core/.kube/config"    
+    - name: setup kube config directory
+      become: yes
+      file:
+        path: /home/core/.kube
+        state: directory
+        mode: '0750'
+        owner: core
+        group: core
 
-    - name: set etcd_ver
-      set_fact:
-        etcd_ver: "{{ lookup('env','etcd_ver') | default('v3.5.12', true) }}"
+    - name: create kubeconfig placeholder
+      become: yes
+      copy:
+        dest: /home/core/.kube/config
+        content: "kubeconfig will be populated after cluster bootstrap\n"
+        mode: '0600'
+        owner: core
+        group: core
+        - name: set etcd_ver
+          set_fact:
+            etcd_ver: "{{ lookup('env','etcd_ver') | default('v3.5.12', true) }}"
 
     - name: Download ectd
       become: false
