@@ -36,28 +36,28 @@
     - role: rocky_k8s_lbs
     # You can uncomment and add rocky_k8s_base here if needed
 
-# 4. Deploy Infrastructure (LBs and Base Config)
-- name: Deploy Cluster nodes
-  hosts: kvm
-  gather_facts: false
-  vars:
-    BUILD_PROFILE: "k8s"
-  roles:
-    - role: rocky_k8s_nodes
+# # 4. Deploy Infrastructure (LBs and Base Config)
+# - name: Deploy Cluster nodes
+#   hosts: kvm
+#   gather_facts: false
+#   vars:
+#     BUILD_PROFILE: "k8s"
+#   roles:
+#     - role: rocky_k8s_nodes
 
-# 5. Initialize Kubernetes Cluster
-- name: Initialize Kubernetes Cluster
-  hosts: cluster_nodes:!helpers
-  remote_user: core
-  become: true
-  gather_facts: true
-  vars:
-    # Pulling from environment script via lookup
-    cluster_token: "{{ lookup('env', 'K8S_CLUSTER_TOKEN') }}"
-    # Pulling from inventory.yml vars
-    api_vip: "{{ k8s_api_vip }}"
-  roles:
-    - role: rocky_k8s_init
+# # 5. Initialize Kubernetes Cluster
+# - name: Initialize Kubernetes Cluster
+#   hosts: cluster_nodes:!helpers
+#   remote_user: core
+#   become: true
+#   gather_facts: true
+#   vars:
+#     # Pulling from environment script via lookup
+#     cluster_token: "{{ lookup('env', 'K8S_CLUSTER_TOKEN') }}"
+#     # Pulling from inventory.yml vars
+#     api_vip: "{{ k8s_api_vip }}"
+#   roles:
+#     - role: rocky_k8s_init
 
 
 # - name: Pillar 1 - Base Kubernetes Hardening
@@ -66,4 +66,4 @@
 #   gather_facts: true
 
 #   roles:
-#     - ocky_k8s_pillar_1
+#     - rocky_k8s_pillar_1
