@@ -20,6 +20,16 @@
         - cloud_node not in groups['helpers']
         - cloud_node != 'localhost'
 
+    - name: setup kube config permissions and placeholder
+      become: yes
+      shell: |
+        {{ item }}
+      loop:
+        - "mkdir -p /home/core/.kube"
+        - "chmod 750 /home/core/.kube"
+        - "echo 'kubeconfig will be populated after cluster bootstrap' > /home/core/.kube/config"
+        - "chmod 600 /home/core/.kube/config"
+
     # ============================================================
     # PLAY 2 — Provision Golden Image (runs inside VM)
     # ============================================================
