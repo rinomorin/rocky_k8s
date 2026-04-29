@@ -7,15 +7,18 @@
   become: yes
   vars:
     ansible_user: "{{ hostvars[cloud_node]['ansible_user'] | default('core') }}"
+    n_zone: "{{ c_zone.replace(c_zone.split('.')[-1], 'local') }}"
   block:
     - name: "DNS Prep - clean resolve"
       ansible.builtin.shell: |     
           sed -i '/nameserver 172.16/d' /etc/resolv.conf
-          echo 'search {{ c_zone }} {{ p_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }}' |tee /etc/resolv.conf > /dev/null
+          echo 'search {{ c_zone }} {{ p_zone }} {{ n_zone }}' |tee /etc/resolv.conf > /dev/null
           echo 'nameserver {{ hostvars[groups['helpers'][0]]['provider_ip'] }}' |tee -a /etc/resolv.conf > /dev/null
           echo 'nameserver {{ hostvars[groups['ipa'][0]]['ansible_host'] }}' | tee -a /etc/resolv.conf > /dev/null
           echo 'nameserver {{ hostvars[groups['ipa'][1]]['ansible_host'] }}' | tee -a /etc/resolv.conf > /dev/null
-      loop: "{{ groups['hahost'] }}"
+      when: 
+        - cloud_node not in groups['helpers']
+        - cloud_node != 'localhost'
 
     # ============================================================
     # PLAY 2 — Provision Golden Image (runs inside VM)
