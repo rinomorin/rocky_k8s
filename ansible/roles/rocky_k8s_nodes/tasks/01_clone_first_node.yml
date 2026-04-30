@@ -22,8 +22,8 @@
     - name: "Add IPA Segment Gateways if IPA reachable"
       ansible.builtin.set_fact:
         ns_list: "{{ ns_list + [
-          hostvars[groups['ipa'][0]]['provision_ip'].split('.')[:3] | join('.') + '.1',
-          hostvars[groups['ipa'][1]]['provision_ip'].split('.')[:3] | join('.') + '.1'
+          hostvars[groups['ipa'][0]]['provider_ip'].split('.')[:3] | join('.') + '.1',
+          hostvars[groups['ipa'][1]]['provider_ip'].split('.')[:3] | join('.') + '.1'
         ] }}"
       when: ping_results.results[0].rc == 0
 
