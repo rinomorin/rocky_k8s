@@ -7,7 +7,7 @@
       register: ping_results
       ignore_errors: yes
       loop:
-        - "{{ hostvars[groups['ipa'][0]]['provision_ip'] }}"
+        - "{{ hostvars[groups['ipa'][0]]['provider_ip'] }}"
         - "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
 
     - name: "Initialize Nameserver List"
