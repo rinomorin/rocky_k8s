@@ -13,8 +13,6 @@
     - nodes_clones.rc != 0 
     - "'already exists' not in nodes_clones.stderr"
 
-
-
 - name: Power on nodes images
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -146,31 +144,6 @@
     done
   loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
-# - name: Switch default NIC to black-hole
-#   become: yes
-#   delegate_to: "{{ kvm_host }}"
-#   shell:
-#     cmd: |
-#       # 1. Find the MAC address
-#       MAC=$(virsh dumpxml "{{ item }}" | xmllint --xpath "string(//interface[source/@network='default' or source/@bridge='default']/mac/@address)" -)
-
-#       if [ -z "$MAC" ]; then
-#         echo "No NIC found on default network for {{ item }}"
-#         exit 0
-#       fi
-
-#       # 2. Extract that specific NIC's XML and swap the source
-#       NIC_XML=$(virsh dumpxml "{{ item }}" | xmllint --xpath "//interface[mac/@address='$MAC']" -)
-#       NEW_NIC_XML=$(echo "$NIC_XML" | sed "s/source [network|bridge]*='br0'/source network='black-hole'/g")
-
-#       # 3. Update the device
-#       echo "$NEW_NIC_XML" > "/tmp/{{ item }}_swap.xml"
-#       virsh update-device "{{ item }}" "/tmp/{{ item }}_swap.xml" --config --live
-#       rm -f "/tmp/{{ item }}_swap.xml"
-#   loop: "{{ groups['worker_nodes'] }}"
-#   register: switch_result
-#   changed_when: "'Device updated successfully' in switch_result.stdout"
-
 - name: 3.2 - Force Guest Link State and Autoconnect (Guest Side)
   become: false
   vars:
@@ -189,7 +162,26 @@
       sudo nmcli connection up cluster || true
       sudo nmcli connection up provider || true
     '
-  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
+  loop: "{{ groups['control_nodes']| default([]) }}"
+
+- name: 3.2 - Force Guest Link State and Autoconnect (Guest Side)
+  become: false
+  vars:
+    # Use a simpler SSH base without the extra vars inside the shell block
+    m_ip: "{{ maintenance_map[item] }}"
+    ssh_target: "core@{{ m_ip }}"
+    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
+  shell: |
+    # We send the entire logic block as a single remote command
+    ssh {{ ssh_opts }} {{ ssh_target }} '
+      for dev in enp2s0; do
+        sudo ip link set $dev up
+        sudo nmcli device set $dev autoconnect yes
+        sudo nmcli device set $dev managed yes
+      done
+      sudo nmcli connection up cluster || true
+    '
+  loop: "{{ groups['worker_nodes'] | default([]) }}"
 
 - name: 4.1a - Get local public key as a fact
   delegate_to: localhost
@@ -254,27 +246,27 @@
   register: node_connet
   loop: "{{ groups['control_nodes'] + groups['worker_nodes'] | default([]) }}"
 
-- name: 6.1 - Reassign KVM Provider Interface to Black-Hole
-  vars:
-    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
-  become: yes
-  shell: |
-    VM_NAME="{{ item.split('.')[0] }}"
-    # 1. Get the MAC address of the interface currently on default
-    P_MAC=$(virsh domiflist $VM_NAME | grep 'default' | awk '{print $5}')
+# - name: 6.1 - Reassign KVM Provider Interface to Black-Hole
+#   vars:
+#     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+#   become: yes
+#   shell: |
+#     VM_NAME="{{ item.split('.')[0] }}"
+#     # 1. Get the MAC address of the interface currently on default
+#     P_MAC=$(virsh domiflist $VM_NAME | grep 'default' | awk '{print $5}')
     
-    if [ ! -z "$P_MAC" ]; then
-      # 2. Update the live configuration to move to black-hole
-      # We use --config for persistence and --live for immediate effect
-      virsh update-device $VM_NAME /dev/stdin --live --config <<EOF
-    <interface type='network'>
-      <mac address='$P_MAC'/>
-      <source network='black-hole'/>
-      <model type='virtio'/>
-    </interface>
-    EOF
-    fi
-  loop: "{{ groups['worker_nodes'] | default([]) }}"
+#     if [ ! -z "$P_MAC" ]; then
+#       # 2. Update the live configuration to move to black-hole
+#       # We use --config for persistence and --live for immediate effect
+#       virsh update-device $VM_NAME /dev/stdin --live --config <<EOF
+#     <interface type='network'>
+#       <mac address='$P_MAC'/>
+#       <source network='black-hole'/>
+#       <model type='virtio'/>
+#     </interface>
+#     EOF
+#     fi
+#   loop: "{{ groups['worker_nodes'] | default([]) }}"
 
 - name: Verify SSH reachability on Static IPs
   become: false

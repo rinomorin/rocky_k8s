@@ -8,7 +8,7 @@
 
 - name: Kubernetes Node Provisioning Block
   block:
-    - import_tasks: 00_dns_register.yml
+    # - import_tasks: 00_dns_register.yml
     - import_tasks: 01_clone_first_node.yml
     - name: Add Repos configurations
       include_tasks: repo.yml  
