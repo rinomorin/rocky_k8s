@@ -1,4 +1,49 @@
 ---
+- name: "DNS - Connectivity Based Setup"
+  become: yes
+  block:
+    - name: "Check connectivity to IPA and Helper"
+      ansible.builtin.ping:
+      register: ping_results
+      ignore_errors: yes
+      loop:
+        - "{{ hostvars[groups['ipa'][0]]['provision_ip'] }}"
+        - "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
+
+    - name: "Initialize Nameserver List"
+      ansible.builtin.set_fact:
+        ns_list: []
+
+    - name: "Add Helper Segment Gateway if Helper reachable"
+      ansible.builtin.set_fact:
+        ns_list: "{{ ns_list + [hostvars[groups['helpers'][0]]['provision_ip'].split('.')[:3] | join('.') + '.1'] }}"
+      when: ping_results.results[1].rc == 0
+
+    - name: "Add IPA Segment Gateways if IPA reachable"
+      ansible.builtin.set_fact:
+        ns_list: "{{ ns_list + [
+          hostvars[groups['ipa'][0]]['provision_ip'].split('.')[:3] | join('.') + '.1',
+          hostvars[groups['ipa'][1]]['provision_ip'].split('.')[:3] | join('.') + '.1'
+        ] }}"
+      when: ping_results.results[0].rc == 0
+
+    - name: "Final Fallback to Google DNS if list is empty"
+      ansible.builtin.set_fact:
+        ns_list: ["8.8.8.8"]
+      when: ns_list | length == 0
+
+    - name: "Apply /etc/resolv.conf"
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          search {{ ipa_domain }}
+          {% for ns in ns_list | unique %}
+          nameserver {{ ns }}
+          {% endfor %}
+        owner: root
+        group: root
+        mode: '0644'
+
 - name: Clone Load Balancer nodes from Golden Image
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -89,7 +134,7 @@
     p_mac: "{{ p_mac_map[item] }}"
     p_ip: "{{ hostvars[item].ansible_host }}"
     # Generic placeholder for gateway
-    p_gw: "192.168.100.1" 
+    p_gw: "{{ hostvars[item].ansible_host.split('.')[0] }}.1" 
     # SSH parameters defined simply
     ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@{{ m_ip }}"
   shell: |
