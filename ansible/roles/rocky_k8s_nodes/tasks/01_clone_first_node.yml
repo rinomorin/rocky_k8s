@@ -1,6 +1,8 @@
 ---
 - name: "DNS - Connectivity Based Setup"
-  become: yes
+  become: false
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] }}"
   block:
     - name: "Check connectivity to IPA and Helper"
       ansible.builtin.shell: "ping -c 1 -W 2 {{ item }}"
@@ -34,6 +36,7 @@
       when: ns_list | length == 0
 
     - name: "Apply /etc/resolv.conf"
+      become: yes
       ansible.builtin.copy:
         dest: /etc/resolv.conf
         content: |
