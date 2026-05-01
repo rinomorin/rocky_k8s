@@ -35,11 +35,24 @@
   shell:
     mkdir -p /home/core/.kube
     cp /tmp/admin.conf ~/.kubes/config
-    chown -R core:core /home/core
+    chown core:core /home/core/.kube
+    chown core:core /home/core/.kube/config
     chmod 700 /home/core /home/core/.kube
   delegate_to: localhost
   run_once: true
-  
+
+# 2. Push the config to all nodes in the cluster
+- name: 4.2 - Distribute kubeconfig to all nodes
+  become: yes
+  copy:
+    src: "/tmp/admin.conf"
+    dest: "/home/core/.kube"
+    owner: core
+    group: core
+    mode: '0700'
+    state: directory
+
+
 # 2. Push the config to all nodes in the cluster
 - name: 4.2 - Distribute kubeconfig to all nodes
   become: yes
@@ -52,17 +65,17 @@
   # We run this on everyone except the controller itself (if needed)
   # Or just 'all' if we want it everywhere.
 
-- name: insure folder in home all belongs to core
-  become: yes
-  file:
-    path: "{{ item }}"
-    owner: "core"
-    group: "core"
-    mode: '0600'
-    state: directory
-  loop:
-    - "/home/core"
-    - "/home/core/.kube/config"
+# - name: insure folder in home all belongs to core
+#   become: yes
+#   file:
+#     path: "{{ item }}"
+#     owner: "core"
+#     group: "core"
+#     mode: '0600'
+#     state: directory
+#   loop:
+#     - "/home/core"
+#     - "/home/core/.kube/config"
 
 # # 2. Fix permissions locally
 # - name: 4.2 - Fix local kubeconfig permissions
@@ -109,4 +122,4 @@
   delay: 10
   run_once: true
   environment:
-    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+    KUBECONFIG: "/home/core/.kube/config"

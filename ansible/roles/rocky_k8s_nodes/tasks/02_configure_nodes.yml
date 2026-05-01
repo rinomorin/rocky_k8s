@@ -58,9 +58,8 @@
       loop_control:
         label: "Scanning for network prefix: {{ item.0 }}"
       when: 
-        - inventory_hostname != (groups['helpers'][0] | default('none'))
+        - hostvars[cloud_node] != (groups['helpers'][0] | default('none'))
         - item.0 != "0.0.0.0."    
-
 
     - name: Add Repos configurations
       include_tasks: repo.yml  

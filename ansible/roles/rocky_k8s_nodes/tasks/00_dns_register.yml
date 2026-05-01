@@ -8,13 +8,17 @@
       no_log: true
 
     - name: Register DNS A and PTR Records for Cluster Nodes
+      vars:
+        ipa_master_ip: "{{ hostvars[groups['ipa'][0]]['ansible_host'].split('.')[0:3] | join('.') }}.1"
       shell: |
         SHORT_NAME=$(echo "{{ item }}" | cut -d'.' -f1)
         PROV_IP="{{ hostvars[item].provision_ip }}"
         DATA_IP="{{ hostvars[item].provider_ip | default('N/A') }}"
+        GATEWAY_IP="{{ ipa_master_ip }}"
         
         # 1. Always register in Provisioning Zone (10.0.0.x)
         ipa dnsrecord-add {{ p_zone }} $SHORT_NAME --a-rec=$PROV_IP
+        ipa dnsconfig-mod --forwarder={{ GATEWAY_IP }} --forward-policy=only
         
         # PTR for Provisioning
         LAST_OCTET_PROV=$(echo $PROV_IP | cut -d'.' -f4)
