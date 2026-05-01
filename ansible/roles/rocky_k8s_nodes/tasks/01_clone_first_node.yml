@@ -17,7 +17,7 @@
 
     - name: "Add Helper Gateway if reachable"
       ansible.builtin.set_fact:
-        ns_list: "{{ ns_list + [hostvars[groups['helpers'][0]]['provision_ip']]}}"
+        ns_list: "{{ ns_list + [hostvars[groups['helpers'][0]]['provision_ip']] }}"
         pv_list: "{{ pv_list + [hostvars[groups['helpers'][0]]['provision_ip']] }}"
       when: ping_results.results[1].rc == 0
 
@@ -45,7 +45,7 @@
       ansible.builtin.copy:
         dest: /etc/resolv.conf
         content: |
-          search {{ ipa_domain }} {{ c_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }}
+          search {{ p_zone }} {{ c_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }}
           {{ ns_lines | join('\n') }}
         owner: root
         group: root
