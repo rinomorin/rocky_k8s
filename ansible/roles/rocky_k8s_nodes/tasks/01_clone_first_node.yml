@@ -3,9 +3,10 @@
   become: yes
   block:
     - name: "Check connectivity to IPA and Helper"
-      ansible.builtin.ping:
+      ansible.builtin.shell: "ping -c 1 -W 2 {{ item }}"
       register: ping_results
       ignore_errors: yes
+      changed_when: false
       loop:
         - "{{ hostvars[groups['ipa'][0]]['ansible_host'] }}"
         - "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
@@ -27,7 +28,7 @@
         ] }}"
       when: ping_results.results[0].rc == 0
 
-    - name: "Final Fallback to Google DNS if list is empty"
+    - name: "Final Fallback to Google DNS"
       ansible.builtin.set_fact:
         ns_list: ["8.8.8.8"]
       when: ns_list | length == 0
