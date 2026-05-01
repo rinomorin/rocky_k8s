@@ -20,15 +20,15 @@
 #     # Set proper directory permissions
 #     chmod 700 /home/core /home/core/.kube
 
-- name: insure folder in home all belongs to core
-  become: yes
-  shell: |
-    # Create the directories if they don't exist
-    mkdir -p /home/core/.kube
-    # Recursively set ownership to core:core
-    chown -R core:core /home/core
-    # Set proper directory permissions
-    chmod 700 /home/core /home/core/.kube
+# - name: insure folder in home all belongs to core
+#   become: yes
+#   shell: |
+#     # Create the directories if they don't exist
+#     mkdir -p /home/core/.kube
+#     # Recursively set ownership to core:core
+#     chown -R core:core /home/core
+#     # Set proper directory permissions
+#     chmod 700 /home/core /home/core/.kube
 
 - name: 4.1b - Ensure KUBECONFIG is present on localhost
   become: false
