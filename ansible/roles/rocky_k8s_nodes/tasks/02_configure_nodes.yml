@@ -14,10 +14,12 @@
         - "chmod 750 /home/core/.kube"
         - "echo 'kubeconfig will be populated after cluster bootstrap' > /home/core/.kube/config"
         - "chmod 600 /home/core/.kube/config"
+        - "chown core:core /home/core/.kube/config"
+        - "chown core:core /home/core/.kube"
       loop_control:
         loop_var: setup_node
 
     - name: Add Repos configurations
       include_tasks: repo.yml  
     - name: Add packages
-      include_tasks: install_packages.yml
+      include_tasks: install_package.yml
