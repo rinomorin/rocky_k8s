@@ -19,6 +19,49 @@
       loop_control:
         loop_var: setup_node
 
+    - name: DNS - Sync Network Zones via Dynamic Prefix
+      become: yes
+      ansible.builtin.shell: |
+        PREFIX="{{ item.0 }}"
+        DOMAIN="{{ item.1 }}"
+        NS_IP="{{ item.2 }}"
+
+        # Skip if the prefix is our dummy '0.0.0.0' or not found on an interface
+        if [ "$PREFIX" != "0.0.0.0." ] && ip -4 -br addr show | grep -q "$PREFIX"; then
+          grep -q '^search' /etc/resolv.conf || echo 'search' >> /etc/resolv.conf
+          
+          if ! grep '^search' /etc/resolv.conf | grep -q "$DOMAIN"; then
+            sed -i "/^search/ s/$/ $DOMAIN/" /etc/resolv.conf
+          fi
+          
+          grep -q "nameserver $NS_IP" /etc/resolv.conf || echo "nameserver $NS_IP" >> /etc/resolv.conf
+        fi
+      loop:
+        # 1. Provisioning
+        - [ 
+            "{{ (hostvars[groups['helpers'][0]]['provision_ip'] | default('0.0.0.0')).split('.')[:3] | join('.') }}.", 
+            "{{ c_zone.replace(c_zone.split('.')[-1], 'local') if c_zone is defined else 'example.local' }}", 
+            "{{ hostvars[groups['helpers'][0]]['provision_ip'] | default('0.0.0.0') }}" 
+          ]
+        # 2. Provider (Helper) - Wrapped in safety check
+        - [ 
+            "{{ (hostvars[groups['helpers'][0]]['provider_ip'] | default('0.0.0.0')).split('.')[:3] | join('.') }}.", 
+            "{{ c_zone | default('example.com') }}", 
+            "{{ hostvars[groups['helpers'][0]]['provider_ip'] | default('0.0.0.0') }}" 
+          ]
+        # 3. Provider (IPA) - Wrapped in safety check
+        - [ 
+            "{{ (hostvars[groups['ipa'][0]]['ansible_host'] | default('0.0.0.0')).split('.')[:3] | join('.') }}.", 
+            "{{ c_zone | default('example.com') }}", 
+            "{{ hostvars[groups['ipa'][0]]['ansible_host'] | default('0.0.0.0') }}" 
+          ]
+      loop_control:
+        label: "Scanning for network prefix: {{ item.0 }}"
+      when: 
+        - inventory_hostname != (groups['helpers'][0] | default('none'))
+        - item.0 != "0.0.0.0."    
+
+
     - name: Add Repos configurations
       include_tasks: repo.yml  
     - name: Add packages
