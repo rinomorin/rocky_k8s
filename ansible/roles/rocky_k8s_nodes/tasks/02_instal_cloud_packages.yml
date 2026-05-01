@@ -2,34 +2,34 @@
 #   set_fact:
     # Change 'lead_m_ip' to 'golden_ip' to match your next tasks
     # golden_ip: "{{ lead_master_m_ip.stdout | trim }}"
-- name: process nodes
-  delegate_to: "{{ hostvars[cloud_node]['provision_ip'] | default('127.0.0.1') }}"
-  become: yes
-  vars:
-    ansible_user: "{{ hostvars[cloud_node]['ansible_user'] | default('core') }}"
-    n_zone: "{{ c_zone.replace(c_zone.split('.')[-1], 'local') }}"
-  block:
-    - name: "DNS Prep - clean resolve for controllers"
-      ansible.builtin.shell: |     
-          sed -i '/nameserver 172.16/d' /etc/resolv.conf
-          echo 'search {{ c_zone }} {{ p_zone }} {{ n_zone }}' |tee /etc/resolv.conf > /dev/null
-          echo 'nameserver {{ hostvars[groups['helpers'][0]]['provider_ip'] }}' |tee -a /etc/resolv.conf > /dev/null
-          echo 'nameserver {{ hostvars[groups['ipa'][0]]['ansible_host'] }}' | tee -a /etc/resolv.conf > /dev/null
-          echo 'nameserver {{ hostvars[groups['ipa'][1]]['ansible_host'] }}' | tee -a /etc/resolv.conf > /dev/null
-      when: 
-        - cloud_node in groups['control_nodes']
-        - cloud_node not in groups['helpers']
-        - cloud_node != 'localhost'
+# - name: process nodes
+#   delegate_to: "{{ hostvars[cloud_node]['provision_ip'] | default('127.0.0.1') }}"
+#   become: yes
+#   vars:
+#     ansible_user: "{{ hostvars[cloud_node]['ansible_user'] | default('core') }}"
+#     n_zone: "{{ c_zone.replace(c_zone.split('.')[-1], 'local') }}"
+#   block:
+#     - name: "DNS Prep - clean resolve for controllers"
+#       ansible.builtin.shell: |     
+#           sed -i '/nameserver 172.16/d' /etc/resolv.conf
+#           echo 'search {{ c_zone }} {{ p_zone }} {{ n_zone }}' |tee /etc/resolv.conf > /dev/null
+#           echo 'nameserver {{ hostvars[groups['helpers'][0]]['provider_ip'] }}' |tee -a /etc/resolv.conf > /dev/null
+#           echo 'nameserver {{ hostvars[groups['ipa'][0]]['ansible_host'] }}' | tee -a /etc/resolv.conf > /dev/null
+#           echo 'nameserver {{ hostvars[groups['ipa'][1]]['ansible_host'] }}' | tee -a /etc/resolv.conf > /dev/null
+#       when: 
+#         - cloud_node in groups['control_nodes']
+#         - cloud_node not in groups['helpers']
+#         - cloud_node != 'localhost'
 
-    - name: "DNS Prep - clean resolve for workers"
-      ansible.builtin.shell: |     
-          sed -i '/nameserver 172.16/d' /etc/resolv.conf
-          echo 'search {{ c_zone }} {{ p_zone }} {{ n_zone }}' |tee /etc/resolv.conf > /dev/null
-          echo 'nameserver {{ hostvars[groups['helpers'][0]]['provision_ip'] }}' |tee -a /etc/resolv.conf > /dev/null
-      when: 
-        - cloud_node in groups['control_nodes']
-        - cloud_node not in groups['helpers']
-        - cloud_node != 'localhost'
+#     - name: "DNS Prep - clean resolve for workers"
+#       ansible.builtin.shell: |     
+#           sed -i '/nameserver 172.16/d' /etc/resolv.conf
+#           echo 'search {{ c_zone }} {{ p_zone }} {{ n_zone }}' |tee /etc/resolv.conf > /dev/null
+#           echo 'nameserver {{ hostvars[groups['helpers'][0]]['provision_ip'] }}' |tee -a /etc/resolv.conf > /dev/null
+#       when: 
+#         - cloud_node in groups['control_nodes']
+#         - cloud_node not in groups['helpers']
+#         - cloud_node != 'localhost'
 
     - name: setup kube config permissions and placeholder
       become: yes

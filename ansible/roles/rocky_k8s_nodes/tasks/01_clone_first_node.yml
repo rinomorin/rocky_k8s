@@ -341,7 +341,7 @@
       ansible.builtin.copy:
         dest: /etc/resolv.conf
         content: |
-          search {{ ipa_domain }} {{ c_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }}
+          search {{ c_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }}
           {{ pv_lines | join('\n') }}
         owner: root
         group: root
