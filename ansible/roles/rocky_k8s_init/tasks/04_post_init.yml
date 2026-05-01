@@ -31,15 +31,15 @@
 #     chmod 700 /home/core /home/core/.kube
 
 - name: 4.1b - Ensure KUBECONFIG is present on localhost
-  become: false
-  shell:
-    mkdir -p /home/core/.kube
-    cp /tmp/admin.conf ~/.kubes/config
-    chown core:core /home/core/.kube
-    chown core:core /home/core/.kube/config
-    chmod 700 /home/core /home/core/.kube
+  become: yes
   delegate_to: localhost
   run_once: true
+  ansible.builtin.shell: |
+    mkdir -p /home/core/.kube && \
+    cp /tmp/admin.conf /home/core/.kube/config && \
+    chown -R core:core /home/core/.kube && \
+    chmod 700 /home/core /home/core/.kube && \
+    chmod 600 /home/core/.kube/config
 
 # 2. Push the config to all nodes in the cluster
 - name: 4.2 - Distribute kubeconfig to all nodes
