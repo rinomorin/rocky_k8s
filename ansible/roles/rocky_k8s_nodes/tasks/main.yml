@@ -8,6 +8,7 @@
 
 - name: id_rsa.pub from helper nodes
   delegate_to: "{{ groups['helpers'][0] }}"
+  become: false
   slurp:
     src: ~/.ssh/id_rsa.pub
   register: id_rsa_pub_content
