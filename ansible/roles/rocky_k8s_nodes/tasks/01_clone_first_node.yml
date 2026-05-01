@@ -279,7 +279,7 @@
     - name: "Add Helper Gateway if reachable"
       ansible.builtin.set_fact:
         ns_list: "{{ ns_list + [hostvars[groups['helpers'][0]]['provision_ip']] }}"
-        pv_list: "{{ pv_list + [hostvars[groups['helpers'][0]]['provision_ip']] }}"
+        pv_list: "{{ pv_list + [hostvars[groups['helpers'][0]]['provision_ip']],'8.8.8.8' }}"
       when: ping_results.results[1].rc == 0
 
     - name: "Add IPA Gateways if reachable"

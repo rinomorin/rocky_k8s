@@ -6,8 +6,10 @@
     - name: setup kube config permissions and placeholder
       become: yes
       shell: |
-        {{ item }}
+        {{ kube_conf }}
       loop:
+      loop_control:
+        loop_var: kube_conf
         - "mkdir -p /home/core/.kube"
         - "chmod 750 /home/core/.kube"
         - "echo 'kubeconfig will be populated after cluster bootstrap' > /home/core/.kube/config"
