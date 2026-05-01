@@ -29,7 +29,7 @@
       include_tasks: 02_configure_nodes.yml
       loop: "{{ groups['cluster_nodes'] }}"
       loop_control:
-        label: "cloud_node: {{ item }}"
+        loop_var: cloud_node
 
   when: not skip_build | bool
 

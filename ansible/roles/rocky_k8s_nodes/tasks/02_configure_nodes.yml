@@ -5,14 +5,14 @@
   block:
     - name: setup kube config permissions and placeholder
       become: yes
-      ansible.builtin.shell: "{{ item }}"
+      ansible.builtin.shell: "{{ setup_node }}"
       loop:
         - "mkdir -p /home/core/.kube"
         - "chmod 750 /home/core/.kube"
         - "echo 'kubeconfig will be populated after cluster bootstrap' > /home/core/.kube/config"
         - "chmod 600 /home/core/.kube/config"
       loop_control:
-        label: "Configuring: {{ item.split(' ')[0] }}"
+        loop_var: setup_node
 
     - name: Add Repos configurations
       include_tasks: repo.yml  
