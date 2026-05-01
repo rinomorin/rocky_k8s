@@ -13,6 +13,7 @@
     - name: "Initialize Nameserver List"
       ansible.builtin.set_fact:
         ns_list: []
+        pv_list: []
 
     - name: "Add Helper Gateway if reachable"
       ansible.builtin.set_fact:
