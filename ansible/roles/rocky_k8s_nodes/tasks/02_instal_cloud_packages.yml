@@ -10,15 +10,6 @@
         - "echo 'kubeconfig will be populated after cluster bootstrap' > /home/core/.kube/config"
         - "chmod 600 /home/core/.kube/config"
     
-    - name: add id_rsa.pub to authorized_keys on all nodes
-      shell: |
-        mkdir -p /home/core/.ssh
-        chown core:core /home/core/.ssh
-        echo "{{ id_rsa_pub_content_decoded }}" >> /home/core/.ssh/authorized_keys
-        chmod 600 /home/core/.ssh/authorized_keys
-      loop: "{{ groups['cluster_nodes'] }}"
-      when: item != 'helper'
-
     # ============================================================
     # PLAY 2 — Provision Golden Image (runs inside VM)
     # ============================================================

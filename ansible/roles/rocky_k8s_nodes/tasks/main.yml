@@ -6,27 +6,31 @@
   debug:
     msg: "Rebuild requested: {{ rebuild_nodes | default(false) }} | Skipping Build: {{ skip_build }}"
 
-- name: id_rsa.pub from helper nodes
-  delegate_to: "{{ groups['helpers'][0] }}"
-  become: false
-  slurp:
-    src: ~/.ssh/id_rsa.pub
-  register: id_rsa_pub_content
+# - name: id_rsa.pub from helper nodes
+#   delegate_to: "{{ groups['helpers'][0] }}"
+#   vars:
+#     ansible_user: "{{ hostvars[groups['helpers'][0]]['ansible_user'] }}"
+#   become: false
+#   slurp:
+#     src: ~/.ssh/id_rsa.pub
+#   register: id_rsa_pub_content
 
-- name: Set id_rsa.pub content as fact
-  set_fact:
-    id_rsa_pub_content_decoded: "{{ id_rsa_pub_content.content | b64decode }}"
+# - name: Set id_rsa.pub content as fact
+#   set_fact:
+#     id_rsa_pub_content_decoded: "{{ id_rsa_pub_content.content | b64decode }}"
 
 - name: Kubernetes Node Provisioning Block
   block:
     # - import_tasks: 00_dns_register.yml
     - import_tasks: 01_clone_first_node.yml
     - name: Add Repos configurations
+      delegate_to: "{{ hostvars[cloud_node]['provision_ip']}}"
       include_tasks: repo.yml  
       loop: "{{ groups['control_nodes'] | default([]) + groups['worker_nodes'] | default([]) + ['localhost'] }}"
       loop_control:
         loop_var: cloud_node
     - name: Add packages
+      delegate_to: "{{ hostvars[cloud_node]['provision_ip']}}"
       include_tasks: 02_instal_cloud_packages.yml  
       loop: "{{ groups['control_nodes'] | default([]) + groups['worker_nodes'] | default([]) + ['localhost'] }}"
       loop_control:
