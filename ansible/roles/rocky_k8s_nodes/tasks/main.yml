@@ -28,6 +28,8 @@
     - name: 0.4 - Configure Nodes (Repos, Packages, etc)
       include_tasks: 02_configure_nodes.yml
       loop: "{{ groups['cluster_nodes'] }}"
+      loop_control:
+        label: "cloud_node: {{ item }}"
 
   when: not skip_build | bool
 

@@ -66,24 +66,6 @@
       changed_when: false
       failed_when: crictl_check.rc != 0
 
-    # - name: setup kube config directory
-    #   become: false
-    #   file:
-    #     path: /home/core/.kube
-    #     state: directory
-    #     mode: '0750'
-    #     owner: core
-    #     group: core
-
-    # - name: create kubeconfig placeholder
-    #   become: false
-    #   copy:
-    #     dest: /home/core/.kube/config
-    #     content: "kubeconfig will be populated after cluster bootstrap\n"
-    #     mode: '0600'
-    #     owner: core
-    #     group: core
-
     - name: set etcd_ver
       set_fact:
         etcd_ver: "{{ lookup('env','etcd_ver') | default('v3.5.12', true) }}"
