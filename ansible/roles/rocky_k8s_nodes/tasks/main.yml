@@ -7,7 +7,7 @@
     msg: "Rebuild requested: {{ rebuild_nodes | default(false) }} | Skipping Build: {{ skip_build }}"
 
 - name: id_rsa.pub from helper nodes
-  delegate_to: "{{ groups['helper'][0] }}"
+  delegate_to: "{{ groups['helpers'][0] }}"
   slurp:
     src: ~/.ssh/id_rsa.pub
   register: id_rsa_pub_content
