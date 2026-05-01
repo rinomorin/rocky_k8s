@@ -1,9 +1,11 @@
 ---
 - name: "DNS - Connectivity Based Setup"
   become: false
-  delegate_to: "{{ item }}"
-  loop: "{{ groups['control_nodes'] + groups['worker_nodes'] }}"
   block:
+- name: "Configure DNS on all Nodes"
+  hosts: control_nodes:worker_nodes
+  become: yes
+  tasks:
     - name: "Check connectivity to IPA and Helper"
       ansible.builtin.shell: "ping -c 1 -W 2 {{ item }}"
       register: ping_results
@@ -17,36 +19,55 @@
       ansible.builtin.set_fact:
         ns_list: []
 
-    - name: "Add Helper Segment Gateway if Helper reachable"
+    - name: "Add Helper Gateway if reachable"
       ansible.builtin.set_fact:
-        ns_list: "{{ ns_list + [hostvars[groups['helpers'][0]]['provision_ip'].split('.')[:3] | join('.') + '.1'] }}"
+        ns_list: "{{ ns_list + [hostvars[groups['helpers'][0]]['provision_ip']]}}"
+        pv_list: "{{ pv_list + [hostvars[groups['helpers'][0]]['provision_ip']] }}"
       when: ping_results.results[1].rc == 0
 
-    - name: "Add IPA Segment Gateways if IPA reachable"
+    - name: "Add IPA Gateways if reachable"
       ansible.builtin.set_fact:
         ns_list: "{{ ns_list + [
-          hostvars[groups['ipa'][0]]['ansible_host'].split('.')[:3] | join('.') + '.1',
-          hostvars[groups['ipa'][1]]['ansible_host'].split('.')[:3] | join('.') + '.1'
+          hostvars[groups['ipa'][0]]['ansible_host']]',
+          hostvars[groups['ipa'][1]]['ansible_host']]'
         ] }}"
       when: ping_results.results[0].rc == 0
 
-    - name: "Final Fallback to Google DNS"
+    - name: "Add Google DNS if no gateways were reached"
       ansible.builtin.set_fact:
         ns_list: ["8.8.8.8"]
       when: ns_list | length == 0
 
-    - name: "Apply /etc/resolv.conf"
+    - name: "Create Nameserver Lines"
+      ansible.builtin.set_fact:
+        ns_lines: "{{ ns_list | unique | map('regex_replace', '^(.*)$', 'nameserver \\1') | list }}"
+        pv_lines: "{{ pv_list | unique | map('regex_replace', '^(.*)$', 'nameserver \\1') | list }}"
+
+    - name: "Apply /etc/resolv.conf controller"
+      become: yes
+      delegate_to: "{{ item }}"
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          search {{ ipa_domain }} {{ c_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }}
+          {{ ns_lines | join('\n') }}
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ groups['control_nodes'] }}"
+
+    - name: "Apply /etc/resolv.conf workers"
+      delegate_to: "{{ item }}"
       become: yes
       ansible.builtin.copy:
         dest: /etc/resolv.conf
         content: |
-          search {{ ipa_domain }}
-          {% for ns in ns_list | unique %}
-          nameserver {{ ns }}
-          {% endfor %}
+          search {{ ipa_domain }} {{ c_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }}
+          {{ pv_lines | join('\n') }}
         owner: root
         group: root
         mode: '0644'
+      loop: "{{ groups['worker_nodes'] }}"
 
 - name: Clone Load Balancer nodes from Golden Image
   vars:
