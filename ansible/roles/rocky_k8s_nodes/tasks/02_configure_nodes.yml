@@ -3,6 +3,9 @@
   vars:
     ansible_user: "{{ hostvars[cloud_node]['ansible_user'] | default('core') }}"  
   block:
+    - debug:
+        msg: "Installing packages on {{ cloud_node }} (IP: {{ hostvars[cloud_node]['provision_ip'] }})"
+
     - name: setup kube config permissions and placeholder
       become: yes
       ansible.builtin.shell: "{{ setup_node }}"
