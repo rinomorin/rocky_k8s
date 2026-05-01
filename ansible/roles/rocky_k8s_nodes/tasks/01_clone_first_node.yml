@@ -1,11 +1,6 @@
 ---
 - name: "DNS - Connectivity Based Setup"
-  become: false
   block:
-- name: "Configure DNS on all Nodes"
-  hosts: control_nodes:worker_nodes
-  become: yes
-  tasks:
     - name: "Check connectivity to IPA and Helper"
       ansible.builtin.shell: "ping -c 1 -W 2 {{ item }}"
       register: ping_results
