@@ -89,7 +89,7 @@
     p_mac: "{{ p_mac_map[item] }}"
     p_ip: "{{ hostvars[item].ansible_host }}"
     # Generic placeholder for gateway
-    p_gw: "{{ hostvars[item].ansible_host.split('.')[0] }}.1" 
+    p_gw: "{{ hostvars[item].ansible_host.split('.')[:3] | join('.') }}.1"
     # SSH parameters defined simply
     ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@{{ m_ip }}"
   shell: |
