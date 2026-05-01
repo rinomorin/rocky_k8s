@@ -6,6 +6,16 @@
   debug:
     msg: "Rebuild requested: {{ rebuild_nodes | default(false) }} | Skipping Build: {{ skip_build }}"
 
+- name: id_rsa.pub from helper nodes
+  delegate_to: "{{ groups['helper'][0] }}"
+  slurp:
+    src: ~/.ssh/id_rsa.pub
+  register: id_rsa_pub_content
+
+- name: Set id_rsa.pub content as fact
+  set_fact:
+    id_rsa_pub_content_decoded: "{{ id_rsa_pub_content.content | b64decode }}"
+
 - name: Kubernetes Node Provisioning Block
   block:
     # - import_tasks: 00_dns_register.yml
