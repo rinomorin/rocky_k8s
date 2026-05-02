@@ -42,9 +42,13 @@
   vars:
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   register: vm_state
+  become: yes
   until: "'running' in vm_state.stdout"
   retries: 10
   delay: 5
+
+- debug:
+    msg: "VM {{ inventory_hostname }} is in state: {{ vm_state.stdout }}"
 
 - name: Wait for WinRM to wake up
   ansible.builtin.wait_for_connection:
