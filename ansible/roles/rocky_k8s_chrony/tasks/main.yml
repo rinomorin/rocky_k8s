@@ -22,6 +22,7 @@
 
 # 3. Apply the template (The template now handles the 'if' logic)
 - name: Configure chrony.conf
+  become: yes
   ansible.builtin.template:
     src: chrony.conf.j2
     dest: /etc/chrony.conf
