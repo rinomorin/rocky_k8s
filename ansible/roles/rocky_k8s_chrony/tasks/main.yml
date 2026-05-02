@@ -1,0 +1,44 @@
+---
+# 1. Parse the environment variable for NRC servers
+- name: Unified NTP parsing
+  ansible.builtin.set_fact:
+    # We take the input from either Extra Vars OR the Env Lookup
+    raw_ntp: "{{ nrc_ntp_list | default(lookup('env', 'ntp_servers')) | default('time.nrc.ca,time.chu.nrc.ca', true) }}"
+
+- name: Final List Conversion
+  ansible.builtin.set_fact:
+    # If the user passed a real list, keep it. If they passed a string (comma separated), split it.
+    nrc_ntp_list: "{{ raw_ntp if raw_ntp is list else raw_ntp.split(',') }}"
+
+# 2. Identify the primary IPA node for internal syncing
+- name: Set primary IPA source fact
+  ansible.builtin.set_fact:
+    ipa_primary_host: "{{ groups['ntp'] | map('extract', hostvars) | selectattr('ipa_cluster_role', 'equalto', 'primary') | map(attribute='ansible_host') | first }}"
+
+- name: Install chrony
+  ansible.builtin.package:
+    name: chrony
+    state: present
+
+# 3. Apply the template (The template now handles the 'if' logic)
+- name: Configure chrony.conf
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Chrony
+
+- name: Ensure firewalld allows NTP
+  ansible.builtin.firewalld:
+    service: ntp
+    permanent: yes
+    state: enabled
+    immediate: yes
+
+- name: Enable and start chronyd
+  ansible.builtin.service:
+    name: chronyd
+    state: started
+    enabled: yes

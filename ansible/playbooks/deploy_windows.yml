@@ -1,0 +1,24 @@
+---
+# STAGE 1a: Linux Infrastructure - Time Foundation
+- name: "Stage 1a: Configure NTP on IPA Infrastructure"
+  hosts: helpers, ipa_masters
+  roles:
+    - role: rocky_k8s_chrony
+
+# STAGE 1b: Windows Infrastructure - AD Creation
+- name: "Stage 1b: Build Windows AD Forest"
+  hosts: windows_workers
+  roles:
+    - role: win_k8s_ad_promotion
+
+# STAGE 2: Identity Bridge
+- name: "Stage 2: Establish IPA-AD Trust"
+  hosts: helpers
+  roles:
+    - role: win_k8s_ipa_trust
+
+# STAGE 3: Kubernetes Integration
+- name: "Stage 3: Join Windows Nodes to Cluster"
+  hosts: windows_workers
+  roles:
+    - role: win_k8s_join
