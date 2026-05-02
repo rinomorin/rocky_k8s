@@ -10,7 +10,7 @@
 - name: Find primary IPA host
   ansible.builtin.set_fact:
     ipa_primary_host: >-
-      {%- for host in groups['ipa_servers'] -%}
+      {%- for host in groups['ipa'] -%}
         {%- if hostvars[host]['ipa_cluster_role'] | default('') == 'primary' -%}
           {{ hostvars[host]['ansible_host'] }}
         {%- endif -%}

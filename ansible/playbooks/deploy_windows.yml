@@ -1,7 +1,7 @@
 ---
 # STAGE 1a: Linux Infrastructure - Time Foundation
 - name: "Stage 1a: Configure NTP on IPA Infrastructure"
-  hosts: localhost, ipa
+  hosts: helpers, ipa
   roles:
     - role: rocky_k8s_chrony
 
