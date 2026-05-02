@@ -1,14 +1,15 @@
 ---
 # 1. Parse the environment variable for NRC servers
+---
 - name: Unified NTP parsing
   ansible.builtin.set_fact:
-    # We take the input from either Extra Vars OR the Env Lookup
-    raw_ntp: "{{ ntp_servers | default(lookup('env', 'ntp_servers')) | default('time.nrc.ca,time.chu.nrc.ca', true) }}"
+    # Capture the raw input from Extra Vars, Env, or Defaults
+    raw_ntp: "{{ nrc_ntp_list | default(lookup('env', 'ntp_servers')) | default('time.nrc.ca,time.chu.nrc.ca', true) }}"
 
 - name: Final List Conversion
   ansible.builtin.set_fact:
-    # If the user passed a real list, keep it. If they passed a string (comma separated), split it.
-    nrc_ntp_list: "{{ raw_ntp if raw_ntp is list else raw_ntp.split(',') }}"
+    # Use type_debug to check if we need to split a string or keep a list
+    nrc_ntp_list: "{{ raw_ntp if raw_ntp | type_debug == 'list' else raw_ntp.split(',') }}"
 
 # 2. Identify the primary IPA node for internal syncing
 - name: Set primary IPA source fact
