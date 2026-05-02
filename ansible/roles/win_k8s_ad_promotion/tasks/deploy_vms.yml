@@ -1,23 +1,23 @@
 ---
 - name: Clone Golden Image for {{ inventory_hostname }}
   vars:
-    ansible_user: "{{ hostvars[groups('kvm')[0]]['ansible_user'] | default('core') }}"
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] | default('core') }}"
   ansible.builtin.copy:
     src: "/var/lib/libvirt/images/ws2022-gold.vhd"
-    dest: "/var/lib/libvirt/images/{{ inventory_hostname }}.qcow2"
+    dest: "/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2"
     remote_src: yes
     force: no
   delegate_to: "{{ kvm_ip }}"
 
 - name: Define and Launch Windows VM
   vars:
-    ansible_user: "{{ hostvars[groups('kvm')[0]]['ansible_user'] | default('core') }}"
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] | default('core') }}"
   ansible.builtin.shell: |
     virt-install \
-      --name {{ inventory_hostname }} \
+      --name {{ inventory_hostname.split('.')[0] }} \
       --memory 4096 \
       --vcpus 2 \
-      --disk path=/var/lib/libvirt/images/{{ inventory_hostname }}.qcow2,format=qcow2 \
+      --disk path=/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2,format=qcow2 \
       --import \
       --os-variant win2k22 \
       --network network=br-cluster \
@@ -31,25 +31,25 @@
 
 - name: Create QCOW2 overlay for Windows Worker
   vars:
-    ansible_user: "{{ hostvars[groups('kvm')[0]]['ansible_user'] | default('core') }}"
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] | default('core') }}"
   ansible.builtin.command: >
     qemu-img create -f qcow2 
     -F vpc 
     -b /var/lib/libvirt/images/ws2022-gold.vhd 
-    /var/lib/libvirt/images/{{ inventory_hostname }}.qcow2
+    /var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2
   delegate_to: "{{ kvm_ip }}"
   args:
-    creates: "/var/lib/libvirt/images/{{ inventory_hostname }}.qcow2"
+    creates: "/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2"
 
 - name: Define and Launch Windows VM
   vars:
-    ansible_user: "{{ hostvars[groups('kvm')[0]]['ansible_user'] | default('core') }}"
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] | default('core') }}"
   ansible.builtin.shell: |
     virt-install \
-      --name {{ inventory_hostname }} \
+      --name {{ inventory_hostname.split('.')[0] }} \
       --memory 4096 \
       --vcpus 2 \
-      --disk path=/var/lib/libvirt/images/{{ inventory_hostname }}.qcow2,format=qcow2 \
+      --disk path=/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2,format=qcow2 \
       --import \
       --os-variant win2k22 \
       --network network=br-cluster \
