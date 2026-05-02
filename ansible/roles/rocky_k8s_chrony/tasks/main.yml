@@ -1,6 +1,5 @@
 ---
 # 1. Parse the environment variable for NRC servers
----
 - name: Unified NTP parsing
   ansible.builtin.set_fact:
     # Capture the raw input from Extra Vars, Env, or Defaults
