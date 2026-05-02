@@ -1,6 +1,7 @@
 ---
 # 1. Parse the environment variable for NRC servers
 - name: show environment variable for NTP servers
+  delegate_to: localhost
   shell: |
    env | grep servers
   register: env_output
