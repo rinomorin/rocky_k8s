@@ -1,45 +1,41 @@
 ---
-# 1. Parse the environment variable for NRC servers
-- name: Unified NTP parsing
+- name: Determine NTP source list
   ansible.builtin.set_fact:
-    # Capture the raw input from Extra Vars, Env, or Defaults
     raw_ntp: "{{ nrc_ntp_list | default(lookup('env', 'ntp_servers')) | default('time.nrc.ca,time.chu.nrc.ca', true) }}"
 
 - name: Final List Conversion
   ansible.builtin.set_fact:
-    # Use type_debug to check if we need to split a string or keep a list
     nrc_ntp_list: "{{ raw_ntp if raw_ntp | type_debug == 'list' else raw_ntp.split(',') }}"
 
-# 2. Identify the primary IPA node for internal syncing
-- name: Set primary IPA source fact
+- name: Find primary IPA host
   ansible.builtin.set_fact:
-    ipa_primary_host: "{{ groups['ntp'] | map('extract', hostvars) | selectattr('ipa_cluster_role', 'equalto', 'primary') | map(attribute='ansible_host') | first }}"
+    ipa_primary_host: >-
+      {%- for host in groups['ipa_servers'] -%}
+        {%- if hostvars[host]['ipa_cluster_role'] | default('') == 'primary' -%}
+          {{ hostvars[host]['ansible_host'] }}
+        {%- endif -%}
+      {%- endfor -%}
 
-- name: Install chrony
-  ansible.builtin.package:
-    name: chrony
-    state: present
+# Use a block to apply delegation specifically for the helper node
+- name: Chrony Configuration Block
+  block:
+    - name: Install chrony
+      ansible.builtin.package:
+        name: chrony
+        state: present
 
-# 3. Apply the template (The template now handles the 'if' logic)
-- name: Configure chrony.conf
+    - name: Configure chrony.conf
+      ansible.builtin.template:
+        src: chrony.conf.j2
+        dest: /etc/chrony.conf
+        mode: '0644'
+      notify: Restart Chrony
+
+    - name: Enable and start chronyd
+      ansible.builtin.service:
+        name: chronyd
+        state: started
+        enabled: yes
+  # If the current host is in the helpers group, do it on localhost
+  delegate_to: "{{ 'localhost' if inventory_hostname in groups['helpers'] else inventory_hostname }}"
   become: yes
-  ansible.builtin.template:
-    src: chrony.conf.j2
-    dest: /etc/chrony.conf
-    owner: root
-    group: root
-    mode: '0644'
-  notify: Restart Chrony
-
-- name: Ensure firewalld allows NTP
-  ansible.builtin.firewalld:
-    service: ntp
-    permanent: yes
-    state: enabled
-    immediate: yes
-
-- name: Enable and start chronyd
-  ansible.builtin.service:
-    name: chronyd
-    state: started
-    enabled: yes
