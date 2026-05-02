@@ -38,6 +38,7 @@ else
     echo "--- Step 3: Sourcing environment: ${DEST_DIR}/env_build.sh"
     exit 1
 fi
+echo "source ${DEST_DIR}/env_build.sh"
 source "${DEST_DIR}/env_build.sh"
 
 # Ensure ANSIBLE_CONFIG is set if not already passed in the SSH string
