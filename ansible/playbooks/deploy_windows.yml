@@ -35,6 +35,6 @@
 
 # # STAGE 3: Kubernetes Integration
 # - name: "Stage 3: Join Windows Nodes to Cluster"
-#   hosts: windows_workers
+#   hosts: win_worker_nodes
 #   roles:
 #     - role: win_k8s_join
