@@ -1,6 +1,5 @@
 ---
 # --- INFRASTRUCTURE TASKS (Delegated to KVM via SSH) ---
----
 # We'll use the 'kvm' group directly to avoid context errors
 - name: Ensure floppy tools are on KVM host
   ansible.builtin.package:
