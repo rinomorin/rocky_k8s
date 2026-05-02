@@ -95,7 +95,7 @@
     state: started
     delay: 10
     timeout: 300
-  delegate_to: helper # We run this from the helper node to test connectivity to the VM
+  delegate_to: localhost
 
 - name: Gather facts now that we have connectivity
   ansible.builtin.setup:
