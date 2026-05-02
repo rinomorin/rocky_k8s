@@ -12,22 +12,25 @@
   loop:
     - mtools
     - dosfstools
+    - genisoimage
 
-- name: Create Floppy and Launch Windows VM
+- name: Create Unattend ISO and Launch Windows VM
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
     ansible_connection: ssh
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: |
-    # 1. Define workspace
     VM_NAME="{{ inventory_hostname.split('.')[0] }}"
     IMG_DIR="/var/lib/libvirt/images"
-    FLOPPY_IMG="${IMG_DIR}/${VM_NAME}-unattend.vfd"
-    XML_FILE="autounattend.xml"
+    ISO_IMG="${IMG_DIR}/${VM_NAME}-unattend.iso"
+    CONFIG_DIR="/tmp/${VM_NAME}-config"
 
-    # 2. Create the XML content (Minimal to bypass OOBE and Enable WinRM)
-    cat <<EOF > /tmp/${VM_NAME}-unattend.xml
+    # 1. Setup temporary directory for ISO content
+    mkdir -p ${CONFIG_DIR}
+    
+    # 2. Generate the XML (Same content as before)
+    cat <<EOF > ${CONFIG_DIR}/autounattend.xml
     <?xml version="1.0" encoding="utf-8"?>
     <unattend xmlns="urn:schemas-microsoft-com:unattend">
         <settings pass="specialize">
@@ -63,20 +66,26 @@
                         <Description>Enable WinRM</Description>
                         <Order>2</Order>
                     </SynchronousCommand>
+                    <SynchronousCommand wcm:action="add">
+                        <CommandLine>powershell -Command "New-NetFirewallRule -Name 'AllowWinRM' -DisplayName 'Allow WinRM' -Enabled True -Profile Any -Protocol TCP -LocalPort 5985 -Action Allow"</CommandLine>
+                        <Description>Open Firewall for WinRM</Description>
+                        <Order>3</Order>
+                    </SynchronousCommand>
                 </FirstLogonCommands>
             </component>
         </settings>
     </unattend>
     EOF
 
-    # 3. Create a 1.44MB Floppy Image
-    dd if=/dev/zero of=${FLOPPY_IMG} bs=1k count=1440
-    mkfs.msdos ${FLOPPY_IMG}
+    # 3. Create the ISO
+    genisoimage -output ${ISO_IMG} -volid "OEMUP" -joliet -rock ${CONFIG_DIR}
 
-    # 4. Copy the XML into the Floppy Image using mcopy (from 'mtools')
-    # If mtools isn't installed, we'd have to mount the loop device, which is messier.
-    mcopy -i ${FLOPPY_IMG} /tmp/${VM_NAME}-unattend.xml ::/autounattend.xml
+    # 4. Cleanup temp dir
+    rm -rf ${CONFIG_DIR}
   register: virt_out
+  failed_when: 
+    - virt_out.rc != 0
+    - "'already exists' not in virt_out.stderr"
 
 # ... [Previous tasks: overlay, virt-install, discovery, and set_fact] ...
 
@@ -105,7 +114,7 @@
       --memory 4096 \
       --vcpus 2 \
       --disk path=/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2,format=qcow2 \
-      --disk path=${FLOPPY_IMG},device=floppy \
+      --disk path=${ISO_IMG},device=cdrom \
       --import \
       --os-variant win2k22 \
       --network network=br-nat \
