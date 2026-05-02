@@ -12,10 +12,6 @@
   roles:
     - role: rocky_dns_entries
 
-# ---
-# # 2. Run your environment check playbook
-# - import_playbook: ../check_env.yml
-
 # Build Golden Base (Conditional)
 # 1. Prepare Environment
 - name: Build Kubernet Images

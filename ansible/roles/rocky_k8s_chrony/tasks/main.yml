@@ -1,7 +1,7 @@
 ---
 # 1. Parse the environment variable for NRC servers
 - name: show environment variable for NTP servers
-  shell: env
+  shell: "hostname && env"
   register: env_output
 - debug:
     var: env_output.stdout_lines
