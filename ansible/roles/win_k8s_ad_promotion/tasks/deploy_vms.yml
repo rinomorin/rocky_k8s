@@ -79,7 +79,8 @@
 
     # 3. Create the ISO
     genisoimage -output ${ISO_IMG} -volid "OEMUP" -joliet -rock ${CONFIG_DIR}
-
+    chmod 644 ${ISO_IMG}
+    chown qemu:qemu ${ISO_IMG}
     # 4. Cleanup temp dir
     rm -rf ${CONFIG_DIR}
   register: virt_out
