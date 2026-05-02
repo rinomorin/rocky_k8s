@@ -23,6 +23,7 @@
       --disk path=/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2,format=qcow2 \
       --import \
       --os-variant win2k22 \
+      --network network=br-nat \
       --network network=br-cluster \
       --noautoconsole \
       --wait 0
@@ -34,6 +35,16 @@
   failed_when: 
     - virt_out.rc != 0
     - "'already exists' not in virt_out.stderr"
+
+- name: Verify VM is running on KVM
+  ansible.builtin.command: virsh domstate {{ inventory_hostname.split('.')[0] }}
+  delegate_to: "{{ kvm_ip }}"
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  register: vm_state
+  until: "'running' in vm_state.stdout"
+  retries: 10
+  delay: 5
 
 - name: Wait for WinRM to wake up
   ansible.builtin.wait_for_connection:
