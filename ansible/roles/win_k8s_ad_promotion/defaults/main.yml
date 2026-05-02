@@ -5,3 +5,5 @@ ad_safe_mode_password: "{{ lookup('env', 'admin_set') }}"
 ad_admin_password: "{{ lookup('env', 'secops_pwd') }}"
 # The NetBIOS name (usually the first part of the domain)
 domain_netbios: "win.{{ lookup ('env', 'public_zone') | default('local', true) }}"
+kvm_ip: "{{ lookup('env', 'VM_HOST_IP') | default(groups['kvm'][0], true) }}"
+kvm: "{{ lookup('env', 'VM_HOST') | default(groups['kvm'][0], true) }}"
