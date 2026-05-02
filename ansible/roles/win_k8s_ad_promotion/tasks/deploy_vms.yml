@@ -37,7 +37,7 @@
     - "'already exists' not in virt_out.stderr"
 
 - name: Verify VM is running on KVM
-  ansible.builtin.command: virsh domstate {{ inventory_hostname.split('.')[0] }}
+  ansible.builtin.shell: virsh domstate {{ inventory_hostname.split('.')[0] }}
   delegate_to: "{{ kvm_ip }}"
   vars:
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
