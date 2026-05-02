@@ -8,9 +8,6 @@
   run_once: true
   changed_when: false
 
-- name: Gather facts now that connectivity is verified
-  ansible.builtin.setup:
-
 - name: Create QCOW2 overlay for Windows Worker
   ansible.builtin.command: >
     qemu-img create -f qcow2 
