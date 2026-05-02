@@ -25,6 +25,7 @@
 - name: "Stage 1b: Build Windows AD Forest"
   gather_facts: false
   hosts: win_worker_nodes
+  become: false
   roles:
     - role: win_k8s_ad_promotion
 
