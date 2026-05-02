@@ -1,5 +1,6 @@
 ---
-# We use the first host in the 'kvm' group as our orchestration target
+# --- INFRASTRUCTURE TASKS (Delegated to KVM via SSH) ---
+
 - name: Create QCOW2 overlay for Windows Worker
   ansible.builtin.command: >
     qemu-img create -f qcow2 
@@ -9,10 +10,10 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
-    # Explicitly pull the user for the KVM host to avoid 'core' vs 'secops' mixups
+    ansible_connection: ssh
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   # args:
-  #   creates: "/var/lib/libvirt/images/{{ inventory_hostname }}.qcow2"
+  #   creates: "/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2"
 
 - name: Define and Launch Windows VM via virt-install
   ansible.builtin.shell: |
@@ -30,6 +31,7 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
+    ansible_connection: ssh
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   register: virt_out
   failed_when: 
@@ -39,30 +41,40 @@
 - name: Verify VM is running on KVM
   ansible.builtin.shell: virsh domstate {{ inventory_hostname.split('.')[0] }}
   delegate_to: "{{ kvm_ip }}"
+  become: yes
   vars:
+    ansible_connection: ssh
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   register: vm_state
-  become: yes
   until: "'running' in vm_state.stdout"
   retries: 10
   delay: 5
 
 - name: 1.1 - Discover Maintenance IP from br-nat
-  vars:
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   ansible.builtin.shell: |
     M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
     while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
   delegate_to: "{{ kvm_ip }}"
-  register: maintenance_ip_raw
   become: yes
-  retries: 10
-  delay: 5
+  vars:
+    ansible_connection: ssh
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  register: maintenance_ip_raw
 
-- name: Set Maintenance IP fact
-  set_fact:
-    maintenance_ip: "{{ maintenance_ip_raw.stdout }}"
+# --- GUEST TRANSITION ---
+
+- name: Set Maintenance IP and WinRM connectivity facts
+  ansible.builtin.set_fact:
+    ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
+    ansible_connection: winrm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_winrm_transport: ntlm
+
+- name: Wait for WinRM to wake up
+  ansible.builtin.wait_for_connection:
+    delay: 20
+    timeout: 300
 
 - name: Gather facts now that we have connectivity
   ansible.builtin.setup:
