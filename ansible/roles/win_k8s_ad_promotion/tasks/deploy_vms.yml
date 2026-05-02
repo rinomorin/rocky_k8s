@@ -69,12 +69,23 @@
     ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
     ansible_connection: winrm
     ansible_winrm_server_cert_validation: ignore
+    ansible_winrm_transport: ntlmt
+
+- name: Set Maintenance IP fact
+  ansible.builtin.set_fact:
+    ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
+    ansible_connection: winrm
+    ansible_winrm_server_cert_validation: ignore
     ansible_winrm_transport: ntlm
 
-- name: Wait for WinRM to wake up
-  ansible.builtin.wait_for_connection:
-    delay: 20
+- name: Wait for WinRM port (5985) to become available
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host }}"
+    port: 5985
+    state: started
+    delay: 10
     timeout: 300
+  delegate_to: helper # We run this from the helper node to test connectivity to the VM
 
 - name: Gather facts now that we have connectivity
   ansible.builtin.setup:
