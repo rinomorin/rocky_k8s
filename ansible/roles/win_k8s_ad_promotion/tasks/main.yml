@@ -1,4 +1,9 @@
 ---
+- name: Prossing Windows AD Promotion with Immutable Principles
+  debug:
+    msg: |
+      processing Windows AD Promotion for {{ inventory_hostname }} with immutable-style approach.
+
 - name: Windows Immutable-Style Initialization
   block:
     # --- STEP 1: LICENSING & EDITION ---
