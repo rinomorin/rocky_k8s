@@ -1,5 +1,79 @@
 ---
 # --- INFRASTRUCTURE TASKS (Delegated to KVM via SSH) ---
+- name: Ensure floppy tools are on KVM host
+  ansible.builtin.package:
+    name:
+      - dosfstools
+      - mtools
+    state: present
+  delegate_to: "{{ kvm_ip }}"
+  become: yes
+
+- name: Create Floppy and Launch Windows VM
+  delegate_to: "{{ kvm_ip }}"
+  become: yes
+  vars:
+    ansible_connection: ssh
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  shell: |
+    # 1. Define workspace
+    VM_NAME="{{ inventory_hostname.split('.')[0] }}"
+    IMG_DIR="/var/lib/libvirt/images"
+    FLOPPY_IMG="${IMG_DIR}/${VM_NAME}-unattend.vfd"
+    XML_FILE="autounattend.xml"
+
+    # 2. Create the XML content (Minimal to bypass OOBE and Enable WinRM)
+    cat <<EOF > /tmp/${VM_NAME}-unattend.xml
+    <?xml version="1.0" encoding="utf-8"?>
+    <unattend xmlns="urn:schemas-microsoft-com:unattend">
+        <settings pass="specialize">
+            <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+                <ComputerName>${VM_NAME}</ComputerName>
+            </component>
+        </settings>
+        <settings pass="oobeSystem">
+            <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+                <OOBE>
+                    <HideEULAPage>true</HideEULAPage>
+                    <HideLocalAdministrationPage>true</HideLocalAdministrationPage>
+                    <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+                    <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+                    <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+                    <NetworkLocation>Work</NetworkLocation>
+                    <ProtectYourPC>1</ProtectYourPC>
+                </OOBE>
+                <UserAccounts>
+                    <AdministratorPassword>
+                        <Value>{{ ad_admin_password }}</Value>
+                        <PlainText>true</PlainText>
+                    </AdministratorPassword>
+                </UserAccounts>
+                <FirstLogonCommands>
+                    <SynchronousCommand wcm:action="add">
+                        <CommandLine>powershell -Command "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Force"</CommandLine>
+                        <Description>Set Execution Policy</Description>
+                        <Order>1</Order>
+                    </SynchronousCommand>
+                    <SynchronousCommand wcm:action="add">
+                        <CommandLine>powershell -Command "winrm quickconfig -force; winrm set winrm/config/service/auth '@{Basic=\"true\"}'; winrm set winrm/config/service '@{AllowUnencrypted=\"true\"}'"</CommandLine>
+                        <Description>Enable WinRM</Description>
+                        <Order>2</Order>
+                    </SynchronousCommand>
+                </FirstLogonCommands>
+            </component>
+        </settings>
+    </unattend>
+    EOF
+
+    # 3. Create a 1.44MB Floppy Image
+    dd if=/dev/zero of=${FLOPPY_IMG} bs=1k count=1440
+    mkfs.msdos ${FLOPPY_IMG}
+
+    # 4. Copy the XML into the Floppy Image using mcopy (from 'mtools')
+    # If mtools isn't installed, we'd have to mount the loop device, which is messier.
+    mcopy -i ${FLOPPY_IMG} /tmp/${VM_NAME}-unattend.xml ::/autounattend.xml
+  register: virt_out
+
 # ... [Previous tasks: overlay, virt-install, discovery, and set_fact] ...
 
 - name: Install pywinrm on control node via shell
@@ -19,8 +93,6 @@
   vars:
     ansible_connection: ssh
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-  # args:
-  #   creates: "/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2"
 
 - name: Define and Launch Windows VM via virt-install
   ansible.builtin.shell: |
@@ -29,6 +101,7 @@
       --memory 4096 \
       --vcpus 2 \
       --disk path=/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2,format=qcow2 \
+      --disk path=${FLOPPY_IMG},device=floppy \
       --import \
       --os-variant win2k22 \
       --network network=br-nat \
