@@ -7,7 +7,7 @@
     -b /var/lib/libvirt/images/ws2022-gold.vhd 
     /var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2
   delegate_to: "{{ kvm_ip }}"
-  delegate_facts: true
+  become: yes
   vars:
     # Explicitly pull the user for the KVM host to avoid 'core' vs 'secops' mixups
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
@@ -27,7 +27,7 @@
       --noautoconsole \
       --wait 0
   delegate_to: "{{ kvm_ip }}"
-  delegate_facts: true
+  become: yes
   vars:
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   register: virt_out
