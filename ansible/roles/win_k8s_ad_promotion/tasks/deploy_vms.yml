@@ -72,14 +72,9 @@
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   register: maintenance_ip_raw
 
+- debug:
+    msg: "Discovered Maintenance IP for {{ inventory_hostname }}: {{ maintenance_ip_raw.stdout }}"
 # --- GUEST TRANSITION ---
-
-- name: Set Maintenance IP and WinRM connectivity facts
-  ansible.builtin.set_fact:
-    ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
-    ansible_connection: winrm
-    ansible_winrm_server_cert_validation: ignore
-    ansible_winrm_transport: ntlmt
 
 - name: Set Maintenance IP fact
   ansible.builtin.set_fact:
