@@ -1,0 +1,67 @@
+---
+- name: Windows Immutable-Style Initialization
+  block:
+    # --- STEP 1: LICENSING & EDITION ---
+    - name: Convert Eval to Licensed Standard Core
+      ansible.windows.win_shell: |
+        dism /online /set-edition:ServerStandardCor /productkey:{{ win_oem_key }} /accepteula
+      register: dism_result
+      failed_when: 
+        - dism_result.rc != 0 
+        - dism_result.rc != 3010 # 3010 means success, but reboot required
+      changed_when: dism_result.rc == 3010
+
+    - name: Reboot to finalize licensing
+      ansible.windows.win_reboot:
+      when: dism_result.changed
+
+    # --- STEP 2: NETWORKING & TIME ---
+    - name: Set DNS to Helper
+      ansible.windows.win_dns_client:
+        adapter_names: '*'
+        ipv4_addresses:
+          - "{{ hostvars['helper']['provision_ip'] }}"
+
+    - name: Configure Time Sync to Helper
+      ansible.windows.win_shell: |
+        w32tm /config /manualpeerlist:"{{ hostvars['helper']['provision_ip'] }}" /syncfromflags:manual /reliable:YES /update
+        Restart-Service w32time
+
+    # --- STEP 3: AD PROMOTION ---
+    - name: Install AD Features (Core)
+      ansible.windows.win_feature:
+        name: AD-Domain-Services
+        include_management_tools: no # Keeping it minimal (Core)
+        state: present
+
+    - name: Create Forest (Primary DC)
+      microsoft.ad.domain:
+        dns_domain_name: "acme.local" # Generic placeholder
+        safe_mode_password: "{{ ad_safe_mode_password }}"
+        install_dns: yes
+        database_path: C:\Windows\NTDS
+      register: forest_creation
+      when: inventory_hostname == groups['win_worker_nodes'][0]
+
+    - name: Post-Promotion Cleanup (Reduce Footprint)
+      ansible.windows.win_shell: |
+        Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
+ 
+    - name: Join Replica DC
+      microsoft.ad.membership:
+        dns_domain_name: "acme.local"
+        domain_admin_user: "Administrator@acme.local"
+        domain_admin_password: "{{ ad_admin_password }}"
+        state: domain
+      register: replica_join
+      when: inventory_hostname == groups['win_worker_nodes'][1]
+
+  rescue:
+    - name: Alert on Failure
+      debug:
+        msg: "Promotion failed. Since we are following immutable principles, destroy the VM and re-provision."
+
+  always:
+    - name: Final Reboot
+      ansible.windows.win_reboot:
+      when: forest_creation.changed or replica_join.changed
