@@ -253,28 +253,6 @@
   register: node_connet
   loop: "{{ groups['hahost'] | default([]) }}"
 
-# - name: 6.1 - Reassign KVM Maintenance Interface to Black-Hole
-#   vars:
-#     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
-#   become: yes
-#   shell: |
-#     VM_NAME="{{ item.split('.')[0] }}"
-#     # 1. Get the MAC address of the interface currently on br-nat
-#     M_MAC=$(virsh domiflist $VM_NAME | grep 'br-nat' | awk '{print $5}')
-    
-#     if [ ! -z "$M_MAC" ]; then
-#       # 2. Update the live configuration to move to black-hole
-#       # We use --config for persistence and --live for immediate effect
-#       virsh update-device $VM_NAME /dev/stdin --live --config <<EOF
-#     <interface type='network'>
-#       <mac address='$M_MAC'/>
-#       <source network='black-hole'/>
-#       <model type='virtio'/>
-#     </interface>
-#     EOF
-#     fi
-#   loop: "{{ groups['hahost'] | default([]) }}"
-
 - name: Verify SSH reachability on Static IPs
   become: false
   wait_for:
