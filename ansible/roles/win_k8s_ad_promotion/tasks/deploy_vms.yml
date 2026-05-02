@@ -76,12 +76,12 @@
     msg: "Discovered Maintenance IP for {{ inventory_hostname }}: {{ maintenance_ip_raw.stdout }}"
 # --- GUEST TRANSITION ---
 
-- name: Set Maintenance IP fact
-  ansible.builtin.set_fact:
-    ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
-    ansible_connection: winrm
-    ansible_winrm_server_cert_validation: ignore
-    ansible_winrm_transport: ntlm
+# - name: Set Maintenance IP fact
+#   ansible.builtin.set_fact:
+#     ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
+#     ansible_connection: winrm
+#     ansible_winrm_server_cert_validation: ignore
+#     ansible_winrm_transport: ntlm
 
 - name: Wait for WinRM port (5985) to become available
   ansible.builtin.wait_for:
