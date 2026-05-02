@@ -47,10 +47,22 @@
   retries: 10
   delay: 5
 
-- debug:
-    msg: "VM {{ inventory_hostname }} is in state: {{ vm_state.stdout }}"
+- name: 1.1 - Discover Maintenance IP from br-nat
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  ansible.builtin.shell: |
+    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
+    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+  delegate_to: "{{ kvm_ip }}"
+  register: maintenance_ip_raw
+  become: yes
+  retries: 10
+  delay: 5
 
-- name: Wait for WinRM to wake up
-  ansible.builtin.wait_for_connection:
-    delay: 20
-    timeout: 300
+- name: Set Maintenance IP fact
+  set_fact:
+    maintenance_ip: "{{ maintenance_ip_raw.stdout }}"
+
+- name: Gather facts now that we have connectivity
+  ansible.builtin.setup:
