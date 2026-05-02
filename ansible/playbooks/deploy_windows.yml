@@ -23,7 +23,7 @@
 
 # STAGE 1b: Windows Infrastructure - AD Creation
 - name: "Stage 1b: Build Windows AD Forest"
-  hosts: windows_workers
+  hosts: win_worker_nodes
   roles:
     - role: win_k8s_ad_promotion
 
