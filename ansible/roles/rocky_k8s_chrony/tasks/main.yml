@@ -1,16 +1,9 @@
 ---
 # 1. Parse the environment variable for NRC servers
-- name: show environment variable for NTP servers
-  delegate_to: localhost
-  shell: "env"
-  register: env_output
-- debug:
-    var: env_output.stdout_lines
-
 - name: Unified NTP parsing
   ansible.builtin.set_fact:
     # We take the input from either Extra Vars OR the Env Lookup
-    raw_ntp: "{{ nrc_ntp_list | default(lookup('env', 'ntp_servers')) | default('time.nrc.ca,time.chu.nrc.ca', true) }}"
+    raw_ntp: "{{ ntp_servers | default(lookup('env', 'ntp_servers')) | default('time.nrc.ca,time.chu.nrc.ca', true) }}"
 
 - name: Final List Conversion
   ansible.builtin.set_fact:
