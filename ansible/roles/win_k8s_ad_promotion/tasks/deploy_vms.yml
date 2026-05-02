@@ -90,7 +90,7 @@
 
 - name: Wait for WinRM port (5985) to become available
   ansible.builtin.wait_for:
-    host: "{{ ansible_host }}"
+    host: "{{ maintenance_ip_raw.stdout | trim }}"
     port: 5985
     state: started
     delay: 10
