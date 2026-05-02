@@ -41,7 +41,7 @@
 
     - name: Create Forest (Primary DC)
       microsoft.ad.domain:
-        dns_domain_name: "acme.local" # Generic placeholder
+        dns_domain_name: "{{ domain_netbios }}" # Generic placeholder
         safe_mode_password: "{{ ad_safe_mode_password }}"
         install_dns: yes
         database_path: C:\Windows\NTDS
@@ -54,8 +54,8 @@
  
     - name: Join Replica DC
       microsoft.ad.membership:
-        dns_domain_name: "acme.local"
-        domain_admin_user: "Administrator@acme.local"
+        dns_domain_name: "{{ domain_netbios }}" # Generic placeholder
+        domain_admin_user: "Administrator@{{ domain_netbios }}"
         domain_admin_password: "{{ ad_admin_password }}"
         state: domain
       register: replica_join
