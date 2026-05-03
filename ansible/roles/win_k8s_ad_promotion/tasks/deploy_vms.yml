@@ -28,15 +28,38 @@
     cat <<EOF > "${CONFIG_DIR}/autounattend.xml"
     <?xml version="1.0" encoding="utf-8"?>
     <unattend xmlns="urn:schemas-microsoft-com:unattend">
+        <!-- 1. Handle language during initial boot/disk setup -->
+        <settings pass="windowsPE">
+            <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+                <SetupUILanguage>
+                    <UILanguage>en-US</UILanguage>
+                </SetupUILanguage>
+                <InputLocale>en-CA</InputLocale>
+                <SystemLocale>en-CA</SystemLocale>
+                <UILanguage>en-US</UILanguage>
+                <UserLocale>en-CA</UserLocale>
+            </component>
+        </settings>
         <settings pass="specialize">
             <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
                 <ComputerName>{{ short_name }}</ComputerName>
             </component>
         </settings>
         <settings pass="oobeSystem">
+            <!-- 2. Handle language/region during the final setup screen -->
+            <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+                <InputLocale>en-CA</InputLocale>
+                <SystemLocale>en-CA</SystemLocale>
+                <UILanguage>en-US</UILanguage>
+                <UserLocale>en-CA</UserLocale>
+            </component>
             <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
                 <OOBE>
                     <HideEULAPage>true</HideEULAPage>
+                    <HideLocalAdministrationPage>true</HideLocalAdministrationPage>
+                    <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+                    <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+                    <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
                     <NetworkLocation>Work</NetworkLocation>
                     <ProtectYourPC>1</ProtectYourPC>
                 </OOBE>
