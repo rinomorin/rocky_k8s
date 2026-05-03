@@ -14,6 +14,7 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
     short_name: "{{ inventory_hostname.split('.')[0] }}"
   shell: |
     ISO_IMG="/var/lib/libvirt/images/{{ short_name }}-unattend.iso"
