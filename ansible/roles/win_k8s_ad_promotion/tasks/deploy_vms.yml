@@ -1,35 +1,27 @@
 ---
 # --- INFRASTRUCTURE TASKS (Delegated to KVM via SSH) ---
-# We'll use the 'kvm' group directly to avoid context errors
-- name: Ensure floppy tools are on KVM host
+- name: Ensure ISO tools are on KVM host
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
     ansible_connection: ssh
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-  shell: |
-    yum list installed {{ item }} || yum install -y --nobest {{ item }}
-  loop:
-    - mtools
-    - dosfstools
-    - genisoimage
+  yum:
+    name: [mtools, dosfstools, genisoimage]
+    state: present
 
-- name: Create Unattend ISO and Launch Windows VM
+- name: Create Unattend ISO
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
     ansible_connection: ssh
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: |
     VM_NAME="{{ inventory_hostname.split('.')[0] }}"
     IMG_DIR="/var/lib/libvirt/images"
     ISO_IMG="${IMG_DIR}/${VM_NAME}-unattend.iso"
     CONFIG_DIR="/tmp/${VM_NAME}-config"
 
-    # 1. Setup temporary directory for ISO content
     mkdir -p ${CONFIG_DIR}
     
-    # 2. Generate the XML (Same content as before)
     cat <<EOF > ${CONFIG_DIR}/autounattend.xml
     <?xml version="1.0" encoding="utf-8"?>
     <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -42,139 +34,81 @@
             <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
                 <OOBE>
                     <HideEULAPage>true</HideEULAPage>
-                    <HideLocalAdministrationPage>true</HideLocalAdministrationPage>
-                    <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
-                    <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
-                    <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
                     <NetworkLocation>Work</NetworkLocation>
                     <ProtectYourPC>1</ProtectYourPC>
                 </OOBE>
-                <UserAccounts>
-                    <AdministratorPassword>
-                        <Value>{{ ad_admin_password }}</Value>
-                        <PlainText>true</PlainText>
-                    </AdministratorPassword>
-                </UserAccounts>
-                <FirstLogonCommands>
-                    <SynchronousCommand wcm:action="add">
-                        <CommandLine>powershell -Command "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Force"</CommandLine>
-                        <Description>Set Execution Policy</Description>
-                        <Order>1</Order>
-                    </SynchronousCommand>
-                    <SynchronousCommand wcm:action="add">
-                        <CommandLine>powershell -Command "winrm quickconfig -force; winrm set winrm/config/service/auth '@{Basic=\"true\"}'; winrm set winrm/config/service '@{AllowUnencrypted=\"true\"}'"</CommandLine>
-                        <Description>Enable WinRM</Description>
-                        <Order>2</Order>
-                    </SynchronousCommand>
-                    <SynchronousCommand wcm:action="add">
-                        <CommandLine>powershell -Command "New-NetFirewallRule -Name 'AllowWinRM' -DisplayName 'Allow WinRM' -Enabled True -Profile Any -Protocol TCP -LocalPort 5985 -Action Allow"</CommandLine>
-                        <Description>Open Firewall for WinRM</Description>
-                        <Order>3</Order>
-                    </SynchronousCommand>
-                </FirstLogonCommands>
+                <!-- No need to create core user here, it's already in the gold image -->
             </component>
         </settings>
     </unattend>
     EOF
 
-    # 3. Create the ISO
     genisoimage -output ${ISO_IMG} -volid "OEMUP" -joliet -rock ${CONFIG_DIR}
     chmod 644 ${ISO_IMG}
     chown qemu:qemu ${ISO_IMG}
-    # 4. Cleanup temp dir
     rm -rf ${CONFIG_DIR}
-  register: virt_out
-  failed_when: 
-    - virt_out.rc != 0
-    - "'already exists' not in virt_out.stderr"
-
-# ... [Previous tasks: overlay, virt-install, discovery, and set_fact] ...
-
-- name: Install pywinrm on control node via shell
-  ansible.builtin.shell: "{{ ansible_playbook_python }} -m pip install pywinrm"
-  delegate_to: localhost
-  run_once: true
-  changed_when: false
 
 - name: Create QCOW2 overlay for Windows Worker
-  ansible.builtin.command: >
-    qemu-img create -f qcow2 
-    -F vpc 
-    -b /var/lib/libvirt/images/ws2022-gold.vhd 
-    /var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
     ansible_connection: ssh
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  command: >
+    qemu-img create -f qcow2 
+    -F qcow2
+    -b /var/lib/libvirt/images/ws2022-gold.qcow2 
+    /var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2
 
-- name: Define and Launch Windows VM via virt-install
-  ansible.builtin.shell: |
+- name: Define and Launch Windows VM
+  delegate_to: "{{ kvm_ip }}"
+  become: yes
+  shell: |
     virt-install \
       --name {{ inventory_hostname.split('.')[0] }} \
       --memory 4096 \
       --vcpus 2 \
       --disk path=/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2,format=qcow2 \
-      --disk path=${ISO_IMG},device=cdrom \
+      --disk path=/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}-unattend.iso,device=cdrom \
       --import \
       --os-variant win2k22 \
       --network network=br-nat \
       --network network=br-cluster \
       --noautoconsole \
       --wait 0
+
+- name: Discover Maintenance IP
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
     ansible_connection: ssh
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-  register: virt_out
-  failed_when: 
-    - virt_out.rc != 0
-    - "'already exists' not in virt_out.stderr"
-
-- name: Verify VM is running on KVM
-  ansible.builtin.shell: virsh domstate {{ inventory_hostname.split('.')[0] }}
-  delegate_to: "{{ kvm_ip }}"
-  become: yes
-  vars:
-    ansible_connection: ssh
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-  register: vm_state
-  until: "'running' in vm_state.stdout"
-  retries: 10
-  delay: 5
-
-- name: 1.1 - Discover Maintenance IP from br-nat
-  ansible.builtin.shell: |
+  shell: |
     M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
-    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 5; done
     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
-  delegate_to: "{{ kvm_ip }}"
-  become: yes
-  vars:
-    ansible_connection: ssh
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   register: maintenance_ip_raw
+  retries: 20
+  delay: 10
 
-- debug:
-    msg: "Discovered Maintenance IP for {{ inventory_hostname }}: {{ maintenance_ip_raw.stdout }}"
-# --- GUEST TRANSITION ---
-
-- name: Set Maintenance IP fact
+# --- GUEST TRANSITION (Now using SSH) ---
+- name: Set SSH facts for Windows
   ansible.builtin.set_fact:
     ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
-    ansible_connection: winrm
-    ansible_winrm_server_cert_validation: ignore
-    ansible_winrm_transport: ntlm
+    ansible_connection: ssh
+    ansible_user: core
+    ansible_password: "On32Build4SysAdmin"
+    ansible_shell_type: powershell
+    # Bypass OpenSSL 3 legacy restrictions on Rocky Linux
+    ansible_ssh_common_args: '-o "SetEnv OPENSSL_CONF=/dev/null"' 
+ 
 
-- name: Wait for WinRM port (5985) to become available
+- name: Wait for SSH port (22) to become available
   ansible.builtin.wait_for:
     host: "{{ maintenance_ip_raw.stdout | trim }}"
-    port: 5985
+    port: 22
     state: started
-    delay: 10
-    timeout: 300
+    delay: 30
+    timeout: 600
   delegate_to: localhost
 
-- name: Gather facts now that we have connectivity
+- name: Gather facts via SSH
   ansible.builtin.setup:

@@ -2,9 +2,10 @@
 - name: Windows Immutable-Style Initialization
   block:
     # --- STEP 1: LICENSING ---
+    # Note: If your Golden Image is already licensed/converted, this can be skipped.
     - name: Convert Eval to Licensed Standard Core
       ansible.windows.win_shell: |
-        dism /online /set-edition:ServerStandardCor /productkey:{{ win_oem_key }} /accepteula
+        dism /online /set-edition:ServerStandardCor /productkey:{{ win_oem_key }} /accepteula /norestart
       register: dism_result
       failed_when: 
         - dism_result.rc != 0 
@@ -13,22 +14,31 @@
 
     - name: Reboot to finalize licensing
       ansible.windows.win_reboot:
-      when: dism_result.changed | default(false)
+      when: dism_result.changed
 
     # --- STEP 2: NETWORKING & AD ---
     - name: Create Forest (Primary DC)
       microsoft.ad.domain:
-        dns_domain_name: "acme.local"
+        dns_domain_name: "{{ domain_netbios }}"
         safe_mode_password: "{{ ad_safe_mode_password }}"
         install_dns: yes
+        database_path: C:\Windows\NTDS
       register: forest_creation
       when: inventory_hostname == groups['win_worker_nodes'][0]
 
+    # --- STEP 3: ACCOUNT MIGRATION FIX ---
+    # After promotion, the local 'core' user becomes 'ACME\core'
+    - name: Update Ansible User to Domain Context
+      set_fact:
+        ansible_user: "core@{{ domain_netbios }}"
+      when: forest_creation.changed
+
     - name: Join Replica DC
       microsoft.ad.membership:
-        dns_domain_name: "acme.local"
-        domain_admin_user: "Administrator@acme.local"
-        domain_admin_password: "{{ ad_admin_password }}"
+        dns_domain_name: "{{ domain_netbios }}"
+        # Use our 'core' user which is now a Domain Admin (once added to the group)
+        domain_admin_user: "core@{{ domain_netbios }}"
+        domain_admin_password: "{{ ansible_password }}"
         state: domain
       register: replica_join
       when: inventory_hostname == groups['win_worker_nodes'][1]
@@ -36,7 +46,7 @@
   rescue:
     - name: Alert on Failure
       debug:
-        msg: "Deployment failed. Ensure 'become_method: runas' is set in the playbook header."
+        msg: "Deployment failed. Check if 'ansible_shell_type: powershell' is set."
 
   always:
     - name: Final Reboot
