@@ -1,68 +1,10 @@
 ---
 # --- INFRASTRUCTURE TASKS (Delegated to KVM via SSH) ---
-- name: Ensure ISO tools are on KVM host
-  delegate_to: "{{ kvm_ip }}"
-  become: yes
-  vars:
-    # ansible_connection: ssh
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-  yum:
-    name: [mtools, dosfstools, genisoimage]
-    state: present
-
-# - name: Create Unattend ISO
-#   delegate_to: "{{ kvm_ip }}"
-#   become: yes
-#   vars:
-#     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-#     short_name: "{{ inventory_hostname.split('.')[0] }}"
-#   shell: |
-#     ISO_IMG="/var/lib/libvirt/images/{{ short_name }}-unattend.iso"
-#     CONFIG_DIR="/tmp/{{ short_name }}-config"
-#     mkdir -p "${CONFIG_DIR}"
-    
-#     # Generate autounattend.xml with windowsPE (skips "Hi there") and oobeSystem (skips OOBE)
-#     cat <<EOF > "${CONFIG_DIR}/autounattend.xml"
-#     <?xml version="1.0" encoding="utf-8"?>
-#     <unattend xmlns="urn:schemas-microsoft-com:unattend">
-#         <!-- Pass 1: Locale settings bypass "Hi there" -->
-#         <settings pass="windowsPE">
-#             <component name="Microsoft-Windows-International-Core-WinPE" ...>
-#                 <InputLocale>en-CA</InputLocale>
-#                 <SystemLocale>en-CA</SystemLocale>
-#                 <UILanguage>en-US</UILanguage>
-#                 <UserLocale>en-CA</UserLocale>
-#             </component>
-#         </settings>
-#         <!-- Pass 7: OOBE bypass and AutoLogon -->
-#         <settings pass="oobeSystem">
-#             <component name="Microsoft-Windows-Shell-Setup" ...>
-#                 <OOBE>
-#                     <HideEULAPage>true</HideEULAPage>
-#                     <HideLocalAdministrationPage>true</HideLocalAdministrationPage>
-#                     <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
-#                 </OOBE>
-#                 <AutoLogon>
-#                     <Username>core</Username>
-#                     <Password><Value>On32Build4SysAdmin</Value><PlainText>true</PlainText></Password>
-#                     <Enabled>true</Enabled>
-#                 </AutoLogon>
-#             </component>
-#         </settings>
-#     </unattend>
-#     EOF
-#     genisoimage -output "${ISO_IMG}" -volid "OEMUP" -joliet -rock "${CONFIG_DIR}"
-#     rm -rf "${CONFIG_DIR}"
-
-
-
-
 - name: Create QCOW2 overlay for Windows Worker
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-    ansible_connection: ssh
   command: >
     qemu-img create -f qcow2 
     -F qcow2
@@ -74,7 +16,6 @@
   become: yes
   vars:
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-    ansible_connection: ssh
   shell: |
     virt-install \
       --name {{ inventory_hostname.split('.')[0] }} \
@@ -92,15 +33,16 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
-    ansible_connection: ssh
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: |
     M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
-    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 5; done
+    # We increased the wait time here because DHCP won't trigger until 
+    # the human passes the initial OOBE screens.
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 10; done
     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
   register: maintenance_ip_raw
-  retries: 20
-  delay: 10
+  retries: 50
+  delay: 20
 
 # --- GUEST TRANSITION (Now using SSH) ---
 - name: Set SSH facts for Windows
@@ -110,17 +52,17 @@
     ansible_user: core
     ansible_password: "{{ lookup('env', 'secops_pwd') }}"
     ansible_shell_type: powershell
-    # Bypass OpenSSL 3 legacy restrictions on Rocky Linux
+    # Required for Rocky Linux / OpenSSL 3 compatibility
     ansible_ssh_common_args: '-o "SetEnv OPENSSL_CONF=/dev/null"' 
- 
 
-- name: Wait for SSH port (22) to become available
+- name: Wait for SSH (Human Intervention Required)
   ansible.builtin.wait_for:
     host: "{{ maintenance_ip_raw.stdout | trim }}"
     port: 22
     state: started
     delay: 30
-    timeout: 600
+    # Increased timeout to 30 minutes to allow time for the human to interact
+    timeout: 1800 
   delegate_to: localhost
 
 - name: Gather facts via SSH
