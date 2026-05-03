@@ -14,9 +14,7 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-    ansible_connection: ssh
-    # Extract the short hostname outside the shell block to avoid quote nesting errors
+    ansible_user: "{{ hostvars['kvmdc01']['ansible_user'] }}"
     short_name: "{{ inventory_hostname.split('.')[0] }}"
   shell: |
     IMG_DIR="/var/lib/libvirt/images"
@@ -28,7 +26,7 @@
     cat <<EOF > "${CONFIG_DIR}/autounattend.xml"
     <?xml version="1.0" encoding="utf-8"?>
     <unattend xmlns="urn:schemas-microsoft-com:unattend">
-        <!-- 1. Handle language during initial boot/disk setup -->
+        <!-- Pass 1: Handles the very first 'Language' screen on boot -->
         <settings pass="windowsPE">
             <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
                 <SetupUILanguage>
@@ -40,13 +38,16 @@
                 <UserLocale>en-CA</UserLocale>
             </component>
         </settings>
+
+        <!-- Pass 4: Sets the Computer Name -->
         <settings pass="specialize">
             <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
                 <ComputerName>{{ short_name }}</ComputerName>
             </component>
         </settings>
+
+        <!-- Pass 7: Handles Region, EULA, and Account creation screens -->
         <settings pass="oobeSystem">
-            <!-- 2. Handle language/region during the final setup screen -->
             <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
                 <InputLocale>en-CA</InputLocale>
                 <SystemLocale>en-CA</SystemLocale>
@@ -63,6 +64,16 @@
                     <NetworkLocation>Work</NetworkLocation>
                     <ProtectYourPC>1</ProtectYourPC>
                 </OOBE>
+                <!-- This skips the 'Who is going to use this PC' prompt -->
+                <AutoLogon>
+                    <Password>
+                        <Value>{{ lookup('env', 'secops_pwd') }}</Value>
+                        <PlainText>true</PlainText>
+                    </Password>
+                    <Enabled>true</Enabled>
+                    <Username>core</Username>
+                    <LogonCount>1</LogonCount>
+                </AutoLogon>
             </component>
         </settings>
     </unattend>
@@ -72,6 +83,7 @@
     chmod 644 "${ISO_IMG}"
     chown qemu:qemu "${ISO_IMG}"
     rm -rf "${CONFIG_DIR}"
+
 
 - name: Create QCOW2 overlay for Windows Worker
   delegate_to: "{{ kvm_ip }}"
