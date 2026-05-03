@@ -12,8 +12,6 @@
 - name: Create Unattend ISO
   delegate_to: "{{ kvm_ip }}"
   become: yes
-  vars:
-    ansible_connection: ssh
   shell: |
     VM_NAME="{{ inventory_hostname.split('.')[0] }}"
     IMG_DIR="/var/lib/libvirt/images"
