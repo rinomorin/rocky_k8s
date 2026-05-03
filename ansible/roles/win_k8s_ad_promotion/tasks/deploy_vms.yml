@@ -14,75 +14,45 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
-    ansible_user: "{{ hostvars['kvmdc01']['ansible_user'] }}"
     short_name: "{{ inventory_hostname.split('.')[0] }}"
   shell: |
-    IMG_DIR="/var/lib/libvirt/images"
-    ISO_IMG="${IMG_DIR}/{{ short_name }}-unattend.iso"
+    ISO_IMG="/var/lib/libvirt/images/{{ short_name }}-unattend.iso"
     CONFIG_DIR="/tmp/{{ short_name }}-config"
-
     mkdir -p "${CONFIG_DIR}"
     
+    # Generate autounattend.xml with windowsPE (skips "Hi there") and oobeSystem (skips OOBE)
     cat <<EOF > "${CONFIG_DIR}/autounattend.xml"
     <?xml version="1.0" encoding="utf-8"?>
     <unattend xmlns="urn:schemas-microsoft-com:unattend">
-        <!-- Pass 1: Handles the very first 'Language' screen on boot -->
+        <!-- Pass 1: Locale settings bypass "Hi there" -->
         <settings pass="windowsPE">
-            <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-                <SetupUILanguage>
-                    <UILanguage>en-US</UILanguage>
-                </SetupUILanguage>
+            <component name="Microsoft-Windows-International-Core-WinPE" ...>
                 <InputLocale>en-CA</InputLocale>
                 <SystemLocale>en-CA</SystemLocale>
                 <UILanguage>en-US</UILanguage>
                 <UserLocale>en-CA</UserLocale>
             </component>
         </settings>
-
-        <!-- Pass 4: Sets the Computer Name -->
-        <settings pass="specialize">
-            <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-                <ComputerName>{{ short_name }}</ComputerName>
-            </component>
-        </settings>
-
-        <!-- Pass 7: Handles Region, EULA, and Account creation screens -->
+        <!-- Pass 7: OOBE bypass and AutoLogon -->
         <settings pass="oobeSystem">
-            <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-                <InputLocale>en-CA</InputLocale>
-                <SystemLocale>en-CA</SystemLocale>
-                <UILanguage>en-US</UILanguage>
-                <UserLocale>en-CA</UserLocale>
-            </component>
-            <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <component name="Microsoft-Windows-Shell-Setup" ...>
                 <OOBE>
                     <HideEULAPage>true</HideEULAPage>
                     <HideLocalAdministrationPage>true</HideLocalAdministrationPage>
-                    <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
                     <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
-                    <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
-                    <NetworkLocation>Work</NetworkLocation>
-                    <ProtectYourPC>1</ProtectYourPC>
                 </OOBE>
-                <!-- This skips the 'Who is going to use this PC' prompt -->
                 <AutoLogon>
-                    <Password>
-                        <Value>{{ lookup('env', 'secops_pwd') }}</Value>
-                        <PlainText>true</PlainText>
-                    </Password>
-                    <Enabled>true</Enabled>
                     <Username>core</Username>
-                    <LogonCount>1</LogonCount>
+                    <Password><Value>On32Build4SysAdmin</Value><PlainText>true</PlainText></Password>
+                    <Enabled>true</Enabled>
                 </AutoLogon>
             </component>
         </settings>
     </unattend>
     EOF
-
     genisoimage -output "${ISO_IMG}" -volid "OEMUP" -joliet -rock "${CONFIG_DIR}"
-    chmod 644 "${ISO_IMG}"
-    chown qemu:qemu "${ISO_IMG}"
     rm -rf "${CONFIG_DIR}"
+
 
 
 - name: Create QCOW2 overlay for Windows Worker
