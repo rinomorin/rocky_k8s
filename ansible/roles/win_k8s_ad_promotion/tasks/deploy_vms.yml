@@ -12,20 +12,22 @@
 - name: Create Unattend ISO
   delegate_to: "{{ kvm_ip }}"
   become: yes
+  vars:
+    # Extract the short hostname outside the shell block to avoid quote nesting errors
+    short_name: "{{ inventory_hostname.split('.')[0] }}"
   shell: |
-    VM_NAME="{{ inventory_hostname.split('.')[0] }}"
     IMG_DIR="/var/lib/libvirt/images"
-    ISO_IMG="${IMG_DIR}/${VM_NAME}-unattend.iso"
-    CONFIG_DIR="/tmp/${VM_NAME}-config"
+    ISO_IMG="${IMG_DIR}/{{ short_name }}-unattend.iso"
+    CONFIG_DIR="/tmp/{{ short_name }}-config"
 
-    mkdir -p ${CONFIG_DIR}
+    mkdir -p "${CONFIG_DIR}"
     
-    cat <<EOF > ${CONFIG_DIR}/autounattend.xml
+    cat <<EOF > "${CONFIG_DIR}/autounattend.xml"
     <?xml version="1.0" encoding="utf-8"?>
     <unattend xmlns="urn:schemas-microsoft-com:unattend">
         <settings pass="specialize">
             <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-                <ComputerName>${VM_NAME}</ComputerName>
+                <ComputerName>{{ short_name }}</ComputerName>
             </component>
         </settings>
         <settings pass="oobeSystem">
@@ -35,16 +37,15 @@
                     <NetworkLocation>Work</NetworkLocation>
                     <ProtectYourPC>1</ProtectYourPC>
                 </OOBE>
-                <!-- No need to create core user here, it's already in the gold image -->
             </component>
         </settings>
     </unattend>
     EOF
 
-    genisoimage -output ${ISO_IMG} -volid "OEMUP" -joliet -rock ${CONFIG_DIR}
-    chmod 644 ${ISO_IMG}
-    chown qemu:qemu ${ISO_IMG}
-    rm -rf ${CONFIG_DIR}
+    genisoimage -output "${ISO_IMG}" -volid "OEMUP" -joliet -rock "${CONFIG_DIR}"
+    chmod 644 "${ISO_IMG}"
+    chown qemu:qemu "${ISO_IMG}"
+    rm -rf "${CONFIG_DIR}"
 
 - name: Create QCOW2 overlay for Windows Worker
   delegate_to: "{{ kvm_ip }}"
