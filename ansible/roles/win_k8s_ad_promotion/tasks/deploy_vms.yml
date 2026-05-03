@@ -13,6 +13,7 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
+    ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
     # Extract the short hostname outside the shell block to avoid quote nesting errors
     short_name: "{{ inventory_hostname.split('.')[0] }}"
   shell: |
@@ -61,6 +62,8 @@
 - name: Define and Launch Windows VM
   delegate_to: "{{ kvm_ip }}"
   become: yes
+  vars:
+    ansible_user: "{{ hostvars[kvm]['ansible_user'] }}" 
   shell: |
     virt-install \
       --name {{ inventory_hostname.split('.')[0] }} \
@@ -80,6 +83,7 @@
   become: yes
   vars:
     ansible_connection: ssh
+    ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
   shell: |
     M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
     while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 5; done
@@ -94,7 +98,7 @@
     ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
     ansible_connection: ssh
     ansible_user: core
-    ansible_password: "On32Build4SysAdmin"
+    ansible_password: "{{ lookup('env', 'secops_pwd') }}"
     ansible_shell_type: powershell
     # Bypass OpenSSL 3 legacy restrictions on Rocky Linux
     ansible_ssh_common_args: '-o "SetEnv OPENSSL_CONF=/dev/null"' 
