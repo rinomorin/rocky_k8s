@@ -81,7 +81,6 @@
       --memory 4096 \
       --vcpus 2 \
       --disk path=/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2,format=qcow2 \
-      --disk path=/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}-unattend.iso,device=disk,bus=usb \
       --import \
       --os-variant win2k22 \
       --network network=br-nat \
