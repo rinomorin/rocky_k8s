@@ -10,49 +10,49 @@
     name: [mtools, dosfstools, genisoimage]
     state: present
 
-- name: Create Unattend ISO
-  delegate_to: "{{ kvm_ip }}"
-  become: yes
-  vars:
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-    short_name: "{{ inventory_hostname.split('.')[0] }}"
-  shell: |
-    ISO_IMG="/var/lib/libvirt/images/{{ short_name }}-unattend.iso"
-    CONFIG_DIR="/tmp/{{ short_name }}-config"
-    mkdir -p "${CONFIG_DIR}"
+# - name: Create Unattend ISO
+#   delegate_to: "{{ kvm_ip }}"
+#   become: yes
+#   vars:
+#     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+#     short_name: "{{ inventory_hostname.split('.')[0] }}"
+#   shell: |
+#     ISO_IMG="/var/lib/libvirt/images/{{ short_name }}-unattend.iso"
+#     CONFIG_DIR="/tmp/{{ short_name }}-config"
+#     mkdir -p "${CONFIG_DIR}"
     
-    # Generate autounattend.xml with windowsPE (skips "Hi there") and oobeSystem (skips OOBE)
-    cat <<EOF > "${CONFIG_DIR}/autounattend.xml"
-    <?xml version="1.0" encoding="utf-8"?>
-    <unattend xmlns="urn:schemas-microsoft-com:unattend">
-        <!-- Pass 1: Locale settings bypass "Hi there" -->
-        <settings pass="windowsPE">
-            <component name="Microsoft-Windows-International-Core-WinPE" ...>
-                <InputLocale>en-CA</InputLocale>
-                <SystemLocale>en-CA</SystemLocale>
-                <UILanguage>en-US</UILanguage>
-                <UserLocale>en-CA</UserLocale>
-            </component>
-        </settings>
-        <!-- Pass 7: OOBE bypass and AutoLogon -->
-        <settings pass="oobeSystem">
-            <component name="Microsoft-Windows-Shell-Setup" ...>
-                <OOBE>
-                    <HideEULAPage>true</HideEULAPage>
-                    <HideLocalAdministrationPage>true</HideLocalAdministrationPage>
-                    <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
-                </OOBE>
-                <AutoLogon>
-                    <Username>core</Username>
-                    <Password><Value>On32Build4SysAdmin</Value><PlainText>true</PlainText></Password>
-                    <Enabled>true</Enabled>
-                </AutoLogon>
-            </component>
-        </settings>
-    </unattend>
-    EOF
-    genisoimage -output "${ISO_IMG}" -volid "OEMUP" -joliet -rock "${CONFIG_DIR}"
-    rm -rf "${CONFIG_DIR}"
+#     # Generate autounattend.xml with windowsPE (skips "Hi there") and oobeSystem (skips OOBE)
+#     cat <<EOF > "${CONFIG_DIR}/autounattend.xml"
+#     <?xml version="1.0" encoding="utf-8"?>
+#     <unattend xmlns="urn:schemas-microsoft-com:unattend">
+#         <!-- Pass 1: Locale settings bypass "Hi there" -->
+#         <settings pass="windowsPE">
+#             <component name="Microsoft-Windows-International-Core-WinPE" ...>
+#                 <InputLocale>en-CA</InputLocale>
+#                 <SystemLocale>en-CA</SystemLocale>
+#                 <UILanguage>en-US</UILanguage>
+#                 <UserLocale>en-CA</UserLocale>
+#             </component>
+#         </settings>
+#         <!-- Pass 7: OOBE bypass and AutoLogon -->
+#         <settings pass="oobeSystem">
+#             <component name="Microsoft-Windows-Shell-Setup" ...>
+#                 <OOBE>
+#                     <HideEULAPage>true</HideEULAPage>
+#                     <HideLocalAdministrationPage>true</HideLocalAdministrationPage>
+#                     <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+#                 </OOBE>
+#                 <AutoLogon>
+#                     <Username>core</Username>
+#                     <Password><Value>On32Build4SysAdmin</Value><PlainText>true</PlainText></Password>
+#                     <Enabled>true</Enabled>
+#                 </AutoLogon>
+#             </component>
+#         </settings>
+#     </unattend>
+#     EOF
+#     genisoimage -output "${ISO_IMG}" -volid "OEMUP" -joliet -rock "${CONFIG_DIR}"
+#     rm -rf "${CONFIG_DIR}"
 
 
 
