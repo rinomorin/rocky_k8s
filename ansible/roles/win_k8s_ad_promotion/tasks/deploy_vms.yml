@@ -4,7 +4,8 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
-    ansible_connection: ssh
+    # ansible_connection: ssh
+    ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
   yum:
     name: [mtools, dosfstools, genisoimage]
     state: present
