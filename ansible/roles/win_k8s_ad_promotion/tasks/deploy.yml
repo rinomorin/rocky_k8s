@@ -45,7 +45,7 @@
 - name: Use br-nat IP for SSH
   set_fact:
     ansible_host: "{{ br_nat_ip.stdout }}"
-    provider_ip: "{{ hostvars[inventory_hostname.split('.')[0]]['provider_ip'] }}"
+    provision_ip: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
 
 
 - name: Reset SSH connection after IP change
@@ -75,7 +75,7 @@
 - name: Configure br-cluster NIC with provider_ip
   raw: |
     powershell -Command "
-      $providerIp = '{{ provider_ip }}'
+      $providerIp = '{{ provision_ip }}'
 
       $clusterNic = Get-NetAdapter |
         Where-Object {
