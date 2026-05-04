@@ -44,4 +44,3 @@
     host: "{{ ansible_host }}"
     port: 22
     timeout: 300
-``
