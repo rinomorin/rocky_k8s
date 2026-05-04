@@ -46,7 +46,7 @@
   set_fact:
     ansible_host: "{{ br_nat_ip.stdout }}"
     provision_ip: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
-
+    provision_gw: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[0:3] | join('.') }}.1"
 
 # - name: Reset SSH connection after IP change
 #   meta: reset_connection
@@ -73,38 +73,44 @@
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
-- name: Force static IP on br-cluster NIC
+- name: Configure br-cluster NIC as persistent static
   raw: |
     powershell -Command "
-      $ip      = '{{ hostvars[inventory_hostname]['provision_ip'] }}'
-      $gw      = '{{ hostvars[inventory_hostname]['provision_ip'].split('.')[0:3] | join('.') }}.1'
-      echo $ip, $gw
-      $nic = Get-NetAdapter -Name 'Ethernet 2'
+      $providerIp = '{{ hostvars[inventory_hostname].provision_ip }}'
 
-      # Disable DHCP
-      Set-NetIPInterface -InterfaceIndex $nic.IfIndex -AddressFamily IPv4 -Dhcp Disabled
+      # Identify br-cluster NIC (not 172.x)
+      $nic = Get-NetAdapter | Where-Object {
+        $ip = (Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+               Select-Object -First 1 -ExpandProperty IPAddress)
+        $ip -and -not $ip.StartsWith('172.')
+      } | Select-Object -First 1
 
-      # Disable APIPA
-      netsh interface ipv4 set interface $nic.IfIndex apipa=disabled
+      if (-not $nic) {
+        Write-Error 'Unable to identify br-cluster NIC'
+        exit 1
+      }
 
-      # Remove any existing IPv4 config
+      # Disable DHCP PERSISTENTLY
+      Set-NetIPInterface `
+        -PolicyStore PersistentStore `
+        -InterfaceIndex $nic.IfIndex `
+        -AddressFamily IPv4 `
+        -Dhcp Disabled
+
+      # Disable APIPA PERSISTENTLY
+      netsh interface ipv4 set interface $nic.IfIndex apipa=no
+
+      # Remove any existing IPv4 addresses (both stores)
       Get-NetIPAddress -InterfaceIndex $nic.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
         Remove-NetIPAddress -Confirm:$false
 
-      # Assign static IP WITH gateway
-      New-NetIPAddress -InterfaceIndex $nic.IfIndex `
-        -IPAddress $ip `
-        -PrefixLength 24 `
-        -DefaultGateway $gw
-
-      # Force adapter refresh
-      Restart-NetAdapter -InterfaceIndex $nic.IfIndex -Confirm:$false
+        # Assign static IP
+        New-NetIPAddress -InterfaceIndex $nic.IfIndex -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ prvision_gw }}
     "
-
 
 - name: Test if changd
   shell: |
-    ssh "{{ ansible_host }}" ipconfig
+    ssh {{ ansible_host }} ipconfig
     
   delegate_to: localhost
   register: ssh_test
