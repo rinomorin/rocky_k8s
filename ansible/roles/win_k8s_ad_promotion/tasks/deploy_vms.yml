@@ -17,6 +17,8 @@
 - name: Check if VM is already defined
   delegate_to: "{{ kvm_ip }}"
   become: yes
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: "virsh list --all | grep -w {{ inventory_hostname.split('.')[0] }}"
   register: vm_exists
   failed_when: false
