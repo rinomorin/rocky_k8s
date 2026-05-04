@@ -1,0 +1,6 @@
+- name: reboot
+  ansible.builtin.shell: |
+    powershell -Command "
+      {{ windows_commit_cmd }};
+      {{ windows_reboot_cmd }}
+    "

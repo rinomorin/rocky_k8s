@@ -4,6 +4,14 @@ win_oem_key: "{{ oem_key_win | default('') }}"
 ad_safe_mode_password: "{{ lookup('env', 'admin_set') }}"
 ad_admin_password: "{{ lookup('env', 'secops_pwd') }}"
 # The NetBIOS name (usually the first part of the domain)
-domain_netbios: "win.{{ lookup ('env', 'public_zone') | default('local', true) }}"
+domain_netbios: "{{ lookup ('env', 'cloud_zone') | default('lcl', true) }}"
 kvm_ip: "{{ lookup('env', 'VM_HOST_IP') | default(groups['kvm'][0], true) }}"
 kvm: "{{ lookup('env', 'VM_HOST') | default(groups['kvm'][0], true) }}"
+
+# Immutable disk support
+windows_state_dir: C:\ansible_state
+windows_commit_cmd: C:\tools\persist.exe --commit
+windows_reboot_cmd: Restart-Computer -Force
+# AD forest settings
+ad_domain_name:  '{{ hostvars[groups['win_worker_nodes'][0]]['domain'] | default(domain_netbios) }}'
+ad_safe_mode_password: '{{ vault_ad_safe_mode_password }}'

@@ -1,8 +1,18 @@
 ---
-# STAGE 0: Infrastructure Provisioning (Runs on KVM Host)
-- name: Provision Windows VM on KVM
-  include_tasks: deploy_vms.yml
+# roles/rocky_k8s/tasks/main.yml
 
-# STAGE 1: Guest Configuration (Runs on Windows Guest)
-- name: Configure Windows AD and Environment
-  include_tasks: config_vms.yml
+- import_tasks: deploy.yml
+- import_tasks: reconnect.yml
+- import_tasks: configure_forest.yml
+
+
+# - name: Windows VM immutable on KVM alert
+#   include_tasks: deploy.yml
+
+# # STAGE 0: Infrastructure Provisioning (Runs on KVM Host)
+# - name: Provision Windows VM on KVM
+#   include_tasks: deploy_vms.yml
+
+# # STAGE 1: Guest Configuration (Runs on Windows Guest)
+# - name: Configure Windows AD and Environment
+#   include_tasks: config_vms.yml

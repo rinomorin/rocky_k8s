@@ -1,0 +1,36 @@
+# roles/rocky_k8s/tasks/configure_forest.yml
+
+- name: Check forest marker
+  stat:
+    path: "{{ windows_state_dir }}\\forest.done"
+  register: forest_done
+
+- name: Install AD DS and DNS roles
+  shell: |
+    powershell -Command "Install-WindowsFeature AD-Domain-Services,DNS -IncludeManagementTools"
+  when:
+    - inventory_hostname == groups['win_worker_nodes'][0]
+    - not forest_done.stat.exists
+
+- name: Create AD forest
+  shell: |
+    powershell -Command "
+      Install-ADDSForest `
+        -DomainName '{{ ad_domain_name }}' `
+        -InstallDNS `
+        -SafeModeAdministratorPassword (
+          ConvertTo-SecureString '{{ ad_safe_mode_password }}' -AsPlainText -Force
+        ) `
+        -Force
+    "
+  when:
+    - inventory_hostname == groups['win_worker_nodes'][0]
+    - not forest_done.stat.exists
+  notify: reboot
+
+- name: Mark forest created
+  shell: |
+    powershell -Command "New-Item {{ windows_state_dir }}\\forest.done -ItemType File"
+  when:
+    - inventory_hostname == groups['win_worker_nodes'][0]
+    - not forest_done.stat.exists

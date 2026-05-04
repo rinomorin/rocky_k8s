@@ -30,7 +30,6 @@
         - dism_output.rc != 0
         - "'STATUS_ALREADY_CONVERTED' not in dism_output.stdout"
 
-  
     - debug:
        var: dism_output
   

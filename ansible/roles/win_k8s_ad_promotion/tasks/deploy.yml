@@ -1,0 +1,83 @@
+# roles/rocky_k8s/tasks/deploy.yml
+
+- name: Fail if immutable commit command is missing
+  assert:
+    that:
+      - windows_commit_cmd | length > 0
+    fail_msg: >
+      windows_commit_cmd is not defined.
+      This system uses an immutable disk and WILL lose changes on reboot.
+
+# ------------------------------------------------------------
+# Discover maintenance NIC (br-nat) IP via KVM
+# ------------------------------------------------------------
+
+- name: Discover br-nat IP from KVM
+  delegate_to: "{{ kvm }}"
+  shell: |
+    virsh domifaddr {{ inventory_hostname }} \
+      --source agent,lease | awk '/ipv4/ && /br-nat/ {print $4}' | cut -d/ -f1
+  register: br_nat_ip
+  changed_when: false
+
+- name: Fail if br-nat IP not found
+  assert:
+    that:
+      - br_nat_ip.stdout | length > 0
+    fail_msg: >
+      Unable to discover br-nat IP for {{ inventory_hostname }} from KVM.
+
+# ------------------------------------------------------------
+# Connect via br-nat
+# ------------------------------------------------------------
+
+- name: Use br-nat IP for SSH
+  set_fact:
+    ansible_host: "{{ br_nat_ip.stdout }}"
+
+- name: Wait for SSH via br-nat
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+    timeout: 300
+
+# ------------------------------------------------------------
+# Prepare state directory
+# ------------------------------------------------------------
+
+- name: Ensure state directory exists
+  shell: |
+    powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
+  changed_when: false
+
+# ------------------------------------------------------------
+# Configure br-cluster NIC with provider_ip
+# ------------------------------------------------------------
+
+- name: Configure br-cluster NIC with provider_ip
+  shell: |
+    powershell -Command "
+      $clusterNic = Get-NetAdapter |
+        Where-Object {
+          -not (Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue)
+        } |
+        Select-Object -First 1
+
+      New-NetIPAddress `
+        -InterfaceIndex $clusterNic.IfIndex `
+        -IPAddress {{ provider_ip }} `
+        -PrefixLength 24
+    "
+
+# ------------------------------------------------------------
+# Set hostname (requires reboot)
+# ------------------------------------------------------------
+
+- name: Set hostname
+  shell: |
+    powershell -Command "
+      if ((hostname) -ne '{{ hostname }}') {
+        Rename-Computer -NewName '{{ hostname }}' -Force
+      }
+    "
+  notify: reboot

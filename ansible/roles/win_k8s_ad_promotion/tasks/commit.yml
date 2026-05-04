@@ -1,0 +1,4 @@
+- name: Commit changes to immutable disk
+  ansible.builtin.shell: |
+    powershell -Command "{{ windows_commit_cmd }}"
+  when: windows_commit_cmd | length > 0
