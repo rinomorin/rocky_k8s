@@ -10,6 +10,17 @@
     -F qcow2
     -b /var/lib/libvirt/images/gi-win22-20260503.qcow2 
     /var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2
+  # This flag tells Ansible to skip the command if the file already exists
+  args:
+    creates: "/var/lib/libvirt/images/{{ inventory_hostname.split('.')[0] }}.qcow2"
+
+- name: Check if VM is already defined
+  delegate_to: "{{ kvm_ip }}"
+  become: yes
+  shell: "virsh list --all | grep -w {{ inventory_hostname.split('.')[0] }}"
+  register: vm_exists
+  failed_when: false
+  changed_when: false
 
 - name: Define and Launch Windows VM
   delegate_to: "{{ kvm_ip }}"
@@ -28,6 +39,8 @@
       --network network=br-cluster \
       --noautoconsole \
       --wait 0
+  # Only run this if the 'Check' task failed to find the VM name
+  when: vm_exists.rc != 0
 
 - name: Discover Maintenance IP
   delegate_to: "{{ kvm_ip }}"
