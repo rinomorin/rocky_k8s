@@ -73,41 +73,32 @@
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
-- name: Configure br-cluster NIC as persistent static (FINAL)
+- name: Force static IP on br-cluster NIC
   raw: |
     powershell -Command "
-      $providerIp = '{{ hostvars[inventory_hostname].provision_ip }}'
-      $gateway    = '{{ hostvars[inventory_hostname].provision_gw | default('10.0.0.1') }}'
+      $ip      = '{{ hostvars[inventory_hostname].provision_ip }}'
+      $gw      = '{{ hostvars[inventory_hostname].provision_gw }}'
 
-      $nic = Get-NetAdapter | Where-Object {
-        $_.Name -eq 'Ethernet 2'
-      }
+      $nic = Get-NetAdapter -Name 'Ethernet 2'
 
-      if (-not $nic) {
-        Write-Error 'br-cluster NIC not found'
-        exit 1
-      }
-
-      # Disable DHCP persistently
-      Set-NetIPInterface -PolicyStore PersistentStore `
-        -InterfaceIndex $nic.IfIndex `
-        -AddressFamily IPv4 `
-        -Dhcp Disabled
+      # Disable DHCP
+      Set-NetIPInterface -InterfaceIndex $nic.IfIndex -AddressFamily IPv4 -Dhcp Disabled
 
       # Disable APIPA
-      netsh interface ipv4 set interface $nic.IfIndex apipa=no
+      netsh interface ipv4 set interface $nic.IfIndex apipa=disabled
 
-      # Remove existing IPs
+      # Remove any existing IPv4 config
       Get-NetIPAddress -InterfaceIndex $nic.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
         Remove-NetIPAddress -Confirm:$false
 
-      # Assign static IP WITH GATEWAY (CRITICAL)
-      New-NetIPAddress `
-        -PolicyStore PersistentStore `
-        -InterfaceIndex $nic.IfIndex `
-        -IPAddress $providerIp `
+      # Assign static IP WITH gateway
+      New-NetIPAddress -InterfaceIndex $nic.IfIndex `
+        -IPAddress $ip `
         -PrefixLength 24 `
-        -DefaultGateway $gateway
+        -DefaultGateway $gw
+
+      # Force adapter refresh
+      Restart-NetAdapter -InterfaceIndex $nic.IfIndex -Confirm:$false
     "
 
 
