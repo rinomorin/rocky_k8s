@@ -76,7 +76,6 @@
 - name: Configure br-cluster NIC as persistent static
   raw: |
     powershell -Command "
-      $providerIp = '{{ hostvars[inventory_hostname].provision_ip }}'
 
       # Identify br-cluster NIC (not 172.x)
       $nic = Get-NetAdapter | Where-Object {
@@ -105,7 +104,7 @@
         Remove-NetIPAddress -Confirm:$false
 
         # Assign static IP
-        New-NetIPAddress -InterfaceIndex $nic.IfIndex -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ prvision_gw }}
+        New-NetIPAddress -InterfaceIndex $nic.IfIndex -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }}
     "
 
 - name: Test if changd
