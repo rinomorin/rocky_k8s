@@ -14,4 +14,3 @@ windows_commit_cmd: C:\tools\persist.exe --commit
 windows_reboot_cmd: Restart-Computer -Force
 # AD forest settings
 ad_domain_name:  "{{ hostvars[groups['win_worker_nodes'][0]]['domain'] | default(domain_netbios) }}"
-ad_safe_mode_password: '{{ vault_ad_safe_mode_password }}'
