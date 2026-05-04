@@ -6,7 +6,7 @@
 # 1. Try br-cluster (provision_ip) first
 - name: Try SSH via provision_ip
   wait_for:
-    host: "{{ hostvars[inventory_hostname].provision_ip }}"
+    host: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
     port: 22
     timeout: 15
   delegate_to: localhost
@@ -16,7 +16,7 @@
 
 - name: Use provision_ip if reachable
   set_fact:
-    ansible_host: "{{ hostvars[inventory_hostname].provision_ip }}"
+    ansible_host: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
   when: provision_ssh.elapsed is defined and provision_ssh.elapsed < 15
 
 - name: Reset SSH connection after switching to provision_ip
@@ -25,13 +25,21 @@
 
 # 2. Fallback: rediscover br-nat IP from KVM
 - name: Rediscover br-nat IP from KVM (fallback)
-  delegate_to: "{{ kvm }}"
+  delegate_to: "{{ kvm_ip }}"
   vars:
-    ansible_host: "{{ hostvars[kvm].ansible_host | default(kvm) }}"
-    ansible_user: "{{ hostvars[kvm].ansible_user | default('root') }}"
+    ansible_host: "{{ hostvars[kvm_ip]['ansible_host'] | default(kvm_ip) }}"
+    ansible_user: "{{ hostvars[kvm_ip]['ansible_user'] | default('core') }}"
   raw: |
-    virsh domifaddr {{ inventory_hostname }} \
-      --source agent,lease | awk '/ipv4/ && /br-nat/ {print $4}' | cut -d/ -f1
+    # Get MAC for the specific bridge
+    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    
+    # Loop until the lease appears
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
+      sleep 5
+    done
+    
+    # Return just the IP
+    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
   register: br_nat_ip_fallback
   when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
 
