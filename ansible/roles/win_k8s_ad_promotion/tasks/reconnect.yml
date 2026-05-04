@@ -28,7 +28,6 @@
   delegate_to: "{{ kvm_ip }}"
   becme: yes
   vars:
-    ansible_host: "{{ hostvars[kvm_ip]['ansible_host'] | default(kvm_ip) }}"
     ansible_user: "{{ hostvars[kvm_ip]['ansible_user'] | default('core') }}"
   raw: |
     # Get MAC for the specific bridge
