@@ -3,7 +3,7 @@
 
 - import_tasks: deploy.yml
 - import_tasks: reconnect.yml
-- import_tasks: configure_forest.yml
+# - import_tasks: configure_forest.yml
 
 
 # - name: Windows VM immutable on KVM alert
