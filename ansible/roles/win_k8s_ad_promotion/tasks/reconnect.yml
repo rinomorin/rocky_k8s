@@ -1,73 +1,59 @@
-# roles/rocky_k8s/tasks/reconnect.yml
-
 # ------------------------------------------------------------
-# After reboot: try provider_ip first
-# ------------------------------------------------------------
-
-- name: Try SSH via provision_ip
-  wait_for:
-    host: "{{ provision_ip }}"
-    port: 22
-    timeout: 15
-  register: provision_ssh
-  failed_when: false
-  changed_when: false
-
-- name: Use provision_ip for SSH
-  set_fact:
-    ansible_host: "{{ provision_ip }}"
-  when: provision_ssh.elapsed is defined and provision_ssh.elapsed < 15
-
-# ------------------------------------------------------------
-# Fallback to br-nat if provider_ip fails
+# Reconnect logic after reboot
+# Prefer br-cluster (provision_ip), fallback to br-nat via KVM
 # ------------------------------------------------------------
 
-# ------------------------------------------------------------
-# After reboot: try provision_ip first
-# ------------------------------------------------------------
-
+# 1. Try br-cluster (provision_ip) first
 - name: Try SSH via provision_ip
   wait_for:
     host: "{{ hostvars[inventory_hostname].provision_ip }}"
     port: 22
     timeout: 15
-  register: provision_ssh
   delegate_to: localhost
+  register: provision_ssh
   failed_when: false
   changed_when: false
 
-- name: Use provision_ip for SSH
+- name: Use provision_ip if reachable
   set_fact:
     ansible_host: "{{ hostvars[inventory_hostname].provision_ip }}"
   when: provision_ssh.elapsed is defined and provision_ssh.elapsed < 15
 
-- name: Reset SSH connection after ansible_host change
+- name: Reset SSH connection after switching to provision_ip
   meta: reset_connection
   when: provision_ssh.elapsed is defined and provision_ssh.elapsed < 15
 
-# ------------------------------------------------------------
-# Fallback to br-nat if provision_ip fails
-# ------------------------------------------------------------
-
+# 2. Fallback: rediscover br-nat IP from KVM
 - name: Rediscover br-nat IP from KVM (fallback)
-  delegate_to: "{{ kvm_ip }}"
+  delegate_to: "{{ kvm }}"
   vars:
     ansible_host: "{{ hostvars[kvm].ansible_host | default(kvm) }}"
     ansible_user: "{{ hostvars[kvm].ansible_user | default('root') }}"
   raw: |
     virsh domifaddr {{ inventory_hostname }} \
+      --source agent,lease | awk '/ipv4/ && /br-nat/ {print $4}' | cut -d/ -f1
+  register: br_nat_ip_fallback
+  when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
 
-- name: Use br-nat IP fallback
+- name: Fail if fallback br-nat IP not found
+  assert:
+    that:
+      - br_nat_ip_fallback.stdout | length > 0
+  when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
+
+- name: Use br-nat fallback IP
   set_fact:
     ansible_host: "{{ br_nat_ip_fallback.stdout }}"
   when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
 
-# ------------------------------------------------------------
-# Wait for SSH on chosen interface
-# ------------------------------------------------------------
+- name: Reset SSH connection after switching to br-nat
+  meta: reset_connection
+  when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
 
+# 3. Final SSH verification
 - name: Wait for SSH on selected interface
   wait_for:
     host: "{{ ansible_host }}"
     port: 22
     timeout: 300
+  delegate_to: localhost
