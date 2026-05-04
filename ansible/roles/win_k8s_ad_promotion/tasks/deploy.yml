@@ -114,7 +114,7 @@
 
 - name: Test if changd
   shell: |
-    ssh {{ ansible_host }} "ipconfig"
+    ssh {{ ansible_host }} ipconfig
     "
   delegate_to: localhost
   register: ssh_test
