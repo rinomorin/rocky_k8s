@@ -13,7 +13,7 @@
 # ------------------------------------------------------------
 
 - name: Discover br-nat IP from KVM
-  delegate_to: "{{ kvm }}"
+  delegate_to: "{{ kvm_ip }}"
   become: yes
   shell: |
     virsh domifaddr {{ inventory_hostname }} \
