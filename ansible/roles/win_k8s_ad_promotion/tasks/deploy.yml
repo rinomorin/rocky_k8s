@@ -76,6 +76,18 @@
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
+
+- name: Disable UAC token filtering for remote administrators
+  raw: |
+    powershell -Command "
+      New-ItemProperty `
+        -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' `
+        -Name 'LocalAccountTokenFilterPolicy' `
+        -PropertyType DWord `
+        -Value 1 `
+        -Force
+    "
+
 - name: Force static IP on br-cluster NIC (netsh – FINAL)
   raw: |
     powershell -Command "
