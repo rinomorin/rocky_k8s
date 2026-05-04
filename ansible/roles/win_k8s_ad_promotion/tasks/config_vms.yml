@@ -29,11 +29,7 @@
       failed_when: 
         - dism_output.rc != 0
         - "'STATUS_ALREADY_CONVERTED' not in dism_output.stdout"
-      register: dism_output
-      changed_when: "'command completed successfully' in dism_output.stdout | lower"
-      failed_when: 
-        - dism_output.rc != 0
-        - "'already converted' not in dism_output.stdout|lower"
+
   
     - debug:
        var: dism_output
