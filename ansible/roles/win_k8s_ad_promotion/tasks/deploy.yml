@@ -14,6 +14,7 @@
 
 - name: Discover br-nat IP from KVM
   delegate_to: "{{ kvm }}"
+  become: yes
   shell: |
     virsh domifaddr {{ inventory_hostname }} \
       --source agent,lease | awk '/ipv4/ && /br-nat/ {print $4}' | cut -d/ -f1
