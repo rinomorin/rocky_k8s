@@ -48,26 +48,57 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
-    ansible_connection: ssh
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: |
+    # Get MAC for the specific bridge
     M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
-    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 5; done
+    
+    # Loop until the lease appears
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
+      sleep 5
+    done
+    
+    # Return just the IP
     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
   register: maintenance_ip_raw
+  # We still use retries/delay as a safety net for the task itself
   retries: 20
   delay: 10
 
-# --- GUEST TRANSITION (Now using SSH) ---
-- name: Set SSH facts for Windows
-  ansible.builtin.set_fact:
-    ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
-    ansible_connection: ssh
-    ansible_user: core
-    ansible_password: "{{ lookup('env', 'secops_pwd') }}"
-    ansible_shell_type: powershell
-    # Required for Rocky Linux / OpenSSL 3 compatibility
-    ansible_ssh_common_args: '-o "SetEnv OPENSSL_CONF=/dev/null"' 
+- name: Wait for SSH to be active on Windows VM
+  wait_for:
+    host: "{{ maintenance_ip_raw.stdout | trim }}"
+    port: 22
+    state: started
+    delay: 5
+    timeout: 300
+  delegate_to: localhost
+
+- name: Set SSH keys on localhost for Windows VM Access
+  vars:
+    ssh_key_path: "{{ lookup('env', 'HOME') }}/.ssh/id_rsa.pub"
+    # Using the specific user for the target Windows VM
+    target_user: "{{ hostvars[inventory_hostname]['ansible_user'] | default('Administrator') }}"
+  shell: |
+    sshpass -p "{{ ad_admin_password }}" ssh-copy-id -o "StrictHostKeyChecking=no" -i {{ ssh_key_path }} {{ target_user }}@{{ maintenance_ip_raw.stdout | trim }}
+  delegate_to: localhost
+  register: ssh_copy_result
+  # Avoid failing if the key is already present
+  failed_when: 
+    - ssh_copy_result.rc != 0 
+    - "'already exists' not in ssh_copy_result.stderr"
+    - "'Already characterized' not in ssh_copy_result.stdout"
+
+# # --- GUEST TRANSITION (Now using SSH) ---
+# - name: Set SSH facts for Windows
+#   ansible.builtin.set_fact:
+#     ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
+#     ansible_connection: ssh
+#     ansible_user: core
+#     ansible_password: "{{ lookup('env', 'secops_pwd') }}"
+#     ansible_shell_type: powershell
+#     # Required for Rocky Linux / OpenSSL 3 compatibility
+#     ansible_ssh_common_args: '-o "SetEnv OPENSSL_CONF=/dev/null"' 
 
 - name: Wait for SSH (Human Intervention Required)
   ansible.builtin.wait_for:
