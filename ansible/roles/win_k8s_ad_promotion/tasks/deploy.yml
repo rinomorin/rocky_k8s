@@ -63,6 +63,8 @@
 # Prepare state directory
 # ------------------------------------------------------------
 
+- debug: msg: "br-nat IP {{ ansible_host }} discovered, connecting to Windows VM for AD promotion tasks
+"
 - name: Ensure state directory exists
   raw: |
     powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
