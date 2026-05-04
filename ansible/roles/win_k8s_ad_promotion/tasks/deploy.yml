@@ -53,6 +53,7 @@
       - "stdout raw: {{ br_nat_ip.stdout }}"
 
 - name: Wait for SSH via br-nat
+  delegate_to: localhost
   wait_for:
     host: "{{ ansible_host }}"
     port: 22
