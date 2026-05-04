@@ -28,6 +28,7 @@
     
     # Return just the IP
     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+    "
   register: br_nat_ip
   changed_when: false
 
