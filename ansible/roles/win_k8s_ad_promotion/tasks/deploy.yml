@@ -76,34 +76,42 @@
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
-
-- name: Disable UAC token filtering for remote administrators
-  raw: |
-    powershell -Command "
-      New-ItemProperty `
-        -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' `
-        -Name 'LocalAccountTokenFilterPolicy' `
-        -PropertyType DWord `
-        -Value 1 `
-        -Force
-    "
-
-- name: Force static IP on br-cluster NIC (netsh – FINAL)
+- name: Force static IP on br-cluster NIC (validated manual sequence)
   raw: |
     powershell -Command "
       $ip = '{{ provision_ip }}'
+      $gw = '{{ provision_gw }}'
+      
+      # Identify br-cluster NIC (not 172.x)
+      $nic = Get-NetAdapter | Where-Object {
+        $ip = (Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+               Select-Object -First 1 -ExpandProperty IPAddress)
+        $ip -and -not $ip.StartsWith('172.')
+      } | Select-Object -First 1
 
-      # Identify second NIC explicitly
-      $nicName = 'Ethernet 2'
+      if (-not $nic) {
+        Write-Error 'Unable to identify br-cluster NIC'
+        exit 1
+      }
 
-      # Force static IP (no gateway, no DHCP, no policy checks)
-      netsh interface ip set address name=`"$nicName`" static $ip 255.255.255.0 {{ provision_gw }} 1
 
-      # Disable DHCP explicitly
-      netsh interface ip set dns name=`"$nicName`" static none
+      # Ensure adapter is enabled
+      Enable-NetAdapter -Name $nic -Confirm:$false
+
+      # Disable DHCP (adapter must exist)
+      Set-NetIPInterface -InterfaceAlias $nic -Dhcp Disabled
+
+      # Remove any existing IPv4 addresses
+      Get-NetIPAddress -InterfaceAlias $nic -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Remove-NetIPAddress -Confirm:$false
+
+      # Assign static IP with gateway
+      New-NetIPAddress `
+        -InterfaceAlias $nic `
+        -IPAddress $ip `
+        -PrefixLength 24 `
+        -DefaultGateway $gw
     "
-
-
 - name: Test if changd
   shell: |
     ssh {{ ansible_host }} ipconfig
