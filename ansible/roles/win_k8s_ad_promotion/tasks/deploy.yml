@@ -73,11 +73,10 @@
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
-
-- name: Configure br-cluster NIC as true static
+- name: Configure br-cluster NIC as persistent static
   raw: |
     powershell -Command "
-      $providerIp = '{{ provision_ip }}'
+      $providerIp = '{{ hostvars[inventory_hostname].provision_ip }}'
 
       # Identify br-cluster NIC (not 172.x)
       $nic = Get-NetAdapter | Where-Object {
@@ -91,22 +90,28 @@
         exit 1
       }
 
-      # 1. Disable DHCP (CRITICAL)
-      Set-NetIPInterface -InterfaceIndex $nic.IfIndex -AddressFamily IPv4 -Dhcp Disabled
+      # Disable DHCP PERSISTENTLY
+      Set-NetIPInterface `
+        -PolicyStore PersistentStore `
+        -InterfaceIndex $nic.IfIndex `
+        -AddressFamily IPv4 `
+        -Dhcp Disabled
 
-      # 2. Disable APIPA / IPv4 autoconfig (CRITICAL)
+      # Disable APIPA PERSISTENTLY
       netsh interface ipv4 set interface $nic.IfIndex apipa=no
 
-      # 3. Remove all existing IPv4 addresses
+      # Remove any existing IPv4 addresses (both stores)
       Get-NetIPAddress -InterfaceIndex $nic.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
         Remove-NetIPAddress -Confirm:$false
 
-      # 4. Assign static IP
+      # Add static IP PERSISTENTLY
       New-NetIPAddress `
+        -PolicyStore PersistentStore `
         -InterfaceIndex $nic.IfIndex `
         -IPAddress $providerIp `
         -PrefixLength 24
     "
+    
 # ------------------------------------------------------------
 # Set hostname (requires reboot)
 # ------------------------------------------------------------
