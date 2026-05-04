@@ -72,20 +72,33 @@
 # ------------------------------------------------------------
 
 - name: Configure br-cluster NIC with provider_ip
-  shell: |
+  raw: |
     powershell -Command "
+      $providerIp = '{{ hostvars[inventory_hostname].provider_ip }}'
+
       $clusterNic = Get-NetAdapter |
         Where-Object {
-          -not (Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue)
+          $ip = Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Select-Object -First 1 -ExpandProperty IPAddress
+          $ip -and -not $ip.StartsWith('172.')
         } |
         Select-Object -First 1
 
+      if (-not $clusterNic) {
+        Write-Error 'Failed to identify br-cluster NIC (non-172 network)'
+        exit 1
+      }
+
+      # Remove existing IP (DHCP) if present
+      Get-NetIPAddress -InterfaceIndex $clusterNic.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Remove-NetIPAddress -Confirm:$false
+
+      # Assign provider_ip
       New-NetIPAddress `
         -InterfaceIndex $clusterNic.IfIndex `
-        -IPAddress {{ provider_ip }} `
+        -IPAddress $providerIp `
         -PrefixLength 24
     "
-
 # ------------------------------------------------------------
 # Set hostname (requires reboot)
 # ------------------------------------------------------------
