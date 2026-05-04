@@ -18,8 +18,16 @@
   vars:
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: |
-    virsh domifaddr {{ inventory_hostname }} \
-      --source agent,lease | awk '/ipv4/ && /br-nat/ {print $4}' | cut -d/ -f1
+    # Get MAC for the specific bridge
+    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    
+    # Loop until the lease appears
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
+      sleep 5
+    done
+    
+    # Return just the IP
+    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
   register: br_nat_ip
   changed_when: false
 
