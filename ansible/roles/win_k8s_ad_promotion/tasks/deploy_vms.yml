@@ -80,7 +80,7 @@
     # Using the specific user for the target Windows VM
     target_user: "{{ hostvars[inventory_hostname]['ansible_user'] | default('Administrator') }}"
   shell: |
-    sshpass -p "{{ ad_safe_mode_password }}" ssh-copy-id -o "StrictHostKeyChecking=no" -i {{ ssh_key_path }} {{ target_user }}@{{ maintenance_ip_raw.stdout | trim }}
+    sshpass -p "{{ ad_safe_mode_password }}" ssh-copy-id {{ target_user }}@{{ maintenance_ip_raw.stdout | trim }}
   delegate_to: localhost
   register: ssh_copy_result
   # Avoid failing if the key is already present
