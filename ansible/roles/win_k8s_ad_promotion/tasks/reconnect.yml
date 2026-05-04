@@ -26,6 +26,7 @@
 # 2. Fallback: rediscover br-nat IP from KVM
 - name: Rediscover br-nat IP from KVM (fallback)
   delegate_to: "{{ kvm_ip }}"
+  becme: yes
   vars:
     ansible_host: "{{ hostvars[kvm_ip]['ansible_host'] | default(kvm_ip) }}"
     ansible_user: "{{ hostvars[kvm_ip]['ansible_user'] | default('core') }}"
