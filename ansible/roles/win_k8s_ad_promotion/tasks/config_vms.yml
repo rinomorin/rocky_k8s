@@ -12,14 +12,15 @@
     #     - dism_result.rc != 3010
     #   changed_when: dism_result.rc == 3010
 
-    - name: Convert Eval to Licensed Standard Core
+    - name: Convert Eval to Licensed Datacenter Core
       win_shell: |
-        $target = "ServerStandardCore"
-        $kmsKey = "VDYBN-27WPP-V4HQT-9VMD4-VMK7H"
+        $target = "ServerDatacenterCore"
+        $kmsKey = "WX4NM-KYWYW-QJJR4-XV3QB-6VM33"
         
-        $edition = (Get-ComputerInfo).WindowsEditionId
-        if ($edition -eq $target) {
-            return "Already converted"
+        $current = (Get-ComputerInfo).WindowsEditionId
+        if ($current -eq $target) {
+            Write-Host "STATUS_ALREADY_CONVERTED"
+            exit 0
         }
 
         dism /online /set-edition:$target /productkey:$kmsKey /accepteula /norestart
@@ -27,8 +28,16 @@
       changed_when: "'command completed successfully' in dism_output.stdout | lower"
       failed_when: 
         - dism_output.rc != 0
-        - "'Already converted' not in dism_output.stdout"
-
+        - "'STATUS_ALREADY_CONVERTED' not in dism_output.stdout"
+      register: dism_output
+      changed_when: "'command completed successfully' in dism_output.stdout | lower"
+      failed_when: 
+        - dism_output.rc != 0
+        - "'already converted' not in dism_output.stdout|lower"
+  
+    - debug:
+       var: dism_output
+  
     - name: Reboot to finalize licensing
       ansible.windows.win_reboot:
       when: dism_result.changed

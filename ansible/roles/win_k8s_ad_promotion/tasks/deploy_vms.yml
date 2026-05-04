@@ -109,7 +109,7 @@
     state: started
     delay: 30
     # Increased timeout to 30 minutes to allow time for the human to interact
-    timeout: 1800 
+    timeout: 900 
   delegate_to: localhost
 
 - name: Gather facts via SSH
