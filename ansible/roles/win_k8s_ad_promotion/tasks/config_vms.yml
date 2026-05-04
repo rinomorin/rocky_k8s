@@ -5,7 +5,7 @@
     # Note: If your Golden Image is already licensed/converted, this can be skipped.
     - name: Convert Eval to Licensed Standard Core
       ansible.windows.win_shell: |
-        dism /online /set-edition:ServerStandardCor /productkey:{{ win_oem_key }} /accepteula /norestart
+        dism /online /set-edition:ServerStandardCore /productkey:{{ win_oem_key }} /accepteula /norestart
       register: dism_result
       failed_when: 
         - dism_result.rc != 0 
