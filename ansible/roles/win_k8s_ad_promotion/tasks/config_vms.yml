@@ -3,14 +3,31 @@
   block:
     # --- STEP 1: LICENSING ---
     # Note: If your Golden Image is already licensed/converted, this can be skipped.
+    # - name: Convert Eval to Licensed Standard Core
+    #   ansible.windows.win_shell: |
+    #     dism /online /set-edition:ServerStandardCore /productkey:{{ win_oem_key }} /accepteula /norestart
+    #   register: dism_result
+    #   failed_when: 
+    #     - dism_result.rc != 0 
+    #     - dism_result.rc != 3010
+    #   changed_when: dism_result.rc == 3010
+
     - name: Convert Eval to Licensed Standard Core
-      ansible.windows.win_shell: |
-        dism /online /set-edition:ServerStandardCore /productkey:{{ win_oem_key }} /accepteula /norestart
-      register: dism_result
+      win_shell: |
+        $target = "ServerStandardCore"
+        $kmsKey = "VDYBN-27WPP-V4HQT-9VMD4-VMK7H"
+        
+        $edition = (Get-ComputerInfo).WindowsEditionId
+        if ($edition -eq $target) {
+            return "Already converted"
+        }
+
+        dism /online /set-edition:$target /productkey:$kmsKey /accepteula /norestart
+      register: dism_output
+      changed_when: "'command completed successfully' in dism_output.stdout.ToLower()"
       failed_when: 
-        - dism_result.rc != 0 
-        - dism_result.rc != 3010
-      changed_when: dism_result.rc == 3010
+        - dism_output.rc != 0
+        - "'Already converted' not in dism_output.stdout"
 
     - name: Reboot to finalize licensing
       ansible.windows.win_reboot:
