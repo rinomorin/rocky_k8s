@@ -74,7 +74,7 @@
 - name: Configure br-cluster NIC with provider_ip
   raw: |
     powershell -Command "
-      $providerIp = '{{ hostvars[inventory_hostname].provider_ip }}'
+      $providerIp = '{{ hostvars[inventory_hostname.split('.')[0]]['provider_ip'] }}'
 
       $clusterNic = Get-NetAdapter |
         Where-Object {
