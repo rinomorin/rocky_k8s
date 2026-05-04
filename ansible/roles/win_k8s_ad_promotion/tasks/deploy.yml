@@ -78,7 +78,7 @@
     powershell -Command "
       $ip      = '{{ hostvars[inventory_hostname]['provision_ip'] }}'
       $gw      = '{{ hostvars[inventory_hostname]['provision_ip'].split('.')[0:3] | join('.') }}.1'
-
+      echo $ip, $gw
       $nic = Get-NetAdapter -Name 'Ethernet 2'
 
       # Disable DHCP
