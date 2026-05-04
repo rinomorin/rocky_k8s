@@ -28,7 +28,6 @@
     
     # Return just the IP
     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
-    "
   register: br_nat_ip
   changed_when: false
 
@@ -52,7 +51,6 @@
     msg: 
       - "br-nat IP: {{ ansible_host }}"
       - "stdout raw: {{ br_nat_ip.stdout }}"
-      # - "ansible_host set to: {{ ansible_host }}"
 
 - name: Wait for SSH via br-nat
   wait_for:
