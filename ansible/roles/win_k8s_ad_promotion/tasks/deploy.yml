@@ -74,31 +74,36 @@
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
 
-- name: Configure br-cluster NIC with provider_ip
+- name: Configure br-cluster NIC as true static
   raw: |
     powershell -Command "
       $providerIp = '{{ provision_ip }}'
 
-      $clusterNic = Get-NetAdapter |
-        Where-Object {
-          $ip = Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Select-Object -First 1 -ExpandProperty IPAddress
-          $ip -and -not $ip.StartsWith('172.')
-        } |
-        Select-Object -First 1
+      # Identify br-cluster NIC (not 172.x)
+      $nic = Get-NetAdapter | Where-Object {
+        $ip = (Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+               Select-Object -First 1 -ExpandProperty IPAddress)
+        $ip -and -not $ip.StartsWith('172.')
+      } | Select-Object -First 1
 
-      if (-not $clusterNic) {
-        Write-Error 'Failed to identify br-cluster NIC (non-172 network)'
+      if (-not $nic) {
+        Write-Error 'Unable to identify br-cluster NIC'
         exit 1
       }
 
-      # Remove existing IP (DHCP) if present
-      Get-NetIPAddress -InterfaceIndex $clusterNic.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+      # 1. Disable DHCP (CRITICAL)
+      Set-NetIPInterface -InterfaceIndex $nic.IfIndex -AddressFamily IPv4 -Dhcp Disabled
+
+      # 2. Disable APIPA / IPv4 autoconfig (CRITICAL)
+      netsh interface ipv4 set interface $nic.IfIndex apipa=no
+
+      # 3. Remove all existing IPv4 addresses
+      Get-NetIPAddress -InterfaceIndex $nic.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
         Remove-NetIPAddress -Confirm:$false
 
-      # Assign provider_ip
+      # 4. Assign static IP
       New-NetIPAddress `
-        -InterfaceIndex $clusterNic.IfIndex `
+        -InterfaceIndex $nic.IfIndex `
         -IPAddress $providerIp `
         -PrefixLength 24
     "
