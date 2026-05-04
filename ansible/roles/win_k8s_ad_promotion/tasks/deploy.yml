@@ -76,39 +76,21 @@
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
-- name: Configure br-cluster NIC as persistent static
+- name: Force static IP on br-cluster NIC (netsh – FINAL)
   raw: |
     powershell -Command "
+      $ip = '{{ hostvars[inventory_hostname].provision_ip }}'
 
-      # Identify br-cluster NIC (not 172.x)
-      $nic = Get-NetAdapter | Where-Object {
-        $ip = (Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-               Select-Object -First 1 -ExpandProperty IPAddress)
-        $ip -and -not $ip.StartsWith('172.')
-      } | Select-Object -First 1
+      # Identify second NIC explicitly
+      $nicName = 'Ethernet 2'
 
-      if (-not $nic) {
-        Write-Error 'Unable to identify br-cluster NIC'
-        exit 1
-      }
+      # Force static IP (no gateway, no DHCP, no policy checks)
+      netsh interface ip set address name=`"$nicName`" static $ip 255.255.255.0 none
 
-      # Disable DHCP PERSISTENTLY
-      Set-NetIPInterface `
-        -PolicyStore PersistentStore `
-        -InterfaceIndex $nic.IfIndex `
-        -AddressFamily IPv4 `
-        -Dhcp Disabled
-
-      # Disable APIPA PERSISTENTLY
-      netsh interface ipv4 set interface $nic.IfIndex apipa=no
-
-      # Remove any existing IPv4 addresses (both stores)
-      Get-NetIPAddress -InterfaceIndex $nic.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Remove-NetIPAddress -Confirm:$false
-
-        # Assign static IP
-        New-NetIPAddress -InterfaceIndex $nic.IfIndex -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }}
+      # Disable DHCP explicitly
+      netsh interface ip set dns name=`"$nicName`" static none
     "
+
 
 - name: Test if changd
   shell: |
