@@ -91,13 +91,13 @@
 - name: Force static IP on br-cluster NIC (netsh – FINAL)
   raw: |
     powershell -Command "
-      $ip = '{{ hostvars[inventory_hostname].provision_ip }}'
+      $ip = '{{ provision_ip }}'
 
       # Identify second NIC explicitly
       $nicName = 'Ethernet 2'
 
       # Force static IP (no gateway, no DHCP, no policy checks)
-      netsh interface ip set address name=`"$nicName`" static $ip 255.255.255.0 none
+      netsh interface ip set address name=`"$nicName`" static $ip 255.255.255.0 {{ provision_gw }} 1
 
       # Disable DHCP explicitly
       netsh interface ip set dns name=`"$nicName`" static none
