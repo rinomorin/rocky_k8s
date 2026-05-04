@@ -72,12 +72,12 @@
   raw: |
     powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
   
-- name: get Nic to target
-  shell: |
+- name: Discover br-cluster NIC alias
+  raw: |
     powershell -Command "
       $nic = Get-NetAdapter | Where-Object {
         $ip = (Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-               Select-Object -First 1 -ExpandProperty IPAddress)
+              Select-Object -First 1 -ExpandProperty IPAddress)
         $ip -and -not $ip.StartsWith('172.')
       } | Select-Object -First 1
 
@@ -86,7 +86,12 @@
         exit 1
       }
 
-     echo $nic.Name
+      # Output ONLY the interface alias for Ansible
+      Write-Output $nic.Name
+    "
+  register: cluster_nic
+  changed_when: false
+    echo $nic.Name
     "
 
 - name: set fact for nic
