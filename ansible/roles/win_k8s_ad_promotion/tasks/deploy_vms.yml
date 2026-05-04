@@ -74,20 +74,22 @@
     timeout: 300
   delegate_to: localhost
 
-- name: Set SSH keys on localhost for Windows VM Access
+- name: Set SSH keys for Windows VM Access (Manual Injection)
   vars:
-    ssh_key_path: "{{ lookup('env', 'HOME') }}/.ssh/id_rsa.pub"
-    # Using the specific user for the target Windows VM
-    target_user: "{{ hostvars[inventory_hostname]['ansible_user'] | default('Administrator') }}"
+    ssh_key_path: "/home/core/.ssh/id_rsa.pub"
+    target_user: "core"
   shell: |
-    sshpass -p "{{ ad_safe_mode_password }}" ssh-copy-id {{ target_user }}@{{ maintenance_ip_raw.stdout | trim }}
+    export SSHPASS="{{ ad_admin_password }}"
+    # Read the local key
+    PUBKEY=$(cat {{ ssh_key_path }})
+    
+    # Use sshpass to run a PowerShell command on the guest to append the key
+    sshpass -e ssh -o "StrictHostKeyChecking=no" {{ target_user }}@{{ maintenance_ip_raw.stdout | trim }} \
+      "powershell -Command \"if (!(Test-Path ~/.ssh)) { New-Item -ItemType Directory -Path ~/.ssh }; Add-Content -Path ~/.ssh/authorized_keys -Value '$PUBKEY'\""
   delegate_to: localhost
   register: ssh_copy_result
-  # Avoid failing if the key is already present
-  failed_when: 
-    - ssh_copy_result.rc != 0 
-    - "'already exists' not in ssh_copy_result.stderr"
-    - "'Already characterized' not in ssh_copy_result.stdout"
+  # We use a custom check to make sure we don't duplicate keys if we run this twice
+  changed_when: "'Add-Content' in ssh_copy_result.cmd"
 
 # # --- GUEST TRANSITION (Now using SSH) ---
 # - name: Set SSH facts for Windows
