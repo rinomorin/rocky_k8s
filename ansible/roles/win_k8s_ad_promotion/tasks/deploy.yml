@@ -49,7 +49,7 @@
 - name: show ips
   debug:
     msg: 
-      - "Provider IP: {{ provider_ip }}, br-nat IP: {{ ansible_host }}"
+      - "br-nat IP: {{ ansible_host }}"
       # - "ansible_host set to: {{ ansible_host }}"
 
 - name: Wait for SSH via br-nat
