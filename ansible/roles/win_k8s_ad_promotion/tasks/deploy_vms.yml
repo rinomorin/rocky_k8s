@@ -91,16 +91,16 @@
   # We use a custom check to make sure we don't duplicate keys if we run this twice
   changed_when: "'Add-Content' in ssh_copy_result.cmd"
 
-# # --- GUEST TRANSITION (Now using SSH) ---
-# - name: Set SSH facts for Windows
-#   ansible.builtin.set_fact:
-#     ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
-#     ansible_connection: ssh
-#     ansible_user: core
-#     ansible_password: "{{ lookup('env', 'secops_pwd') }}"
-#     ansible_shell_type: powershell
-#     # Required for Rocky Linux / OpenSSL 3 compatibility
-#     ansible_ssh_common_args: '-o "SetEnv OPENSSL_CONF=/dev/null"' 
+# --- GUEST TRANSITION (Now using SSH) ---
+- name: Set SSH facts for Windows
+  ansible.builtin.set_fact:
+    ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
+    ansible_connection: ssh
+    ansible_user: core
+    ansible_password: "{{ ad_safe_mode_password }}"
+    ansible_shell_type: powershell
+    # Required for Rocky Linux / OpenSSL 3 compatibility
+    ansible_ssh_common_args: '-o "SetEnv OPENSSL_CONF=/dev/null"' 
 
 - name: Wait for SSH (Human Intervention Required)
   ansible.builtin.wait_for:
