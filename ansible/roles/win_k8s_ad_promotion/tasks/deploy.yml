@@ -15,6 +15,8 @@
 - name: Discover br-nat IP from KVM
   delegate_to: "{{ kvm_ip }}"
   become: yes
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: |
     virsh domifaddr {{ inventory_hostname }} \
       --source agent,lease | awk '/ipv4/ && /br-nat/ {print $4}' | cut -d/ -f1
