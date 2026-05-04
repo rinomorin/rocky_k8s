@@ -28,7 +28,7 @@
   delegate_to: "{{ kvm_ip }}"
   becme: yes
   vars:
-    ansible_user: "{{ hostvars[kvm_ip]['ansible_user'] | default('core') }}"
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] | default('core') }}"
   raw: |
     # Get MAC for the specific bridge
     M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
