@@ -50,6 +50,7 @@
   debug:
     msg: 
       - "br-nat IP: {{ ansible_host }}"
+      - "stdout raw: {{ br_nat_ip.stdout }}"
       # - "ansible_host set to: {{ ansible_host }}"
 
 - name: Wait for SSH via br-nat
