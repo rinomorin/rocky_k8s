@@ -46,6 +46,12 @@
   set_fact:
     ansible_host: "{{ br_nat_ip.stdout }}"
 
+- name: show ips
+  debug:
+    msg: 
+      - "Provider IP: {{ provider_ip }}, br-nat IP: {{ ansible_host }}"
+      - "ansible_host set to: {{ ansible_host }}"
+      
 - name: Wait for SSH via br-nat
   wait_for:
     host: "{{ ansible_host }}"
