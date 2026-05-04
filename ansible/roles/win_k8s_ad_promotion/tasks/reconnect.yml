@@ -22,13 +22,40 @@
 # Fallback to br-nat if provider_ip fails
 # ------------------------------------------------------------
 
+# ------------------------------------------------------------
+# After reboot: try provision_ip first
+# ------------------------------------------------------------
+
+- name: Try SSH via provision_ip
+  wait_for:
+    host: "{{ hostvars[inventory_hostname].provision_ip }}"
+    port: 22
+    timeout: 15
+  register: provision_ssh
+  delegate_to: localhost
+  failed_when: false
+  changed_when: false
+
+- name: Use provision_ip for SSH
+  set_fact:
+    ansible_host: "{{ hostvars[inventory_hostname].provision_ip }}"
+  when: provision_ssh.elapsed is defined and provision_ssh.elapsed < 15
+
+- name: Reset SSH connection after ansible_host change
+  meta: reset_connection
+  when: provision_ssh.elapsed is defined and provision_ssh.elapsed < 15
+
+# ------------------------------------------------------------
+# Fallback to br-nat if provision_ip fails
+# ------------------------------------------------------------
+
 - name: Rediscover br-nat IP from KVM (fallback)
-  delegate_to: "{{ kvm }}"
-  shell: |
+  delegate_to: "{{ kvm_ip }}"
+  vars:
+    ansible_host: "{{ hostvars[kvm].ansible_host | default(kvm) }}"
+    ansible_user: "{{ hostvars[kvm].ansible_user | default('root') }}"
+  raw: |
     virsh domifaddr {{ inventory_hostname }} \
-      --source agent,lease | awk '/ipv4/ && /br-nat/ {print $4}' | cut -d/ -f1
-  register: br_nat_ip_fallback
-  when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
 
 - name: Use br-nat IP fallback
   set_fact:
