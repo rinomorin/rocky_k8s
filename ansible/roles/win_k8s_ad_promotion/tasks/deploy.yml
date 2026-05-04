@@ -76,8 +76,8 @@
 - name: Force static IP on br-cluster NIC
   raw: |
     powershell -Command "
-      $ip      = '{{ hostvars[inventory_hostname].provision_ip }}'
-      $gw      = '{{ hostvars[inventory_hostname].provision_gw }}'
+      $ip      = '{{ hostvars[inventory_hostname]['provision_ip'] }}'
+      $gw      = '{{ hostvars[inventory_hostname]['provision_ip'].split('.')[0:3] | join('.') }}.1'
 
       $nic = Get-NetAdapter -Name 'Ethernet 2'
 
