@@ -79,7 +79,7 @@
     ssh_key_path: "/home/core/.ssh/id_rsa.pub"
     target_user: "core"
   shell: |
-    export SSHPASS="{{ ad_admin_password }}"
+    export SSHPASS="{{ ad_safe_mode_password }}"
     # Read the local key
     PUBKEY=$(cat {{ ssh_key_path }})
     
