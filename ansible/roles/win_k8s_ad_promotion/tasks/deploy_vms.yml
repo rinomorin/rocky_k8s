@@ -33,16 +33,15 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
+    ansible_connection: ssh
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: |
     M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
-    # We increased the wait time here because DHCP won't trigger until 
-    # the human passes the initial OOBE screens.
-    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 10; done
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 5; done
     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
   register: maintenance_ip_raw
-  retries: 50
-  delay: 20
+  retries: 20
+  delay: 10
 
 # --- GUEST TRANSITION (Now using SSH) ---
 - name: Set SSH facts for Windows
