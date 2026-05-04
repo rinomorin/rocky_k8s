@@ -112,9 +112,6 @@
         -PrefixLength 24
     "
 
-# ------------------------------------------------------------
-# Set hostname (requires reboot)
-# ------------------------------------------------------------
 - name: Test if changd
   shell: |
     ssh {{ ansible_host }} "ipconfig"
@@ -123,6 +120,10 @@
   register: ssh_test
 - debug:
     var: ssh_test
+
+# ------------------------------------------------------------
+# Set hostname (requires reboot)
+# ------------------------------------------------------------
 
 - name: Set hostname
   raw: |
