@@ -4,19 +4,19 @@
 # After reboot: try provider_ip first
 # ------------------------------------------------------------
 
-- name: Try SSH via provider_ip
+- name: Try SSH via provision_ip
   wait_for:
-    host: "{{ provider_ip }}"
+    host: "{{ provision_ip }}"
     port: 22
     timeout: 15
-  register: provider_ssh
+  register: provision_ssh
   failed_when: false
   changed_when: false
 
-- name: Use provider_ip for SSH
+- name: Use provision_ip for SSH
   set_fact:
-    ansible_host: "{{ provider_ip }}"
-  when: provider_ssh.elapsed is defined and provider_ssh.elapsed < 15
+    ansible_host: "{{ provision_ip }}"
+  when: provision_ssh.elapsed is defined and provision_ssh.elapsed < 15
 
 # ------------------------------------------------------------
 # Fallback to br-nat if provider_ip fails
@@ -28,12 +28,12 @@
     virsh domifaddr {{ inventory_hostname }} \
       --source agent,lease | awk '/ipv4/ && /br-nat/ {print $4}' | cut -d/ -f1
   register: br_nat_ip_fallback
-  when: provider_ssh.elapsed is not defined or provider_ssh.elapsed >= 15
+  when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
 
 - name: Use br-nat IP fallback
   set_fact:
     ansible_host: "{{ br_nat_ip_fallback.stdout }}"
-  when: provider_ssh.elapsed is not defined or provider_ssh.elapsed >= 15
+  when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
 
 # ------------------------------------------------------------
 # Wait for SSH on chosen interface
