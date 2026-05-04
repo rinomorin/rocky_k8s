@@ -105,7 +105,7 @@
 # ------------------------------------------------------------
 
 - name: Set hostname
-  shell: |
+  raw: |
     powershell -Command "
       if ((hostname) -ne '{{ hostname }}') {
         Rename-Computer -NewName '{{ hostname }}' -Force
