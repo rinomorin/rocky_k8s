@@ -72,17 +72,9 @@
   raw: |
     powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
   
-
-# ------------------------------------------------------------
-# Configure br-cluster NIC with provider_ip
-# ------------------------------------------------------------
-- name: Force static IP on br-cluster NIC (validated manual sequence)
-  raw: |
+- name: get Nic to target
+  shell: |
     powershell -Command "
-      $ip = '{{ provision_ip }}'
-      $gw = '{{ provision_gw }}'
-      
-      # Identify br-cluster NIC (not 172.x)
       $nic = Get-NetAdapter | Where-Object {
         $ip = (Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
                Select-Object -First 1 -ExpandProperty IPAddress)
@@ -94,7 +86,23 @@
         exit 1
       }
 
-     echo "$($nic.Name) identified as br-cluster adapter. Configuring static IP $ip with gateway $gw."
+     echo $nic.Name
+    "
+
+- name: set fact for nic
+  set_fact:
+    br_cluster_nic: "{{ get_nic_to_target.stdout }}"
+# ------------------------------------------------------------
+# Configure br-cluster NIC with provider_ip
+# ------------------------------------------------------------
+- name: Force static IP on br-cluster NIC (validated manual sequence)
+  raw: |
+    powershell -Command "
+      $ip = '{{ provision_ip }}'
+      $gw = '{{ provision_gw }}'
+      
+      # Identify br-cluster NIC (not 172.x)
+      $nic = {{ br_cluster_nic }}
 
       # Ensure adapter is enabled
       Enable-NetAdapter -Name $nic -Confirm:$false
