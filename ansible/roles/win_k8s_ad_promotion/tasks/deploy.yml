@@ -94,6 +94,7 @@
         exit 1
       }
 
+     echo "$($nic.Name) identified as br-cluster adapter. Configuring static IP $ip with gateway $gw."
 
       # Ensure adapter is enabled
       Enable-NetAdapter -Name $nic -Confirm:$false
