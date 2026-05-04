@@ -73,44 +73,43 @@
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
-- name: Configure br-cluster NIC as persistent static
+- name: Configure br-cluster NIC as persistent static (FINAL)
   raw: |
     powershell -Command "
       $providerIp = '{{ hostvars[inventory_hostname].provision_ip }}'
+      $gateway    = '{{ hostvars[inventory_hostname].provision_gw | default('10.0.0.1') }}'
 
-      # Identify br-cluster NIC (not 172.x)
       $nic = Get-NetAdapter | Where-Object {
-        $ip = (Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-               Select-Object -First 1 -ExpandProperty IPAddress)
-        $ip -and -not $ip.StartsWith('172.')
-      } | Select-Object -First 1
+        $_.Name -eq 'Ethernet 2'
+      }
 
       if (-not $nic) {
-        Write-Error 'Unable to identify br-cluster NIC'
+        Write-Error 'br-cluster NIC not found'
         exit 1
       }
 
-      # Disable DHCP PERSISTENTLY
-      Set-NetIPInterface `
-        -PolicyStore PersistentStore `
+      # Disable DHCP persistently
+      Set-NetIPInterface -PolicyStore PersistentStore `
         -InterfaceIndex $nic.IfIndex `
         -AddressFamily IPv4 `
         -Dhcp Disabled
 
-      # Disable APIPA PERSISTENTLY
+      # Disable APIPA
       netsh interface ipv4 set interface $nic.IfIndex apipa=no
 
-      # Remove any existing IPv4 addresses (both stores)
+      # Remove existing IPs
       Get-NetIPAddress -InterfaceIndex $nic.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
         Remove-NetIPAddress -Confirm:$false
 
-      # Add static IP PERSISTENTLY
+      # Assign static IP WITH GATEWAY (CRITICAL)
       New-NetIPAddress `
         -PolicyStore PersistentStore `
         -InterfaceIndex $nic.IfIndex `
         -IPAddress $providerIp `
-        -PrefixLength 24
+        -PrefixLength 24 `
+        -DefaultGateway $gateway
     "
+
 
 - name: Test if changd
   shell: |
