@@ -46,27 +46,26 @@
   set_fact:
     ansible_host: "{{ br_nat_ip.stdout }}"
 
-- name: show ips
-  debug:
-    msg: 
-      - "br-nat IP: {{ ansible_host }}"
-      - "stdout raw: {{ br_nat_ip.stdout }}"
+
+- name: Reset SSH connection after IP change
+  meta: reset_connection
 
 - name: Wait for SSH via br-nat
-  delegate_to: localhost
   wait_for:
     host: "{{ ansible_host }}"
     port: 22
     timeout: 300
+  delegate_to: localhost
+
 
 # ------------------------------------------------------------
 # Prepare state directory
 # ------------------------------------------------------------
 
 - name: Ensure state directory exists
-  shell: |
+  raw: |
     powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
-  changed_when: false
+  
 
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
