@@ -73,29 +73,25 @@
     powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
   
 - name: Discover br-cluster NIC alias
-  raw: |
-    powershell -Command "
-      $nic = Get-NetAdapter | Where-Object {
-        $ip = (Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-              Select-Object -First 1 -ExpandProperty IPAddress)
-        $ip -and -not $ip.StartsWith('172.')
-      } | Select-Object -First 1
+  win_shell: |
+    $nic = Get-NetAdapter | Where-Object {
+        $ip = (Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress
+        $ip -and $ip -notlike '172.*'
+    } | Select-Object -First 1
 
-      if (-not $nic) {
-        Write-Error 'Unable to identify br-cluster NIC'
+    if (-not $nic) {
+        Write-Error "Unable to identify br-cluster NIC"
         exit 1
-      }
+    }
 
-      # Output ONLY the interface alias for Ansible
-      Write-Output $nic.Name
-    "
+    # Output ONLY the interface alias
+    Write-Output $nic.Name
   register: cluster_nic
   changed_when: false
 
-- name: set fact for nic
+- name: Set fact for nic
   set_fact:
-    br_cluster_nic: "{{ cluster_nic.stdout }}"
-
+    br_cluster_nic: "{{ cluster_nic.stdout | trim }}"
 - debug:
     msg:
       - "Identified br-cluster NIC alias: {{ br_cluster_nic }}"
