@@ -97,13 +97,16 @@
 - name: Enable br-cluster NIC
   raw: powershell.exe -NoProfile -NonInteractive -Command "Enable-NetAdapter -Name '{{ br_cluster_nic }}' -Confirm:$false"
 
-- name: Surgical IP assignment (Skip Gateway)
+- name: Total Purge and Re-provision IPv4
   raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24; Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 -AddressDirection Inbound"
+    powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 -Dhcp Disabled; Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -SkipAsSource $false; Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 -DadTransmits 0 -RouterDiscovery Disabled"
   register: ip_config_result
   
 - name: Restart NIC to apply changes
   raw: powershell.exe -NoProfile -NonInteractive -Command "Restart-NetAdapter -Name '{{ br_cluster_nic }}'"
+
+- name: Verify Address State
+  raw: powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Select-Object IPAddress, AddressState"
 
 - debug:
     msg:
