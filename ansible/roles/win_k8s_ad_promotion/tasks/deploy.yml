@@ -62,7 +62,7 @@
 
 - name: Discover br-cluster NIC alias
   raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "$n=(Get-NetAdapter|?{(Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress -notlike '172.*'})[0]; if($n){Write-Host \"###$($n.Name)###\"}else{exit 1}"
+    powershell.exe -NoProfile -NonInteractive -Command "$n=(Get-NetAdapter | ?{(Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress -notlike '172.*'})[0]; if($n){Write-Host \"###$($n.Name)###\"}else{exit 1}"
   register: cluster_nic
   changed_when: false
 
