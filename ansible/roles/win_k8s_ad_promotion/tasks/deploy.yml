@@ -138,9 +138,9 @@
     "
   # notify: reboot
 
-# Add this at the end of your main playbook tasks
 - name: Force native reboot
   ansible.windows.win_reboot:
-    pre_reboot_command: powershell.exe -Command "Get-Volume C | Flush-Volume"
+    pre_reboot_cmd: powershell.exe -Command "Get-Volume C | Flush-Volume"
+    reboot_timeout: 900
   become: yes
   become_method: runas
