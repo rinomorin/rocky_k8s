@@ -101,17 +101,16 @@
   raw: |
     powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -Dhcp Disabled"
 
-- name: Remove existing IPv4 addresses from br-cluster NIC
-  raw: powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue"
-
-- name: Assign IP Address only
-  raw: powershell.exe -NoProfile -NonInteractive -Command "New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24"
-  ignore_errors: yes
+- name: Force Persistent Static IP
+  raw: |
+    powershell.exe -NoProfile -NonInteractive -Command "Remove-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -SkipAsSource $false -PolicyStore PersistentStore"
   register: ip_config_result
 
 - name: Assign new Static IP to br-cluster NIC
   raw: powershell.exe -NoProfile -NonInteractive -Command "New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -PrefixLength 24 -DefaultGateway {{ provision_gw }}"
   
+- name: Restart NIC to apply changes
+  raw: powershell.exe -NoProfile -NonInteractive -Command "Restart-NetAdapter -Name '{{ br_cluster_nic }}'"
 
 - debug:
     msg:
