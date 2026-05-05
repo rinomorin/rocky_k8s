@@ -54,7 +54,7 @@
       
 - name: Ensure state directory exists
   raw: |
-#     powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
+    powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
   
 # - name: Ensure state directory exists
 #   win_shell: New-Item -ItemType Directory -Force "example_state_dir"
