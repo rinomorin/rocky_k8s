@@ -1,73 +1,73 @@
----
-# --- INFRASTRUCTURE TASKS (Delegated to KVM via SSH) ---
+# ---
+# # --- INFRASTRUCTURE TASKS (Delegated to KVM via SSH) ---
 
-- name: Discover Maintenance IP
-  delegate_to: "{{ kvm_ip }}"
-  become: yes
-  vars:
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-  shell: |
-    # Get MAC for the specific bridge
-    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+# - name: Discover Maintenance IP
+#   delegate_to: "{{ kvm_ip }}"
+#   become: yes
+#   vars:
+#     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+#   shell: |
+#     # Get MAC for the specific bridge
+#     M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
     
-    # Loop until the lease appears
-    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
-      sleep 5
-    done
+#     # Loop until the lease appears
+#     while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
+#       sleep 5
+#     done
     
-    # Return just the IP
-    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
-  register: maintenance_ip_raw
-  # We still use retries/delay as a safety net for the task itself
-  retries: 20
-  delay: 10
+#     # Return just the IP
+#     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+#   register: maintenance_ip_raw
+#   # We still use retries/delay as a safety net for the task itself
+#   retries: 20
+#   delay: 10
 
-- name: Wait for SSH to be active on Windows VM
-  wait_for:
-    host: "{{ maintenance_ip_raw.stdout | trim }}"
-    port: 22
-    state: started
-    delay: 5
-    timeout: 300
-  delegate_to: localhost
+# - name: Wait for SSH to be active on Windows VM
+#   wait_for:
+#     host: "{{ maintenance_ip_raw.stdout | trim }}"
+#     port: 22
+#     state: started
+#     delay: 5
+#     timeout: 300
+#   delegate_to: localhost
 
-- name: Set SSH keys for Windows VM Access (Manual Injection)
-  vars:
-    ssh_key_path: "/home/core/.ssh/id_rsa.pub"
-    target_user: "core"
-  shell: |
-    export SSHPASS="{{ ad_safe_mode_password }}"
-    # Read the local key
-    PUBKEY=$(cat {{ ssh_key_path }})
+# - name: Set SSH keys for Windows VM Access (Manual Injection)
+#   vars:
+#     ssh_key_path: "/home/core/.ssh/id_rsa.pub"
+#     target_user: "core"
+#   shell: |
+#     export SSHPASS="{{ ad_safe_mode_password }}"
+#     # Read the local key
+#     PUBKEY=$(cat {{ ssh_key_path }})
     
-    # Use sshpass to run a PowerShell command on the guest to append the key
-    sshpass -e ssh -o "StrictHostKeyChecking=no" {{ target_user }}@{{ maintenance_ip_raw.stdout | trim }} \
-      "powershell -Command \"if (!(Test-Path ~/.ssh)) { New-Item -ItemType Directory -Path ~/.ssh }; Add-Content -Path ~/.ssh/authorized_keys -Value '$PUBKEY'\""
-  delegate_to: localhost
-  register: ssh_copy_result
-  # We use a custom check to make sure we don't duplicate keys if we run this twice
-  changed_when: "'Add-Content' in ssh_copy_result.cmd"
+#     # Use sshpass to run a PowerShell command on the guest to append the key
+#     sshpass -e ssh -o "StrictHostKeyChecking=no" {{ target_user }}@{{ maintenance_ip_raw.stdout | trim }} \
+#       "powershell -Command \"if (!(Test-Path ~/.ssh)) { New-Item -ItemType Directory -Path ~/.ssh }; Add-Content -Path ~/.ssh/authorized_keys -Value '$PUBKEY'\""
+#   delegate_to: localhost
+#   register: ssh_copy_result
+#   # We use a custom check to make sure we don't duplicate keys if we run this twice
+#   changed_when: "'Add-Content' in ssh_copy_result.cmd"
 
-# --- GUEST TRANSITION (Now using SSH) ---
-- name: Set SSH facts for Windows
-  ansible.builtin.set_fact:
-    ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
-    ansible_connection: ssh
-    ansible_user: core
-    ansible_password: "{{ ad_safe_mode_password }}"
-    ansible_shell_type: powershell
-    # Required for Rocky Linux / OpenSSL 3 compatibility
-    ansible_ssh_common_args: '-o "SetEnv OPENSSL_CONF=/dev/null"' 
+# # --- GUEST TRANSITION (Now using SSH) ---
+# - name: Set SSH facts for Windows
+#   ansible.builtin.set_fact:
+#     ansible_host: "{{ maintenance_ip_raw.stdout | trim }}"
+#     ansible_connection: ssh
+#     ansible_user: core
+#     ansible_password: "{{ ad_safe_mode_password }}"
+#     ansible_shell_type: powershell
+#     # Required for Rocky Linux / OpenSSL 3 compatibility
+#     ansible_ssh_common_args: '-o "SetEnv OPENSSL_CONF=/dev/null"' 
 
-- name: Wait for SSH (Human Intervention Required)
-  ansible.builtin.wait_for:
-    host: "{{ maintenance_ip_raw.stdout | trim }}"
-    port: 22
-    state: started
-    delay: 30
-    # Increased timeout to 30 minutes to allow time for the human to interact
-    timeout: 900 
-  delegate_to: localhost
+# - name: Wait for SSH (Human Intervention Required)
+#   ansible.builtin.wait_for:
+#     host: "{{ maintenance_ip_raw.stdout | trim }}"
+#     port: 22
+#     state: started
+#     delay: 30
+#     # Increased timeout to 30 minutes to allow time for the human to interact
+#     timeout: 900 
+#   delegate_to: localhost
 
-- name: Gather facts via SSH
-  ansible.builtin.setup:
+# - name: Gather facts via SSH
+#   ansible.builtin.setup:
