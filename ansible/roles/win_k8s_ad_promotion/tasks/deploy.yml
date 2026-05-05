@@ -30,7 +30,7 @@
     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
   register: br_nat_ip
   changed_when: false
-  
+
 - name: Fail if br-nat IP not found
   assert:
     that:
@@ -51,6 +51,12 @@
 # ------------------------------------------------------------
 # Prepare state directory
 # ------------------------------------------------------------
+- name: show defined ips
+  debug:
+    msg: 
+      - "Provision IP: {{ provision_ip }}, Provision GW: {{ provision_gw }}"
+      - "provision_gw: {{ provision_gw }}"
+      - "ansible_host: {{ ansible_host }}"
       
 - name: Compute br-cluster network parameters
   delegate_to: localhost
