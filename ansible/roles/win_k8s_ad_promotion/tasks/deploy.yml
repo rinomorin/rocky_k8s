@@ -99,7 +99,8 @@
 
 - name: Hard reset and set IP on br-cluster NIC
   raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -Dhcp Disabled; Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }} -ErrorAction Stop; Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 -RouterDiscovery Disabled"  register: ip_config_result
+    powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -Dhcp Disabled; Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }} -ErrorAction Stop; Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 -RouterDiscovery Disabled"
+  register: ip_config_result
   
 - name: Restart NIC to apply changes
   raw: powershell.exe -NoProfile -NonInteractive -Command "Restart-NetAdapter -Name '{{ br_cluster_nic }}'"
