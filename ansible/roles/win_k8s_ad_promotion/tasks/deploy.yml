@@ -11,9 +11,8 @@
 # ------------------------------------------------------------
 # Discover maintenance NIC (br-nat) IP via KVM
 # ------------------------------------------------------------
-- debug:
-    msg: "what is hostname {{ inventory_hostname.split('.')[0] }}"    
-    
+
+
 - name: Discover br-nat IP from KVM
   delegate_to: "{{ kvm_ip }}"
   become: yes
@@ -21,7 +20,7 @@
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: |
     # Get MAC for the specific bridge
-    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0]|l }} | grep 'br-nat' | awk '{print $5}')
     
     # Loop until the lease appears
     while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
@@ -32,6 +31,11 @@
     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
   register: br_nat_ip
   changed_when: false
+
+- debug:
+    msg: 
+      - "what is hostname {{ inventory_hostname.split('.')[0] }}"    
+      - "what is kvm_ip {{ br_nat_ip.stdout }}"
 
 - name: Fail if br-nat IP not found
   assert:
