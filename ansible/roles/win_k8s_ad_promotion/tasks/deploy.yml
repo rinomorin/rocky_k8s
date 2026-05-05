@@ -12,13 +12,25 @@
 # Discover maintenance NIC (br-nat) IP via KVM
 # ------------------------------------------------------------
 
-- name: Render NIC provisioning script locally
-  delegate_to: localhost
-  template:
-    src: update_nic_provision.ps1.j2
-    dest: "/tmp/update_nic_provision_{{ inventory_hostname }}.ps1"
-    mode: '0644'
-
+- name: Discover br-nat IP from KVM
+  delegate_to: "{{ kvm_ip }}"
+  become: yes
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  shell: |
+    # Get MAC for the specific bridge
+    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    
+    # Loop until the lease appears
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
+      sleep 5
+    done
+    
+    # Return just the IP
+    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+  register: br_nat_ip
+  changed_when: false
+  
 - name: Fail if br-nat IP not found
   assert:
     that:
@@ -66,6 +78,13 @@
     provision_gw: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[0:3] | join('.') }}.1"
 
 
+- name: Render NIC provisioning script locally
+  delegate_to: localhost
+  template:
+    src: update_nic_provision.ps1.j2
+    dest: "/tmp/update_nic_provision_{{ inventory_hostname }}.ps1"
+    mode: '0644'
+
 - name: Copy NIC provisioning script to Windows host
   become: false
   shell: |
@@ -82,7 +101,7 @@
 - name: Parse NIC provisioning result
   debug:
     msg: "NIC provision result: {{ nic_result.stdout }}"
-    
+
 
 - name: Total Purge and Re-provision IPv4
   raw: |
