@@ -121,6 +121,12 @@
 - debug:
     msg: "hostname: {{ hostname }}"
 
+- name: get current hostname
+  raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
+  register: current_hostname
+  changed_when: false
+
+
 - name: Set hostname
   raw: |
     powershell -Command "
@@ -128,6 +134,7 @@
         Rename-Computer -NewName '{{ hostname }}' -Force
       }
     "
+  when: current_hostname.stdout != hostname
   # notify: reboot
 
 - name: Force native reboot
@@ -136,3 +143,4 @@
     reboot_timeout: 900
   become: yes
   become_method: runas
+  when: current_hostname.stdout != hostname
