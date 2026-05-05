@@ -80,7 +80,7 @@
     br_cluster_nic: "{{ cluster_nic.stdout | regex_findall('###(.*?)###') | first | default('NOT_FOUND') | trim }}"
 
 - debug:
-    msg: "Discovered cluster NIC: {{ br_cluster_nic }} vai  {{ cluster_nic}}"
+    msg: "{{ansible_host}}: Discovered cluster NIC: {{ br_cluster_nic }} vai  {{ cluster_nic}}"
 
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
