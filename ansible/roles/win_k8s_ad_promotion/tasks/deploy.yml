@@ -91,7 +91,7 @@
   changed_when: false
 
 - debug:
-    msg: "Discovered cluster NIC: {{ br_cluster_nic.stdout }}"
+    msg: "Discovered br-cluster IfIndex: {{ br_cluster_ifindex.stdout }}"
 
 # - name: Enable br-cluster NIC
 #   raw: "powershell.exe -Command \"Enable-NetAdapter -Name '{{ br_cluster_nic }}' -Confirm:$false\""
