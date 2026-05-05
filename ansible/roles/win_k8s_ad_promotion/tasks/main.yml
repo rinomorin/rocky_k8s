@@ -2,7 +2,7 @@
 # roles/rocky_k8s/tasks/main.yml
 
 - import_tasks: deploy.yml
-# - import_tasks: reconnect.yml
+- import_tasks: reconnect.yml
 # - import_tasks: configure_forest.yml
 
 

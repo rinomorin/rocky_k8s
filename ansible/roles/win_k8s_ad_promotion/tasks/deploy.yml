@@ -48,17 +48,6 @@
     provision_ip: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
     provision_gw: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[0:3] | join('.') }}.1"
 
-# - name: Reset SSH connection after IP change
-#   meta: reset_connection
-
-# - name: Wait for SSH via br-nat
-#   wait_for:
-#     host: "{{ ansible_host }}"
-#     port: 22
-#     timeout: 300
-#   delegate_to: localhost
-
-
 # ------------------------------------------------------------
 # Prepare state directory
 # ------------------------------------------------------------
