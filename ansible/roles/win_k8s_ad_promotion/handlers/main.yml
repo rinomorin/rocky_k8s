@@ -1,4 +1,4 @@
-- name: Force native reboot
+- name: reboot
   ansible.windows.win_reboot:
     msg: "Rebooting after hostname change"
     reboot_timeout: 900
