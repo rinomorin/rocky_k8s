@@ -96,30 +96,11 @@
 # ------------------------------------------------------------
 - name: Force static IP on br-cluster NIC (validated manual sequence)
   raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "
-      $ip = '{{ provision_ip }}'
-      $gw = '{{ provision_gw }}'
-      
-      # Identify br-cluster NIC (not 172.x)
-      $nic = {{ br_cluster_nic }}
+    powershell.exe -NoProfile -NonInteractive -Command "Enable-NetAdapter -Name {{ br_cluster_nic }} -Confirm:$false"
+    powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias {{ br_cluster_nic }} -Dhcp Disabled"
+    powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias {{ br_cluster_nic }} -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:$false"
+    powershell.exe -NoProfile -NonInteractive -Command "New-NetIPAddress -InterfaceAlias {{ br_cluster_nic }} -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }}"
 
-      # Ensure adapter is enabled
-      Enable-NetAdapter -Name {{ br_cluster_nic }} -Confirm:$false
-
-      # Disable DHCP (adapter must exist)
-      Set-NetIPInterface -InterfaceAlias $nic -Dhcp Disabled
-
-      # Remove any existing IPv4 addresses
-      Get-NetIPAddress -InterfaceAlias $nic -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Remove-NetIPAddress -Confirm:$false
-
-      # Assign static IP with gateway
-      New-NetIPAddress `
-        -InterfaceAlias $nic `
-        -IPAddress $ip `
-        -PrefixLength 24 `
-        -DefaultGateway $gw
-    "
 - name: Test if changd
   shell: |
     ssh {{ ansible_host }} ipconfig
