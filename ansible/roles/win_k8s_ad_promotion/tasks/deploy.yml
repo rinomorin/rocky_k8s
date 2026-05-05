@@ -107,10 +107,11 @@
 - name: Assign IP Address only
   raw: powershell.exe -NoProfile -NonInteractive -Command "New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24"
   ignore_errors: yes
+  register: ip_config_result
 
 - name: Assign new Static IP to br-cluster NIC
   raw: powershell.exe -NoProfile -NonInteractive -Command "New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -PrefixLength 24 -DefaultGateway {{ provision_gw }}"
-  register: ip_config_result
+  
 
 - debug:
     msg:
