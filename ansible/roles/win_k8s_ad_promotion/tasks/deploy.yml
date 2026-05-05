@@ -96,24 +96,13 @@
 # ------------------------------------------------------------
 - name: Force static IP on br-cluster NIC
   raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "
-      $alias = '{{ br_cluster_nic }}';
-      $ip = '{{ provision_ip }}';
-      $gw = '{{ provision_gw }}';
-      
-      Enable-NetAdapter -Name $alias -Confirm:$false;
-      Set-NetIPInterface -InterfaceAlias $alias -Dhcp Disabled;
-      
-      # Remove any existing IPv4 addresses and gateways to start clean
-      Get-NetIPAddress -InterfaceAlias $alias -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue;
-      Get-NetRoute -InterfaceAlias $alias -NextHop $gw -ErrorAction SilentlyContinue | Remove-NetRoute -Confirm:$false;
-      
-      # Apply the new configuration
-      New-NetIPAddress -InterfaceAlias $alias -IPAddress $ip -PrefixLength 24 -DefaultGateway $gw;
-      
-      # Force a refresh of the interface
-      Restart-NetAdapter -Name $alias -Confirm:$false;
-    "
+    powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -Dhcp Disabled -ErrorAction SilentlyContinue; Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }} -ErrorAction SilentlyContinue"
+  register: ip_config_result
+
+- debug:
+    msg:
+      - "rc: {{ ip_config_result.rc }}"
+
 - name: Test if changd
   shell: |
     ssh {{ ansible_host }} ipconfig
