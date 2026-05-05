@@ -90,11 +90,6 @@
 # ------------------------------------------------------------
 # Set hostname (requires reboot)
 # ------------------------------------------------------------
-- name: Flush disk buffers (Windows Sync)
-  raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
-  ignore_errors: yes
-
 - name: get current hostname
   raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
   register: current_hostname
@@ -109,6 +104,11 @@
     "
   when: current_hostname.stdout != hostname
   # notify: reboot
+
+- name: Flush disk buffers (Windows Sync)
+  raw: |
+    powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
+  ignore_errors: yes
 
 - name: Force native reboot
   ansible.windows.win_reboot:
