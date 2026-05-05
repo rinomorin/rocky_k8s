@@ -1,4 +1,4 @@
 - name: reboot
   ansible.windows.win_reboot:
     pre_reboot_command: powershell.exe -Command "Get-Volume C | Flush-Volume"
-    # reboot_timeout: 300
+    reboot_timeout: 1
