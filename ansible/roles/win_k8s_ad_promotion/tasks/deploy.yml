@@ -83,8 +83,7 @@
 
 - name: Set fact for nic
   set_fact:
-    br_cluster_nic: "{{ cluster_nic.stdout_lines | last | trim }}"
-
+    br_cluster_nic: "{{ cluster_nic.stdout | regex_replace('\\x1b\\[[0-9;]*[a-zA-Z]|\\x1b\\]0;.*?\\x07', '') | trim }}"
 - name: Set fact for nic
   set_fact:
     br_cluster_nic: "{{ cluster_nic.stdout | trim }}"
