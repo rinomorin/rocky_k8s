@@ -60,6 +60,8 @@
 #   win_shell: New-Item -ItemType Directory -Force "example_state_dir"
   # Replace "example_state_dir" with your {{ windows_state_dir }} variable
 - name: Discover br-cluster NIC alias
+  vars
+    ansible_shell_type: powershell
   raw: |
     powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
     $$maintIndex = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $$_.IPAddress -like '172.*' }).InterfaceIndex;
