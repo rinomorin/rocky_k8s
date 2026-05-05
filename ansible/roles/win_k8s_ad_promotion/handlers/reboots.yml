@@ -2,4 +2,5 @@
   ansible.windows.win_reboot:
     pre_reboot_command: |
       powershell.exe -Command "if (Test-Path 'C:\tools\persist.exe') { & 'C:\tools\persist.exe' --commit }; Get-Volume C | Flush-Volume"
+    msg: "Rebooting to apply network changes"
     reboot_timeout: 600
