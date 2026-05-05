@@ -86,6 +86,7 @@
   when: br_cluster_nic != 'NOT_FOUND'
   register: enable_result
 
+
 - name: Fail if NIC not found
   fail:
     msg: "We could not find a secondary NIC on {{ inventory_hostname }}. Check virt-install settings."
@@ -102,38 +103,38 @@
 - name: Verify Address State
   raw: powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Select-Object IPAddress, AddressState"
 
-# ------------------------------------------------------------
-# Set hostname (requires reboot)
-# ------------------------------------------------------------
-- name: get current hostname
-  raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
-  register: current_hostname
-  changed_when: false
+# # ------------------------------------------------------------
+# # Set hostname (requires reboot)
+# # ------------------------------------------------------------
+# - name: get current hostname
+#   raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
+#   register: current_hostname
+#   changed_when: false
 
-- name: Set hostname
-  raw: |
-    powershell -Command "
-      if ((hostname) -ne '{{ hostname }}') {
-        Rename-Computer -NewName '{{ hostname }}' -Force
-      }
-    "
-  when: current_hostname.stdout != hostname
-  notify: reboot
+# - name: Set hostname
+#   raw: |
+#     powershell -Command "
+#       if ((hostname) -ne '{{ hostname }}') {
+#         Rename-Computer -NewName '{{ hostname }}' -Force
+#       }
+#     "
+#   when: current_hostname.stdout != hostname
+#   notify: reboot
 
-- name: Flush disk buffers (Windows Sync)
-  become: yes
-  become_method: runas
-  failed_when: false
-  register: sync_result
-  changed_when: sync_result.rc == 0
-  raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
-  ignore_errors: yes
+# - name: Flush disk buffers (Windows Sync)
+#   become: yes
+#   become_method: runas
+#   failed_when: false
+#   register: sync_result
+#   changed_when: sync_result.rc == 0
+#   raw: |
+#     powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
+#   ignore_errors: yes
 
-- name: Force native reboot
-  ansible.windows.win_reboot:
-    msg: "Rebooting after hostname change"
-    reboot_timeout: 900
-  become: yes
-  become_method: runas
-  when: current_hostname.stdout != hostname
+# - name: Force native reboot
+#   ansible.windows.win_reboot:
+#     msg: "Rebooting after hostname change"
+#     reboot_timeout: 900
+#   become: yes
+#   become_method: runas
+#   when: current_hostname.stdout != hostname
