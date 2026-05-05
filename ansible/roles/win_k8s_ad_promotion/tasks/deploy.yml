@@ -61,13 +61,15 @@
   # Replace "example_state_dir" with your {{ windows_state_dir }} variable
 
 - name: Discover br-cluster NIC alias
-  raw: powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '$n = Get-NetAdapter | Where-Object { (Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress -notlike "172.*" }; if ($n) { Write-Host "###$($n[0].Name)###" } else { Write-Host "###NOT_FOUND###" }'
-  register: nic_discovery
+  raw: |
+    powershell.exe -NoProfile -NonInteractive -Command "$n=(Get-NetAdapter | ?{(Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress -notlike '172.*'})[0]; if($n){Write-Host \"###$($n.Name)###\"}else{exit 1}"
+  register: cluster_nic
   changed_when: false
 
 - name: Set fact for nic
   set_fact:
-    br_cluster_nic: "{{ nic_discovery.stdout | regex_findall('###(.*?)###') | first | default('NOT_FOUND') | trim }}"
+    br_cluster_nic: "{{ cluster_nic.stdout | regex_findall('###(.*?)###') | first | trim }}"
+
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
