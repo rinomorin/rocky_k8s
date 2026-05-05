@@ -91,8 +91,6 @@
     "
   register: cluster_nic
   changed_when: false
-    echo $nic.Name
-    "
 
 - name: set fact for nic
   set_fact:
