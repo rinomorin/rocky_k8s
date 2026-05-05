@@ -109,6 +109,7 @@
   become: yes
   become_method: runas
   failed_when: false
+  register: sync_result
   changed_when: sync_result.rc == 0
   raw: |
     powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
