@@ -99,9 +99,11 @@
   raw: |
     powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -Dhcp Disabled"
 
-- name: Assign Static IP to br-cluster NIC
-  raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }}"
+- name: Remove existing IPv4 addresses from br-cluster NIC
+  raw: powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue"
+
+- name: Assign new Static IP to br-cluster NIC
+  raw: powershell.exe -NoProfile -NonInteractive -Command "New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }}"
   register: ip_config_result
 
 - debug:
