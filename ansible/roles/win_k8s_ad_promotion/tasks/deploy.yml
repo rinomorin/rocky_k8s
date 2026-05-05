@@ -108,7 +108,7 @@
 
 - debug:
     msg:
-      - "rc: {{ ip_config_result.rc }}"
+      - "rc: {{ ip_config_result }}"
 
 - name: Test if changd
   shell: |
