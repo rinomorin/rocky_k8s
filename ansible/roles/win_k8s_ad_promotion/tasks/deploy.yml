@@ -86,7 +86,8 @@
   register: br_cluster_nic
   changed_when: false
 
-
+- debug:
+    msg: "Discovered cluster NIC: {{ br_cluster_nic.stdout }}"
 
 # - name: Enable br-cluster NIC
 #   raw: "powershell.exe -Command \"Enable-NetAdapter -Name '{{ br_cluster_nic }}' -Confirm:$false\""
