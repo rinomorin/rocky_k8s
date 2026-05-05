@@ -96,7 +96,7 @@
 # ------------------------------------------------------------
 - name: Force static IP on br-cluster NIC (validated manual sequence)
   raw: |
-    powershell -Command "
+    powershell.exe -NoProfile -NonInteractive -Command "
       $ip = '{{ provision_ip }}'
       $gw = '{{ provision_gw }}'
       
@@ -104,7 +104,7 @@
       $nic = {{ br_cluster_nic }}
 
       # Ensure adapter is enabled
-      Enable-NetAdapter -Name $nic -Confirm:$false
+      Enable-NetAdapter -Name {{ br_cluster_nic }} -Confirm:$false
 
       # Disable DHCP (adapter must exist)
       Set-NetIPInterface -InterfaceAlias $nic -Dhcp Disabled
