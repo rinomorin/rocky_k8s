@@ -12,7 +12,7 @@ while getopts "d:i:U:C:v:e:" opt; do
     i) INVENTORY="$OPTARG" ;;
     U) REPO_URL="$OPTARG" ;;
     C) CHECKOUT="$OPTARG" ;;
-    v) VERBOSE="\-vvvv" ;;
+    v) VERBOSE=1 ;;
     e) EXTRA_VARS="$OPTARG" ;;
 
     *) echo "Usage: ansible.execute -d dir -i inv -U url [-C checkout] [-v venv] [-e vars] playbook" && exit 1 ;;
@@ -47,6 +47,14 @@ export ANSIBLE_CONFIG="${DEST_DIR}/ansible/ansible.cfg"
 # pwd  && echo ${PLAYBOOK}
 # 4: Run the actual playbook
 if [[ "${EXTRA_VARS}" != "" ]] ;  then
+   if [[ "${VERBOSE}" == "1" ]] ; then
+       VERBOSE="-vvvv"
+       ansible-playbook "$VERBOSE" -i "${INVENTORY}" -e "${EXTRA_VARS}" "${PLAYBOOK}" 
+    else
+        ansible-playbook -i "${INVENTORY}" -e "${EXTRA_VARS}" "${PLAYBOOK}"
+    fi
+elif [[ "${VERBOSE}" == "1" ]] ; then
+    VERBOSE="-vvvv"  
     ansible-playbook "$VERBOSE" -i "${INVENTORY}" -e "${EXTRA_VARS}" "${PLAYBOOK}" 
 else
     ansible-playbook -i "${INVENTORY}" "${PLAYBOOK}"
