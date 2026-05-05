@@ -108,6 +108,8 @@
 - name: Flush disk buffers (Windows Sync)
   become: yes
   become_method: runas
+  failed_when: false
+  changed_when: sync_result.rc == 0
   raw: |
     powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
   ignore_errors: yes
