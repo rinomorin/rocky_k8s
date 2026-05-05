@@ -103,7 +103,7 @@
       }
     "
   when: current_hostname.stdout != hostname
-  # notify: reboot
+  notify: reboot
 
 - name: Flush disk buffers (Windows Sync)
   become: yes
