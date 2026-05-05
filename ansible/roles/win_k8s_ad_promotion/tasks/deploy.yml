@@ -64,29 +64,26 @@
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
 - name: Discover br-cluster NIC IfIndex (exclude 172.x)
-  raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "
-      $nic = Get-NetAdapter |
-      Where-Object {
-        $_.Status -eq 'Up' -and
-        $_.Virtual -eq $false -and
-        $_.Name -notmatch 'Loopback'
-      } |
-      Where-Object {
-        $ips = Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-               Select-Object -ExpandProperty IPAddress
-        -not ($ips | Where-Object { $_ -like '172.*' })
-      } |
-      Select-Object -First 1
+  raw: >
+    powershell.exe -NoProfile -NonInteractive -Command
+    "& {
+        $nic = Get-NetAdapter |
+            Where-Object {
+                $_.Status -eq 'Up' -and
+                $_.Virtual -eq $false -and
+                $_.Name -notmatch 'Loopback'
+            } |
+            Where-Object {
+                $ips = Get-NetIPAddress -InterfaceIndex $_.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                       Select-Object -ExpandProperty IPAddress
+                -not ($ips | Where-Object { $_ -like '172.*' })
+            } |
+            Select-Object -First 1
 
-      if (-not $nic) {
-        Write-Error 'No br-cluster NIC found'
-        exit 1
-      }
+        if (-not $nic) { exit 1 }
 
-      # OUTPUT ONLY THE IfIndex
-      Write-Output $nic.IfIndex
-    "
+        $nic.IfIndex
+    }"
   register: br_cluster_ifindex
   changed_when: false
 
