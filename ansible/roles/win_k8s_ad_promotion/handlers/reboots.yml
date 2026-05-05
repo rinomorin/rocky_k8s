@@ -1,9 +1,5 @@
 - name: reboot
   ansible.windows.win_reboot:
     pre_reboot_command: |
-      powershell.exe -Command "
-      if (Test-Path 'C:\tools\persist.exe') { & 'C:\tools\persist.exe' --commit };
-      Get-Volume C | Flush-Volume
-      "
-    msg: "Ansible is rebooting the node to commit network changes"
+      powershell.exe -Command "if (Test-Path 'C:\tools\persist.exe') { & 'C:\tools\persist.exe' --commit }; Get-Volume C | Flush-Volume"
     reboot_timeout: 600
