@@ -54,9 +54,9 @@
     ansible_host: "{{ br_nat_ip_fallback.stdout }}"
   when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
 
-- name: Reset SSH connection after switching to br-nat
-  meta: reset_connection
-  when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
+# - name: Reset SSH connection after switching to br-nat
+#   meta: reset_connection
+#   when: provision_ssh.elapsed is not defined or provision_ssh.elapsed >= 15
 
 # 3. Final SSH verification
 # - name: Wait for SSH on selected interface
