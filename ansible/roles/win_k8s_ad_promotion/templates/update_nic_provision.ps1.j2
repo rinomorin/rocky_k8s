@@ -43,6 +43,42 @@ $IfIndex = $Nic.IfIndex
 $IfName  = $Nic.Name
 
 # ==============================
+# IDPOTENCY CHECK
+# ==============================
+
+$ExistingIP = Get-NetIPAddress `
+    -InterfaceIndex $IfIndex `
+    -AddressFamily IPv4 `
+    -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.IPAddress -eq $ProvisionIP -and
+        $_.PrefixLength -eq $PrefixLength
+    }
+
+$ExistingGW = Get-NetRoute `
+    -InterfaceIndex $IfIndex `
+    -DestinationPrefix '0.0.0.0/0' `
+    -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.NextHop -eq $ProvisionGateway
+    }
+
+if ($ExistingIP -and $ExistingGW) {
+    # Already configured correctly
+    Get-NetIPConfiguration |
+        Where-Object { $_.InterfaceIndex -eq $IfIndex } |
+        Select-Object `
+            @{Name='IfIndex'; Expression={$_.InterfaceIndex}},
+            @{Name='Interface'; Expression={$_.InterfaceAlias}},
+            @{Name='IP'; Expression={$_.IPv4Address.IPAddress}},
+            @{Name='Gateway'; Expression={$_.IPv4DefaultGateway.NextHop}} |
+        ConvertTo-Json -Compress
+
+    exit 0
+}
+
+
+# ==============================
 # 2. Ensure NIC is enabled
 # ==============================
 Enable-NetAdapter -Name $IfName -Confirm:$false
