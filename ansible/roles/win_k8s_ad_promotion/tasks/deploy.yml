@@ -78,7 +78,7 @@
 
 - name: Total Purge and Re-provision IPv4
   raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 -Dhcp Disabled; Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -SkipAsSource $false; Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 -DadTransmits 0 -RouterDiscovery Disabled"
+    powershell.exe -NoProfile -NonInteractive -Command "$n=(Get-NetAdapter | ?{(Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress -notlike '172.*'})[0]; if($n){Write-Host \"###$($n.Name)###\"}else{exit 1}"
   register: ip_config_result
   
 - name: Restart NIC to apply changes
