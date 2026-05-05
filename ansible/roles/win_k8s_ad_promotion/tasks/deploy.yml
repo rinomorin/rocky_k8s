@@ -12,25 +12,42 @@
 # Discover maintenance NIC (br-nat) IP via KVM
 # ------------------------------------------------------------
 
+- name: Compute br-cluster network parameters
+  delegate_to: localhost
+  set_fact:
+    br_cluster_net: >-
+      {{ hostvars[groups['kvm'][0]].libvirt_networks
+         | selectattr('name','equalto','br-cluster')
+         | first }}
 
-- name: Discover br-nat IP from KVM
-  delegate_to: "{{ kvm_ip }}"
-  become: yes
+- name: Render NIC provisioning script locally
+  delegate_to: localhost
   vars:
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-  shell: |
-    # Get MAC for the specific bridge
-    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
-    
-    # Loop until the lease appears
-    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
-      sleep 5
-    done
-    
-    # Return just the IP
-    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
-  register: br_nat_ip
-  changed_when: false
+    provision_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
+    provision_gw: "{{ _br_cluster_net.cidr.split('/')[0].split('.')[:3] | join('.') }}.1"
+    provision_prefix: "{{ _br_cluster_net.cidr.split('/')[-1] | int }}" 
+  template:
+    src: update_nic_provision.ps1.j2
+    dest: "/tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1"
+    mode: '0644'
+
+- name: Copy NIC provisioning script to Windows host
+  copy:
+    src: "/tmp/update_nic_provision_{{ inventory_hostname }}.ps1"
+    dest: "C:\\Windows\\Temp\\update_nic_provision.ps1"
+
+- name: Execute NIC provisioning script
+  raw: |
+    powershell.exe -NoProfile -ExecutionPolicy Bypass ^
+      -File C:\Windows\Temp\update_nic_provision.ps1
+  register: nic_result
+  changed_when: true
+
+- name: Parse NIC provisioning result
+  debug:
+    msg: "NIC provision result: {{ nic_result.stdout }}"
+
+
 
 - name: Fail if br-nat IP not found
   assert:
@@ -55,50 +72,37 @@
       
 - name: Ensure state directory exists
   raw: |
-    powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
+vi    powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
   
 # - name: Ensure state directory exists
 #   win_shell: New-Item -ItemType Directory -Force "example_state_dir"
   # Replace "example_state_dir" with your {{ windows_state_dir }} variable
+- name: Discover br-cluster NIC alias
+  vars:
+    ansible_shell_type: powershell
+  raw: |
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
+    $$maintIndex = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $$_.IPAddress -like '172.*' }).InterfaceIndex;
+    $$n = Get-NetAdapter | Where-Object { $$_.InterfaceIndex -ne $$maintIndex };
+    if ($$n) { 
+        Write-Host '###'($$n[0].Name)'###' 
+    } else { 
+        Write-Host '###NOT_FOUND###' 
+    }"
+  register: cluster_nic
+  changed_when: false
 
+
+- name: Set fact for nic
+  set_fact:
+    br_cluster_nic: "{{ cluster_nic.stdout | regex_findall('###(.*?)###') | first | default('NOT_FOUND') | trim }}"
+# ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
-- name: Drop NIC discovery script on host
-  raw: |
-    > C:\Windows\Temp\find_cluster_nic.ps1 (
-      echo $ErrorActionPreference = 'Stop'
-      echo
-      echo $nic = $null
-      echo foreach ($n in Get-NetAdapter^) {
-      echo ^  if ($n.Status -ne 'Up'^) { continue ^}
-      echo ^  if ($n.Virtual^) { continue ^}
-      echo ^  if ($n.Name -match 'Loopback'^) { continue ^}
-      echo
-      echo ^  $ips = Get-NetIPAddress -InterfaceIndex $n.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue ^| Select -ExpandProperty IPAddress
-      echo ^  if (-not ($ips ^| Where-Object { $_ -like '172.*' })^) {
-      echo ^    $nic = $n
-      echo ^    break
-      echo ^  ^}
-      echo ^}
-      echo
-      echo if (-not $nic^) { exit 1 ^}
-      echo $nic.IfIndex
-    )
-
-- name: Discover br-cluster NIC IfIndex
-  raw: |
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\find_cluster_nic.ps1
-  register: br_cluster_ifindex
-  changed_when: false
-  
-- debug:
-    msg: "Discovered br-cluster IfIndex: {{ br_cluster_ifindex.stdout }}"
-
-# - name: Enable br-cluster NIC
-#   raw: "powershell.exe -Command \"Enable-NetAdapter -Name '{{ br_cluster_nic }}' -Confirm:$false\""
-#   when: br_cluster_nic != 'NOT_FOUND'
-#   register: enable_result
-
+- name: Enable br-cluster NIC
+  raw: "powershell.exe -Command \"Enable-NetAdapter -Name '{{ br_cluster_nic }}' -Confirm:$false\""
+  when: br_cluster_nic != 'NOT_FOUND'
+  register: enable_result
 
 - name: Fail if NIC not found
   fail:
@@ -116,38 +120,38 @@
 - name: Verify Address State
   raw: powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Select-Object IPAddress, AddressState"
 
-# # ------------------------------------------------------------
-# # Set hostname (requires reboot)
-# # ------------------------------------------------------------
-# - name: get current hostname
-#   raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
-#   register: current_hostname
-#   changed_when: false
+# ------------------------------------------------------------
+# Set hostname (requires reboot)
+# ------------------------------------------------------------
+- name: get current hostname
+  raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
+  register: current_hostname
+  changed_when: false
 
-# - name: Set hostname
-#   raw: |
-#     powershell -Command "
-#       if ((hostname) -ne '{{ hostname }}') {
-#         Rename-Computer -NewName '{{ hostname }}' -Force
-#       }
-#     "
-#   when: current_hostname.stdout != hostname
-#   notify: reboot
+- name: Set hostname
+  raw: |
+    powershell -Command "
+      if ((hostname) -ne '{{ hostname }}') {
+        Rename-Computer -NewName '{{ hostname }}' -Force
+      }
+    "
+  when: current_hostname.stdout != hostname
+  notify: reboot
 
-# - name: Flush disk buffers (Windows Sync)
-#   become: yes
-#   become_method: runas
-#   failed_when: false
-#   register: sync_result
-#   changed_when: sync_result.rc == 0
-#   raw: |
-#     powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
-#   ignore_errors: yes
+- name: Flush disk buffers (Windows Sync)
+  become: yes
+  become_method: runas
+  failed_when: false
+  register: sync_result
+  changed_when: sync_result.rc == 0
+  raw: |
+    powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
+  ignore_errors: yes
 
-# - name: Force native reboot
-#   ansible.windows.win_reboot:
-#     msg: "Rebooting after hostname change"
-#     reboot_timeout: 900
-#   become: yes
-#   become_method: runas
-#   when: current_hostname.stdout != hostname
+- name: Force native reboot
+  ansible.windows.win_reboot:
+    msg: "Rebooting after hostname change"
+    reboot_timeout: 900
+  become: yes
+  become_method: runas
+  when: current_hostname.stdout != hostname

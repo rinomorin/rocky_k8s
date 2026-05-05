@@ -1,0 +1,78 @@
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+# ==============================
+# CONFIG (rendered by Ansible)
+# ==============================
+$ProvisionIP      = '{{ provision_ip }}'
+$PrefixLength     = {{ provision_prefix | default(24) }}
+$ProvisionGateway = '{{ provision_gw }}'
+
+# ==============================
+# 1. Find target NIC
+#    - Up
+#    - Not virtual
+#    - Not loopback
+#    - Does NOT have 172.x IPv4
+# ==============================
+$Nic = $null
+
+foreach ($n in Get-NetAdapter) {
+    if ($n.Status -ne 'Up') { continue }
+    if ($n.Virtual) { continue }
+    if ($n.Name -match 'Loopback') { continue }
+
+    $ips = Get-NetIPAddress `
+            -InterfaceIndex $n.IfIndex `
+            -AddressFamily IPv4 `
+            -ErrorAction SilentlyContinue |
+           Select-Object -ExpandProperty IPAddress
+
+    if (-not ($ips | Where-Object { $_ -like '172.*' })) {
+        $Nic = $n
+        break
+    }
+}
+
+if (-not $Nic) {
+    Write-Error 'No eligible non-172 NIC found'
+    exit 1
+}
+
+$IfIndex = $Nic.IfIndex
+$IfName  = $Nic.Name
+
+# ==============================
+# 2. Ensure NIC is enabled
+# ==============================
+Enable-NetAdapter -Name $IfName -Confirm:$false
+
+# ==============================
+# 3. Disable DHCP
+# ==============================
+Set-NetIPInterface `
+    -InterfaceIndex $IfIndex `
+    -AddressFamily IPv4 `
+    -Dhcp Disabled
+
+# ==============================
+# 4. Remove existing IPv4 addresses
+# ==============================
+Get-NetIPAddress `
+    -InterfaceIndex $IfIndex `
+    -AddressFamily IPv4 `
+    -ErrorAction SilentlyContinue |
+    Remove-NetIPAddress -Confirm:$false
+
+# ==============================
+# 5. Assign static IP + gateway
+#    (NO route manipulation = NO deadlock)
+# ==============================
+New-NetIPAddress `
+    -InterfaceIndex $IfIndex `
+    -IPAddress $ProvisionIP `
+    -PrefixLength $PrefixLength `
+    -DefaultGateway $ProvisionGateway
+
+# ==============================
+# 6. Restart NIC to apply cleanly
