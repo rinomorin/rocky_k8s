@@ -89,8 +89,8 @@
 - debug:
     msg:
       - "Identified br-cluster NIC alias: {{ br_cluster_nic }}"
-      - "ip address for {{ br_cluster_nic }}: {{ cluster_nic.stdout }}"
-      - "ip address for br-nat_ip: {{ br_nat_ip.stdout }}"
+      - "ip address for {{ br_cluster_nic }}: {{ provision_ip }}"
+      - "gw address for {{ br_cluster_nic }}: {{ provision_gw }}"
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
