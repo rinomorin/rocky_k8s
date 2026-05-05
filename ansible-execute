@@ -48,14 +48,12 @@ export ANSIBLE_CONFIG="${DEST_DIR}/ansible/ansible.cfg"
 # 4: Run the actual playbook
 if [[ "${EXTRA_VARS}" != "" ]] ;  then
    if [[ "${VERBOSE}" == "1" ]] ; then
-       VERBOSE="-vvvv"
-       ansible-playbook "$VERBOSE" -i "${INVENTORY}" -e "${EXTRA_VARS}" "${PLAYBOOK}" 
+       ansible-playbook -vvvv -i "${INVENTORY}" -e "${EXTRA_VARS}" "${PLAYBOOK}" 
     else
         ansible-playbook -i "${INVENTORY}" -e "${EXTRA_VARS}" "${PLAYBOOK}"
     fi
 elif [[ "${VERBOSE}" == "1" ]] ; then
-    VERBOSE="-vvvv"  
-    ansible-playbook "$VERBOSE" -i "${INVENTORY}" -e "${EXTRA_VARS}" "${PLAYBOOK}" 
+    ansible-playbook -vvvv -i "${INVENTORY}" -e "${EXTRA_VARS}" "${PLAYBOOK}" 
 else
     ansible-playbook -i "${INVENTORY}" "${PLAYBOOK}"
 fi
