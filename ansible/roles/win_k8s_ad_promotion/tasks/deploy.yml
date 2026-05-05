@@ -80,7 +80,14 @@
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
 - name: Enable br-cluster NIC
-  raw: powershell.exe -NoProfile -NonInteractive -Command "Enable-NetAdapter -Name '{{ br_cluster_nic }}' -Confirm:$false"
+  raw: "powershell.exe -Command \"Enable-NetAdapter -Name '{{ br_cluster_nic }}' -Confirm:$false\""
+  when: br_cluster_nic != 'NOT_FOUND'
+  register: enable_result
+
+- name: Fail if NIC not found
+  fail:
+    msg: "We could not find a secondary NIC on {{ inventory_hostname }}. Check virt-install settings."
+  when: br_cluster_nic == 'NOT_FOUND'
 
 - name: Total Purge and Re-provision IPv4
   raw: |
