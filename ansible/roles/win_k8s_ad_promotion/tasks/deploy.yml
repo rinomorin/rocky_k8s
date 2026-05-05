@@ -63,36 +63,34 @@
 
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
-- name: Discover br-cluster NIC IfIndex (exclude 172.x)
-  raw: >
-    powershell.exe -NoProfile -NonInteractive -Command
-    "& {
-        $candidate = $null;
+- name: Drop NIC discovery script on host
+  raw: |
+    > C:\Windows\Temp\find_cluster_nic.ps1 (
+      echo $ErrorActionPreference = 'Stop'
+      echo
+      echo $nic = $null
+      echo foreach ($n in Get-NetAdapter^) {
+      echo ^  if ($n.Status -ne 'Up'^) { continue ^}
+      echo ^  if ($n.Virtual^) { continue ^}
+      echo ^  if ($n.Name -match 'Loopback'^) { continue ^}
+      echo
+      echo ^  $ips = Get-NetIPAddress -InterfaceIndex $n.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue ^| Select -ExpandProperty IPAddress
+      echo ^  if (-not ($ips ^| Where-Object { $_ -like '172.*' })^) {
+      echo ^    $nic = $n
+      echo ^    break
+      echo ^  ^}
+      echo ^}
+      echo
+      echo if (-not $nic^) { exit 1 ^}
+      echo $nic.IfIndex
+    )
 
-        foreach ($n in Get-NetAdapter) {
-            if ($n.Status -ne 'Up') { continue }
-            if ($n.Virtual -eq $true) { continue }
-            if ($n.Name -match 'Loopback') { continue }
-
-            $ips = Get-NetIPAddress -InterfaceIndex $n.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                   Select-Object -ExpandProperty IPAddress
-
-            if (-not ($ips | Where-Object { $_ -like '172.*' })) {
-                $candidate = $n
-                break
-            }
-        }
-
-        if (-not $candidate) {
-            Write-Error 'No br-cluster NIC found'
-            exit 1
-        }
-
-        Write-Output $candidate.IfIndex
-    }"
+- name: Discover br-cluster NIC IfIndex
+  raw: |
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\find_cluster_nic.ps1
   register: br_cluster_ifindex
   changed_when: false
-
+  
 - debug:
     msg: "Discovered br-cluster IfIndex: {{ br_cluster_ifindex.stdout }}"
 
