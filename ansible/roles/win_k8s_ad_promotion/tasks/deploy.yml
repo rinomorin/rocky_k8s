@@ -72,6 +72,10 @@
   raw: |
     powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
   
+- name: Ensure state directory exists
+  win_shell: New-Item -ItemType Directory -Force "example_state_dir"
+  # Replace "example_state_dir" with your {{ windows_state_dir }} variable
+
 - name: Discover br-cluster NIC alias
   win_shell: |
     $nic = Get-NetAdapter | Where-Object {
