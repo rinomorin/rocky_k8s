@@ -77,24 +77,13 @@
   # Replace "example_state_dir" with your {{ windows_state_dir }} variable
 
 - name: Discover br-cluster NIC alias
-  win_shell: |
-    $nic = Get-NetAdapter | Where-Object {
-        $ip = (Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress
-        $ip -and $ip -notlike '172.*'
-    } | Select-Object -First 1
-
-    if (-not $nic) {
-        Write-Error "Unable to identify br-cluster NIC"
-        exit 1
-    }
-
-    Write-Output $nic.Name
+  raw: powershell.exe -NoProfile -NonInteractive -Command "$n=(Get-NetAdapter|?{(Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress -notlike '172.*'})[0]; if($n){write-host $n.Name}else{exit 1}"
   register: cluster_nic
   changed_when: false
 
 - name: Set fact for nic
   set_fact:
-    br_cluster_nic: "{{ cluster_nic.stdout | trim }}"
+    br_cluster_nic: "{{ cluster_nic.stdout_lines | last | trim }}"
 
 - name: Set fact for nic
   set_fact:
