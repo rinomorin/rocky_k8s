@@ -47,8 +47,6 @@
   debug:
     msg: "NIC provision result: {{ nic_result.stdout }}"
 
-
-
 - name: Fail if br-nat IP not found
   assert:
     that:
@@ -72,7 +70,7 @@
       
 - name: Ensure state directory exists
   raw: |
-vi    powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
+    powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
   
 # - name: Ensure state directory exists
 #   win_shell: New-Item -ItemType Directory -Force "example_state_dir"
