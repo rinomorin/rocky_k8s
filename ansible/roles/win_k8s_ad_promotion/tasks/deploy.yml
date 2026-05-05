@@ -11,7 +11,9 @@
 # ------------------------------------------------------------
 # Discover maintenance NIC (br-nat) IP via KVM
 # ------------------------------------------------------------
-
+- debug:
+    msg: "what is hostname {{ inventory_hostname.split('.')[0] }}"    
+    
 - name: Discover br-nat IP from KVM
   delegate_to: "{{ kvm_ip }}"
   become: yes
