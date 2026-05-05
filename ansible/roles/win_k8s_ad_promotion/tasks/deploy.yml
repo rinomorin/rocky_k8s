@@ -51,11 +51,6 @@
 # ------------------------------------------------------------
 # Prepare state directory
 # ------------------------------------------------------------
-
-- debug: 
-    msg: 
-      - "br-nat IP {{ ansible_host }} discovered, connecting to Windows VM for AD promotion tasks"
-      - "Provision IP: {{ provision_ip }}, Provision GW: {{ provision_gw }}"
       
 - name: Ensure state directory exists
   raw: |
@@ -75,11 +70,6 @@
   set_fact:
     br_cluster_nic: "{{ cluster_nic.stdout | regex_findall('###(.*?)###') | first | trim }}"
 
-- debug:
-    msg:
-      - "Identified br-cluster NIC alias: {{ br_cluster_nic }}"
-      - "ip address for {{ br_cluster_nic }}: {{ provision_ip }}"
-      - "gw address for {{ br_cluster_nic }}: {{ provision_gw }}"
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
@@ -97,19 +87,6 @@
 - name: Verify Address State
   raw: powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Select-Object IPAddress, AddressState"
 
-- debug:
-    msg:
-      - "rc: {{ ip_config_result }}"
-
-- name: Test if changd
-  shell: |
-    ssh {{ ansible_host }} ipconfig
-    
-  delegate_to: localhost
-  register: ssh_test
-- debug:
-    var: ssh_test
-
 # ------------------------------------------------------------
 # Set hostname (requires reboot)
 # ------------------------------------------------------------
@@ -118,14 +95,10 @@
     powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
   ignore_errors: yes
 
-- debug:
-    msg: "hostname: {{ hostname }}"
-
 - name: get current hostname
   raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
   register: current_hostname
   changed_when: false
-
 
 - name: Set hostname
   raw: |

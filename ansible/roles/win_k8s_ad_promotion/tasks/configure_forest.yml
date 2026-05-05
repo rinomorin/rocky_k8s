@@ -1,7 +1,11 @@
 # roles/rocky_k8s/tasks/configure_forest.yml
+- name: Ensure state directory exists
+  ansible.windows.win_file:
+    path: "{{ windows_state_dir }}"
+    state: directory
 
 - name: Check forest marker
-  stat:
+  ansible.windows.win_stat:
     path: "{{ windows_state_dir }}\\forest.done"
   register: forest_done
 
