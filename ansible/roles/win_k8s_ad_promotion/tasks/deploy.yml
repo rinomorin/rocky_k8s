@@ -12,6 +12,34 @@
 # Discover maintenance NIC (br-nat) IP via KVM
 # ------------------------------------------------------------
 
+- name: Render NIC provisioning script locally
+  delegate_to: localhost
+  template:
+    src: update_nic_provision.ps1.j2
+    dest: "/tmp/update_nic_provision_{{ inventory_hostname }}.ps1"
+    mode: '0644'
+
+- name: Fail if br-nat IP not found
+  assert:
+    that:
+      - br_nat_ip.stdout | length > 0
+    fail_msg: >
+      Unable to discover br-nat IP for {{ inventory_hostname }} from KVM.
+
+# ------------------------------------------------------------
+# Connect via br-nat
+# ------------------------------------------------------------
+
+- name: Use br-nat IP for SSH
+  set_fact:
+    ansible_host: "{{ br_nat_ip.stdout }}"
+    provision_ip: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
+    provision_gw: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[0:3] | join('.') }}.1"
+
+# ------------------------------------------------------------
+# Prepare state directory
+# ------------------------------------------------------------
+      
 - name: Compute br-cluster network parameters
   delegate_to: localhost
   set_fact:
@@ -54,61 +82,7 @@
 - name: Parse NIC provisioning result
   debug:
     msg: "NIC provision result: {{ nic_result.stdout }}"
-
-- name: Fail if br-nat IP not found
-  assert:
-    that:
-      - br_nat_ip.stdout | length > 0
-    fail_msg: >
-      Unable to discover br-nat IP for {{ inventory_hostname }} from KVM.
-
-# ------------------------------------------------------------
-# Connect via br-nat
-# ------------------------------------------------------------
-
-
-# ------------------------------------------------------------
-# Prepare state directory
-# ------------------------------------------------------------
-      
-- name: Ensure state directory exists
-  raw: |
-    powershell -Command "New-Item -ItemType Directory -Force {{ windows_state_dir }}"
-  
-# - name: Ensure state directory exists
-#   win_shell: New-Item -ItemType Directory -Force "example_state_dir"
-  # Replace "example_state_dir" with your {{ windows_state_dir }} variable
-- name: Discover br-cluster NIC alias
-  vars:
-    ansible_shell_type: powershell
-  raw: |
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
-    $$maintIndex = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $$_.IPAddress -like '172.*' }).InterfaceIndex;
-    $$n = Get-NetAdapter | Where-Object { $$_.InterfaceIndex -ne $$maintIndex };
-    if ($$n) { 
-        Write-Host '###'($$n[0].Name)'###' 
-    } else { 
-        Write-Host '###NOT_FOUND###' 
-    }"
-  register: cluster_nic
-  changed_when: false
-
-
-- name: Set fact for nic
-  set_fact:
-    br_cluster_nic: "{{ cluster_nic.stdout | regex_findall('###(.*?)###') | first | default('NOT_FOUND') | trim }}"
-# ------------------------------------------------------------
-# Configure br-cluster NIC with provider_ip
-# ------------------------------------------------------------
-- name: Enable br-cluster NIC
-  raw: "powershell.exe -Command \"Enable-NetAdapter -Name '{{ br_cluster_nic }}' -Confirm:$false\""
-  when: br_cluster_nic != 'NOT_FOUND'
-  register: enable_result
-
-- name: Fail if NIC not found
-  fail:
-    msg: "We could not find a secondary NIC on {{ inventory_hostname }}. Check virt-install settings."
-  when: br_cluster_nic == 'NOT_FOUND'
+    
 
 - name: Total Purge and Re-provision IPv4
   raw: |
