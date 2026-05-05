@@ -140,7 +140,7 @@
 
 - name: Force native reboot
   ansible.windows.win_reboot:
-    pre_reboot_cmd: powershell.exe -Command "Get-Volume C | Flush-Volume"
+    msg: "Rebooting after hostname change"
     reboot_timeout: 900
   become: yes
   become_method: runas
