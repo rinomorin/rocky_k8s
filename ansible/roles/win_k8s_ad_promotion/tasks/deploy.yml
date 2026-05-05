@@ -94,14 +94,15 @@
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
-- name: Force static IP on br-cluster NIC
-  raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -Dhcp Disabled -ErrorAction SilentlyContinue; Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }} -ErrorAction SilentlyContinue"
-  register: ip_config_result
 
-- name: Force static IP on br-cluster NIC
+- name: Disable DHCP on br-cluster NIC
   raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -Dhcp Disabled; Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }}; Set-NetIPv4Protocol -ProtocolCompliance RFC -ErrorAction SilentlyContinue"
+    powershell.exe -NoProfile -NonInteractive -Command "Set-NetIPInterface -InterfaceAlias '{{ br_cluster_nic }}' -Dhcp Disabled"
+
+- name: Assign Static IP to br-cluster NIC
+  raw: |
+    powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -IPAddress {{ provision_ip }} -PrefixLength 24 -DefaultGateway {{ provision_gw }}"
+  register: ip_config_result
 
 - debug:
     msg:
