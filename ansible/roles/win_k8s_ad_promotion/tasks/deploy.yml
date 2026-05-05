@@ -136,4 +136,11 @@
         Rename-Computer -NewName '{{ hostname }}' -Force
       }
     "
-  notify: reboot
+  # notify: reboot
+
+# Add this at the end of your main playbook tasks
+- name: Force native reboot
+  ansible.windows.win_reboot:
+    pre_reboot_command: powershell.exe -Command "Get-Volume C | Flush-Volume"
+  become: yes
+  become_method: runas
