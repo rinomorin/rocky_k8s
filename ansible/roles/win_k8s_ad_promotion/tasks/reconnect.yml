@@ -19,9 +19,9 @@
     ansible_host: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
   when: provision_ssh.elapsed is defined and provision_ssh.elapsed < 15
 
-- name: Reset SSH connection after switching to provision_ip
-  meta: reset_connection
-  when: provision_ssh.elapsed is defined and provision_ssh.elapsed < 15
+# - name: Reset SSH connection after switching to provision_ip
+#   meta: reset_connection
+#   when: provision_ssh.elapsed is defined and provision_ssh.elapsed < 15
 
 # 2. Fallback: rediscover br-nat IP from KVM
 - name: Rediscover br-nat IP from KVM (fallback)
