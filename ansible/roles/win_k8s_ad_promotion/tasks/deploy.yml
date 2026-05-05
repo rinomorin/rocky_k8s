@@ -32,10 +32,11 @@
     mode: '0644'
 
 - name: Copy NIC provisioning script to Windows host
+  become: false
   shell: |
     scp /tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1 {{ ansible_user }}@{{ ansible_host }}:C:\Windows\Temp\update_nic_provision.ps1
   delegate_to: localhost
-  
+
 - name: Execute NIC provisioning script
   raw: |
     powershell.exe -NoProfile -ExecutionPolicy Bypass ^
