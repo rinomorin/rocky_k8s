@@ -106,6 +106,8 @@
   # notify: reboot
 
 - name: Flush disk buffers (Windows Sync)
+  become: yes
+  become_method: runas
   raw: |
     powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
   ignore_errors: yes
