@@ -33,7 +33,7 @@
   changed_when: false
 
 - debug:
-    msg: 
+    msg: |
       - "what is hostname {{ inventory_hostname.split('.')[0] }}"    
       - "what is kvm_ip {{ br_nat_ip.stdout }}"
 
