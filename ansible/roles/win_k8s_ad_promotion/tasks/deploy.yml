@@ -84,10 +84,13 @@
         exit 1
     }
 
-    # Output ONLY the interface alias
     Write-Output $nic.Name
   register: cluster_nic
   changed_when: false
+
+- name: Set fact for nic
+  set_fact:
+    br_cluster_nic: "{{ cluster_nic.stdout | trim }}"
 
 - name: Set fact for nic
   set_fact:
