@@ -62,13 +62,21 @@
 
 - name: Discover br-cluster NIC alias
   raw: |
-    powershell.exe -NoProfile -NonInteractive -Command "$n=(Get-NetAdapter | ?{(Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress -notlike '172.*'})[0]; if($n){Write-Host \"###$($n.Name)###\"}else{exit 1}"
-  register: cluster_nic
+    powershell.exe -NoProfile -NonInteractive -Command "
+    $n = (Get-NetAdapter | Where-Object { 
+        (Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress -notlike '172.*' 
+    })[0]; 
+    if ($n) { 
+        Write-Host '###'($n.Name)'###' 
+    } else { 
+        exit 1 
+    }"
+  register: nic_discovery
   changed_when: false
 
 - name: Set fact for nic
   set_fact:
-    br_cluster_nic: "{{ cluster_nic.stdout | regex_findall('###(.*?)###') | first | trim }}"
+    br_cluster_nic: "{{ nic_discovery.stdout | regex_findall('###(.*?)###') | first | trim }}"
 
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
