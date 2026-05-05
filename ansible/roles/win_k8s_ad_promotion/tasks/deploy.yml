@@ -118,6 +118,9 @@
     powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
   ignore_errors: yes
 
+- debug:
+    msg: "hostname: {{ hostname }}"
+
 - name: Set hostname
   raw: |
     powershell -Command "
