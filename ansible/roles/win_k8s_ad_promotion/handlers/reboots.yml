@@ -1,6 +1,17 @@
+# Replace the old windows_commit_cmd with this logic
 - name: reboot
   ansible.windows.win_shell: |
+    # Check for the custom lab persistence tool
     if (Test-Path "C:\tools\persist.exe") {
         & C:\tools\persist.exe --commit
+    } elseif (Test-Path "C:\persist.exe") {
+        & C:\persist.exe --commit
+    } else {
+        # Fallback to native flush if no lab tool is found
+        Write-Output "No custom persist tool found, flushing volume cache instead."
+        $drive = Get-Volume -DriveLetter C
+        $drive | Flush-Volume
     }
+    
+    # Trigger the reboot
     Restart-Computer -Force
