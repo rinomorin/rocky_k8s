@@ -9,9 +9,10 @@
     path: "{{ windows_state_dir }}\\forest.done"
   register: forest_done
 
-- name: Install AD DS and DNS roles
-  shell: |
-    powershell -Command "Install-WindowsFeature AD-Domain-Services,DNS -IncludeManagementTools"
+- name: Install AD DS and DNS roles (Raw Mode)
+  raw: powershell.exe -Command "Install-WindowsFeature AD-Domain-Services,DNS -IncludeManagementTools"
+  become: yes
+  become_method: runas
   when:
     - inventory_hostname == groups['win_worker_nodes'][0]
     - not forest_done.stat.exists
