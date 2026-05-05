@@ -24,8 +24,8 @@
   delegate_to: localhost
   vars:
     provision_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
-    provision_gw: "{{ _br_cluster_net.cidr.split('/')[0].split('.')[:3] | join('.') }}.1"
-    provision_prefix: "{{ _br_cluster_net.cidr.split('/')[-1] | int }}" 
+    provision_gw: "{{ br_cluster_net.cidr.split('/')[0].split('.')[:3] | join('.') }}.1"
+    provision_prefix: "{{ br_cluster_net.cidr.split('/')[-1] | int }}" 
   template:
     src: update_nic_provision.ps1.j2
     dest: "/tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1"
