@@ -97,6 +97,11 @@
 - name: set fact for nic
   set_fact:
     br_cluster_nic: "{{ get_nic_to_target.stdout }}"
+- debug:
+    msg:
+      - "Identified br-cluster NIC alias: {{ br_cluster_nic }}"
+      - "ip address for {{ br_cluster_nic }}: {{ get_nic_to_target.stdout }}"
+      - " ip address for br-nat_ip: {{ br_nat_ip.stdout }}"]"
 # ------------------------------------------------------------
 # Configure br-cluster NIC with provider_ip
 # ------------------------------------------------------------
