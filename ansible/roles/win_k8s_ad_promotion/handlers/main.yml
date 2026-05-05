@@ -1,3 +1,6 @@
-- name: reboot
-  ansible.builtin.shell: |
-    powershell -Command "{{ windows_commit_cmd }}; Restart-Computer -Force"
+- name: Force native reboot
+  ansible.windows.win_reboot:
+    msg: "Rebooting after hostname change"
+    reboot_timeout: 900
+  become: yes
+  become_method: runas

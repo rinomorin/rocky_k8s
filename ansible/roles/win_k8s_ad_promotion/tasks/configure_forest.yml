@@ -17,9 +17,9 @@
     - inventory_hostname == groups['win_worker_nodes'][0]
     - not forest_done.stat.exists
 
-- name: Create AD forest
-  shell: |
-    powershell -Command "
+- name: Create AD forest (Raw Mode)
+  raw: |
+    powershell.exe -Command "
       Install-ADDSForest `
         -DomainName '{{ ad_domain_name }}' `
         -InstallDNS `
@@ -28,10 +28,11 @@
         ) `
         -Force
     "
+  become: yes
+  become_method: runas
   when:
     - inventory_hostname == groups['win_worker_nodes'][0]
     - not forest_done.stat.exists
-  notify: reboot
 
 - name: Mark forest created
   shell: |
