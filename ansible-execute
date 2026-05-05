@@ -12,7 +12,7 @@ while getopts "d:i:U:C:v:e:" opt; do
     i) INVENTORY="$OPTARG" ;;
     U) REPO_URL="$OPTARG" ;;
     C) CHECKOUT="$OPTARG" ;;
-    v) VERBOSE="-v $OPTARG" ;;
+    v) VERBOSE="-vvvv" ;;
     e) EXTRA_VARS="$OPTARG" ;;
 
     *) echo "Usage: ansible.execute -d dir -i inv -U url [-C checkout] [-v venv] [-e vars] playbook" && exit 1 ;;
