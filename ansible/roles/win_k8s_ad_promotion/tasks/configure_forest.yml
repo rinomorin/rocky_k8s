@@ -34,9 +34,26 @@
     - inventory_hostname == groups['win_worker_nodes'][0]
     - not forest_done.stat.exists
 
-- name: Mark forest created
-  shell: |
-    powershell -Command "New-Item {{ windows_state_dir }}\\forest.done -ItemType File"
+- name: Flush disk buffers (Windows Sync)
+  raw: powershell.exe -NoProfile -NonInteractive -Command "Sync-Disk; [System.IO.File]::Flush((New-Object System.IO.FileStream('C:\temp.tmp', 'Create')).SafeFileHandle)"
+  become: yes
+  become_method: runas
+  register: sync_result
+  failed_when: false
+  changed_when: false
+  ignore_errors: yes
+
+- name: Force native reboot
+  ansible.windows.win_reboot:
+    msg: "Rebooting after hostname change"
+    reboot_timeout: 900
+  become: yes
+  become_method: runas
+
+- name: Mark forest created (Raw Mode)
+  raw: powershell.exe -Command "New-Item -Path '{{ windows_state_dir }}\\forest.done' -ItemType File -Force"
+  become: yes
+  become_method: runas
   when:
     - inventory_hostname == groups['win_worker_nodes'][0]
     - not forest_done.stat.exists
