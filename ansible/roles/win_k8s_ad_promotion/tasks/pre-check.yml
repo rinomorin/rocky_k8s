@@ -1,5 +1,5 @@
 - name: 0.1 - Check if Windows Nodes already exist
-  delegate_to: "{{ kvm_host }}"
+  delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -17,7 +17,7 @@
     skip_win_build: "{{ not (rebuild_win | default(false) | bool) and ('missing' not in win_vm_check.results | map(attribute='stdout') | list) }}"
 
 - name: 0.3 - Cleanup for Windows Rebuild (Only if forced)
-  delegate_to: "{{ kvm_host }}"
+  delegate_to: "{{ kvm_ip }}"
   become: yes
   when: rebuild_win | default(false) | bool
   vars:
