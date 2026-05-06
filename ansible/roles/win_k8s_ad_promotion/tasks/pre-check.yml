@@ -15,6 +15,9 @@
   set_fact:
     # Build if rebuild_win is true OR if any VM is missing
     skip_win_build: "{{ not (rebuild_win | default(false) | bool) and ('missing' not in win_vm_check.results | map(attribute='stdout') | list) }}"
+- name: host name chech
+  debug:
+    msg: "Host {{ inventory_hostname.split('.')[0] }} - skip_win_build={{ skip_win_build }} - win_vm_check={{ win_vm_check.results | map(attribute='stdout') | list }}" 
 
 - name: 0.3 - Cleanup for Windows Rebuild (Only if forced)
   delegate_to: "{{ kvm_ip }}"
