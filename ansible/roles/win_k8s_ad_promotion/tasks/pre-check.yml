@@ -21,12 +21,12 @@
   vars:
     ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
   debug:
-    msg: "Host {{ inventory_hostname.split('.')[0] }} " 
+    msg: "Host {{ inventory_hostname.split('.')[0] }} is {{ rebuild_win | default(false) }} " 
 
 - name: 0.3 - Cleanup for Windows Rebuild (Only if forced)
   delegate_to: "{{ kvm_ip }}"
   become: yes
-  when: rebuild_win | default(false) | bool
+  when: rebuild_win | default(false)
   vars:
     ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
   shell: |
