@@ -210,17 +210,19 @@
   register: current_hostname
   changed_when: false
 
-- debug:
-    msg: "Current hostname is {{ current_hostname.stdout }} and desired hostname is {{ hostname }}" 
-
 - name: Set hostname
   raw: |
     powershell -Command "
-      if ((hostname) -ne '{{ hostname }}') {
-        Rename-Computer -NewName '{{ hostname }}' -Force
+      $current = (hostname).Trim()
+      $desired = '{{ inventory_hostname.split('.')[0] }}'
+      if ($current -ne $desired) {
+        Rename-Computer -NewName $desired -Force -ErrorAction Stop
+        exit 100
       }
     "
-  when: current_hostname.stdout != hostname
+  register: rename_result
+  # 100 is our custom 'changed' code
+  changed_when: rename_result.rc == 100
   notify: reboot
 
 - name: Flush disk buffers (Windows Sync)
