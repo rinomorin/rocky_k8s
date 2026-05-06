@@ -116,6 +116,8 @@
 # Connect via br-nat
 # ------------------------------------------------------------
 - name: Set Administrator password for first login
+  delegate_to: localhost
+  become: false
   shell: |
     ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa -T core@{{ br_nat_ip.stdout }} \
     "powershell -Command \"[adsi]'WinNT://./Administrator,user' | %{ \$_.SetPassword('On32Build4SysAdmin'); \$_.SetInfo() }\""
