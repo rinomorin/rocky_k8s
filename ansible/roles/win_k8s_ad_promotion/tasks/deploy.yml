@@ -202,11 +202,6 @@
     timeout: 300
   delegate_to: localhost
 
-- name: Parse NIC provisioning result
-  debug:
-    msg: "NIC provision result: {{ nic_result.stdout }}"
-
-
 - name: Total Purge and Re-provision IPv4
   raw: |
     powershell.exe -NoProfile -NonInteractive -Command "$n=(Get-NetAdapter | ?{(Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress -notlike '172.*'})[0]; if($n){Write-Host \"###$($n.Name)###\"}else{exit 1}"
