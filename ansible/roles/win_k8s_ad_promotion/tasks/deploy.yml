@@ -44,7 +44,7 @@
   become: yes
   delegate_to: "{{ kvm_ip }}"
   vars:
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: |
     virsh start "{{ inventory_hostname.split('.')[0] }}"
   register: start_res
