@@ -21,7 +21,7 @@
   vars:
     ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
   debug:
-    msg: "Host {{ inventory_hostname.split('.')[0] }} - skip_win_build={{ skip_win_build }} - win_vm_check={{ win_vm_check.results | map(attribute='stdout') | list }}" 
+    msg: "Host {{ inventory_hostname.split('.')[0] }} " 
 
 - name: 0.3 - Cleanup for Windows Rebuild (Only if forced)
   delegate_to: "{{ kvm_ip }}"
