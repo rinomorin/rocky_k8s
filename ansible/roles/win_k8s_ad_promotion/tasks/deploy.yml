@@ -210,6 +210,9 @@
   register: current_hostname
   changed_when: false
 
+- debug:
+    msg: "Current hostname is {{ current_hostname.stdout }} and desired hostname is {{ hostname }}" 
+
 - name: Set hostname
   raw: |
     powershell -Command "
