@@ -102,6 +102,16 @@
     fail_msg: >
       Unable to discover br-nat IP for {{ inventory_hostname }} from KVM.
 
+- name: Wait for Windows SSH to be ready
+  wait_for:
+    host: "{{ br_nat_ip.stdout }}"
+    port: 22
+    delay: 10
+    timeout: 300
+    state: started
+  delegate_to: localhost
+  when: not skip_win_build
+
 # ------------------------------------------------------------
 # Connect via br-nat
 # ------------------------------------------------------------
