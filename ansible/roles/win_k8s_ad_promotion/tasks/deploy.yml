@@ -187,29 +187,6 @@
   wait_for:
     host: "{{ provision_ip }}" # Use the new IP if it changed
     port: 22
-
-- name: Set hostname
-  win_shell: |
-    $current = (hostname).Trim()
-    $desired = "{{ inventory_hostname.split('.') }}"
-    if ($current -ne $desired) {
-        Rename-Computer -NewName $desired -Force -ErrorAction Stop
-        exit 100
-    } else {
-        exit 0
-    }
-  register: rename_result
-  # Force Ansible to see '100' as a change
-  changed_when: rename_result.rc == 100
-  failed_when: rename_result.rc not in [0, 100]
-  become: yes
-  become_method: runas
-  become_user: Administrator
-
-- name: Force native reboot
-  ansible.windows.win_reboot:
-    msg: "Rebooting to apply hostname: {{ inventory_hostname.split('.') }}"
-  when: rename_result.changed
     delay: 15
     timeout: 300
   delegate_to: localhost
@@ -236,22 +213,27 @@
   changed_when: false
 
 - name: Set hostname
-  raw: |
-    powershell -Command "
-      $current = (hostname).Trim()
-      $desired = '{{ inventory_hostname.split('.') }}'
-      if ($current -ieq $desired) {
-          exit 0
-      } else {
-          Rename-Computer -NewName $desired -Force -ErrorAction Stop
-          exit 100
-      }
-    "
-  # Use the trimmed value for the Ansible-level check too
-  when: current_hostname.stdout | trim != inventory_hostname.split('.')[0]
+  win_shell: |
+    $current = (hostname).Trim()
+    $desired = "{{ inventory_hostname.split('.') }}"
+    if ($current -ne $desired) {
+        Rename-Computer -NewName $desired -Force -ErrorAction Stop
+        exit 100
+    } else {
+        exit 0
+    }
   register: rename_result
+  # Force Ansible to see '100' as a change
   changed_when: rename_result.rc == 100
-  # notify: reboot
+  failed_when: rename_result.rc not in [0, 100]
+  become: yes
+  become_method: runas
+  become_user: Administrator
+
+- name: Force native reboot
+  ansible.windows.win_reboot:
+    msg: "Rebooting to apply hostname: {{ inventory_hostname.split('.') }}"
+  when: rename_result.changed
 
 - name: get current hostname again
   raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
