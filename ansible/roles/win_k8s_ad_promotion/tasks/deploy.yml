@@ -165,34 +165,34 @@
     provision_gw: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[0:3] | join('.') }}.1"
 
 
-- name: Render NIC provisioning script locally
-  delegate_to: localhost
-  template:
-    src: update_nic_provision.ps1.j2
-    dest: "/tmp/update_nic_provision_{{ inventory_hostname }}.ps1"
-    mode: '0644'
+# - name: Render NIC provisioning script locally
+#   delegate_to: localhost
+#   template:
+#     src: update_nic_provision.ps1.j2
+#     dest: "/tmp/update_nic_provision_{{ inventory_hostname }}.ps1"
+#     mode: '0644'
 
-- name: Copy NIC provisioning script to Windows host
-  win_copy:
-    src: "/tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1"
-    dest: 'C:\Windows\Temp\update_nic_provision.ps1'
+# - name: Copy NIC provisioning script to Windows host
+#   win_copy:
+#     src: "/tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1"
+#     dest: 'C:\Windows\Temp\update_nic_provision.ps1'
 
-- name: Show NIC provisioning script content
-  debug:
-    msg: " ansible_host: {{ ansible_host }}, provision_ip: {{ provision_ip }}, provision_gw: {{ provision_gw }}"
+# - name: Show NIC provisioning script content
+#   debug:
+#     msg: " ansible_host: {{ ansible_host }}, provision_ip: {{ provision_ip }}, provision_gw: {{ provision_gw }}"
 
-- name: Create one-time task to update IP
-  win_scheduled_task:
-    name: "UpdateNIC"
-    actions:
-      - path: powershell.exe
-        arguments: -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\update_nic_provision.ps1
-    triggers:
-      - type: registration
-    state: present
-    enabled: yes
-    user: SYSTEM
-    run_level: highest
+# - name: Create one-time task to update IP
+#   win_scheduled_task:
+#     name: "UpdateNIC"
+#     actions:
+#       - path: powershell.exe
+#         arguments: -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\update_nic_provision.ps1
+#     triggers:
+#       - type: registration
+#     state: present
+#     enabled: yes
+#     user: SYSTEM
+#     run_level: highest
 
 - name: Wait for connection on the NEW IP
   wait_for:
