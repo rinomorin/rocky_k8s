@@ -42,18 +42,17 @@
 
 - name: "Power On {{ inventory_hostname.split('.')[0] }}"
   become: yes
+  delegate_to: "{{ kvm_ip }}"
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible
   shell: |
     virsh start "{{ inventory_hostname.split('.')[0] }}"
   register: start_res
-  # Logic: It's only a failure if the return code is non-zero 
-  # AND the error message is NOT "Domain is already active"
   failed_when: 
     - start_res.rc != 0 
     - "'already active' not in start_res.stderr"
-  # Logic: Report 'changed' only if we actually started it
   changed_when: 
     - start_res.rc == 0
-
 
 # - name: 1.1 - Discover Maintenance IP from br-nat
 #   vars:
