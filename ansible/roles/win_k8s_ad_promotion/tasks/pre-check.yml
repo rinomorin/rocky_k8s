@@ -2,7 +2,7 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
-    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+    ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
   shell: |
     if virsh list --all | grep -q "hostvars[inventory_hostname.split('.')[0]] }}"; then
       echo "exists"
@@ -21,7 +21,7 @@
   become: yes
   when: rebuild_win | default(false) | bool
   vars:
-    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+    ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
   shell: |
     VM="hostvars[inventory_hostname.split('.')[0]] }}"
     virsh destroy $VM || true
