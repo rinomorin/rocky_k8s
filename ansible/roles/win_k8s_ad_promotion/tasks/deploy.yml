@@ -105,6 +105,11 @@
 # ------------------------------------------------------------
 # Connect via br-nat
 # ------------------------------------------------------------
+- name: Set Administrator password for first login
+  win_user:
+    name: Administrator
+    password: "{{ ad_safe_mode_password }}"
+  when: not skip_win_build
 
 - name: Use br-nat IP for SSH
   set_fact:
@@ -179,7 +184,7 @@
 
 - name: Wait for connection on the NEW IP
   wait_for:
-    host: "{{ ProvisionIP }}" # Use the new IP if it changed
+    host: "{{ provision_ip }}" # Use the new IP if it changed
     port: 22
     delay: 15
     timeout: 300
