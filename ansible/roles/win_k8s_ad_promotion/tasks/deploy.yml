@@ -157,6 +157,7 @@
     src: update_nic_provision.ps1.j2
     dest: "/tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1"
     mode: '0644'
+    force: true
 
 - name: Use br-nat IP for SSH
   set_fact:
