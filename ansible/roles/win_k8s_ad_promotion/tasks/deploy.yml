@@ -100,13 +100,26 @@
   debug:
     msg: " ansible_host: {{ ansible_host }}, provision_ip: {{ provision_ip }}, provision_gw: {{ provision_gw }}"
 
-- name: Execute NIC provisioning script
-  delegate_to: "{{ ansible_host }}"
-  raw: |
-    powershell.exe -NoProfile -ExecutionPolicy Bypass ^
-      -File C:\Windows\Temp\update_nic_provision.ps1
-  register: nic_result
-  changed_when: true
+- name: Create one-time task to update IP
+  win_scheduled_task:
+    name: "UpdateNIC"
+    actions:
+      - path: powershell.exe
+        arguments: -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\update_nic_provision.ps1
+    triggers:
+      - type: registration
+    state: present
+    enabled: yes
+    user: SYSTEM
+    run_level: highest
+
+- name: Wait for connection on the NEW IP
+  wait_for:
+    host: "{{ ProvisionIP }}" # Use the new IP if it changed
+    port: 5985 # or 22 for SSH
+    delay: 15
+    timeout: 300
+  delegate_to: localhost
 
 - name: Parse NIC provisioning result
   debug:
