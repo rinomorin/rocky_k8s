@@ -165,19 +165,6 @@
     provision_ip: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
     provision_gw: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[0:3] | join('.') }}.1"
 
-- name: Reset connection after reboot
-  meta: clear_host_errors
-
-- name: Wait for connection to stabilize
-  wait_for_connection:
-    delay: 5
-    timeout: 300
-
-- name: Copy NIC provisioning script to Windows host
-  win_copy:
-    src: "/tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1"
-    dest: 'C:\Windows\Temp\update_nic_provision.ps1'
-    force: yes
 
 # - name: Show NIC provisioning script content
 #   debug:
@@ -199,7 +186,29 @@
 - name: Wait for connection on the NEW IP
   wait_for:
     host: "{{ provision_ip }}" # Use the new IP if it changed
-    port: 22
+    port: 22- name: Set hostname
+  win_shell: |
+    $current = (hostname).Trim()
+    $desired = "{{ inventory_hostname.split('.') }}"
+    if ($current -ne $desired) {
+        Rename-Computer -NewName $desired -Force -ErrorAction Stop
+        exit 100
+    } else {
+        exit 0
+    }
+  register: rename_result
+  # Force Ansible to see '100' as a change
+  changed_when: rename_result.rc == 100
+  failed_when: rename_result.rc not in [0, 100]
+  become: yes
+  become_method: runas
+  become_user: Administrator
+
+- name: Force native reboot
+  ansible.windows.win_reboot:
+    msg: "Rebooting to apply hostname: {{ inventory_hostname.split('.') }}"
+  when: rename_result.changed
+
     delay: 15
     timeout: 300
   delegate_to: localhost
