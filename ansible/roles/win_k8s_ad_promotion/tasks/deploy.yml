@@ -232,12 +232,20 @@
   when: current_hostname.stdout | trim != inventory_hostname.split('.')[0]
   register: rename_result
   changed_when: rename_result.rc == 100
-  notify: reboot
+  # notify: reboot
 
-- name: Force native reboot
-  ansible.windows.win_reboot:
-    msg: "Rebooting to apply hostname: {{ inventory_hostname.split('.') }}"
-  when: rename_result.changed
+- name: get current hostname again
+  raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
+  register: current_hostname2
+  changed_when: false
+
+- name: Debug hostname change results
+  debug:
+    msg: 
+      - "Current Hostname before change: {{ current_hostname.stdout }}"
+      - "Current Hostname after change: {{ current_hostname2.stdout }}"
+      - "Desired Hostname: {{ inventory_hostname.split('.')[0] }}"
+      - "Rename Result: {{ rename_result }}"  
 
 - name: Flush disk buffers (Windows Sync)
   become: yes
@@ -248,6 +256,13 @@
   raw: |
     powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
   ignore_errors: yes
+
+
+- name: Force native reboot
+  ansible.windows.win_reboot:
+    msg: "Rebooting to apply hostname: {{ inventory_hostname.split('.') }}"
+  when: rename_result.changed
+
 
 - name: Force native reboot
   ansible.windows.win_reboot:
