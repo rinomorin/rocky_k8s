@@ -30,13 +30,16 @@
   vars:
     ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
   shell: |
-    VM="hostvars[inventory_hostname.split('.')[0]] }}"
-    virsh destroy $VM || true
-    virsh undefine $VM --remove-all-storage --nvram || true
-    # Ensures the specific qcow2 is gone
-    rm -f /var/lib/libvirt/images/${VM}.qcow2
-  
-- name: 0.4 - Cleanup for Windows Rebuild pause
-  wait_for:
-    timeout: 15
+    # Properly resolve the VM name into a shell variable
+    VM="{{ inventory_hostname.split('.')[0] }}"
     
+    # Run commands and capture output
+    virsh destroy "$VM" || true
+    virsh undefine "$VM" --remove-all-storage --nvram || true
+    rm -f /var/lib/libvirt/images/"$VM".qcow2
+  register: cleanup_output
+
+- name: 0.4 - Cleanup for Windows Rebuild pause
+  pause:
+    seconds: 5
+  when: rebuild_win | default(false) | bool
