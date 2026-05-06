@@ -199,8 +199,8 @@
     powershell.exe -NoProfile -NonInteractive -Command "$n=(Get-NetAdapter | ?{(Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress -notlike '172.*'})[0]; if($n){Write-Host \"###$($n.Name)###\"}else{exit 1}"
   register: ip_config_result
   
-- name: Verify Address State
-  raw: powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Select-Object IPAddress, AddressState"
+# - name: Verify Address State
+#   raw: powershell.exe -NoProfile -NonInteractive -Command "Get-NetIPAddress -InterfaceAlias '{{ br_cluster_nic }}' -AddressFamily IPv4 | Select-Object IPAddress, AddressState"
 
 # ------------------------------------------------------------
 # Set hostname (requires reboot)
