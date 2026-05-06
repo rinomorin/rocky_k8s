@@ -94,8 +94,7 @@
 - name: Copy NIC provisioning script to Windows host
   become: false
   shell: |
-    echo /tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1 {{ ansible_host }}:C:\Windows\Temp\update_nic_provision.ps1 
-    scp -i /home/core/.ssh/id_rsa /tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1 {{ ansible_host }}:C:\Windows\Temp\update_nic_provision.ps1
+    scp -StrictHostKeyChecking=no -UserKnownHostsFile=/dev/null -i /home/core/.ssh/id_rsa /tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1 {{ ansible_host }}:C:\Windows\Temp\update_nic_provision.ps1
   delegate_to: localhost
 
 - name: Execute NIC provisioning script
