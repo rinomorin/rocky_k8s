@@ -165,11 +165,19 @@
     provision_ip: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
     provision_gw: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[0:3] | join('.') }}.1"
 
+- name: Reset connection after reboot
+  meta: clear_host_errors
+
+- name: Wait for connection to stabilize
+  wait_for_connection:
+    delay: 5
+    timeout: 300
+
 - name: Copy NIC provisioning script to Windows host
-  delegate_to: "{{ ansible_host }}"
   win_copy:
     src: "/tmp/update_nic_provision_{{ inventory_hostname.split('.')[0] }}.ps1"
     dest: 'C:\Windows\Temp\update_nic_provision.ps1'
+    force: yes
 
 # - name: Show NIC provisioning script content
 #   debug:
