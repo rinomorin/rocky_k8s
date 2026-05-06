@@ -97,6 +97,7 @@
     dest: 'C:\Windows\Temp\update_nic_provision.ps1'
 
 - name: Execute NIC provisioning script
+  delegate_to: "{{ ansible_host }}"
   raw: |
     powershell.exe -NoProfile -ExecutionPolicy Bypass ^
       -File C:\Windows\Temp\update_nic_provision.ps1
