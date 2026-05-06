@@ -1,0 +1,32 @@
+- name: 0.1 - Check if Windows Nodes already exist
+  delegate_to: "{{ kvm_host }}"
+  become: yes
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  shell: |
+    if virsh list --all | grep -q "hostvars[inventory_hostname.split('.')[0]] }}"; then
+      echo "exists"
+    else
+      echo "missing"
+    fi
+  register: win_vm_check
+  
+- name: 0.2 - Determine if Windows Build is Required
+  set_fact:
+    # Build if rebuild_win is true OR if any VM is missing
+    skip_win_build: "{{ not (rebuild_win | default(false) | bool) and ('missing' not in win_vm_check.results | map(attribute='stdout') | list) }}"
+
+- name: 0.3 - Cleanup for Windows Rebuild (Only if forced)
+  delegate_to: "{{ kvm_host }}"
+  become: yes
+  when: rebuild_win | default(false) | bool
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  shell: |
+    VM="hostvars[inventory_hostname.split('.')[0]] }}"
+    virsh destroy $VM || true
+    virsh undefine $VM --remove-all-storage --nvram || true
+    # Ensures the specific qcow2 is gone
+    rm -f /var/lib/libvirt/images/${VM}.qcow2
+  
+

@@ -1,5 +1,70 @@
 # roles/rocky_k8s/tasks/deploy.yml
 
+- name: 1.1 - Find the latest gi-win base image
+  delegate_to: "{{ kvm_ip }}"
+  become: yes
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  shell: |
+    virsh list --name --all | grep "gi-win" | head -n 1
+  register: base_image_name
+
+- name: 1.2 - Create Linked Clone and Define Windows VM
+  delegate_to: "{{ kvm_ip }}"
+  become: yes
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+    vm_name: "{{ inventory_hostname.split('.')[0] }}"
+    base_qcow2: "/var/lib/libvirt/images/{{ base_image_name.stdout }}.qcow2"
+    target_qcow2: "/var/lib/libvirt/images/{{ vm_name }}.qcow2"
+  when: not skip_win_build
+  shell: |
+    # 1. Create the Differencing Disk (Linked Clone)
+    qemu-img create -F qcow2 -f qcow2 -b {{ base_qcow2 }} {{ target_qcow2 }}
+    
+    # 2. Fix Permissions
+    chmod 644 {{ target_qcow2 }}
+    chown qemu:qemu {{ target_qcow2 }}
+
+    # 3. Install the VM
+    virt-install \
+      --name {{ vm_name }} \
+      --memory 6144 \
+      --vcpus 4 \
+      --disk path={{ target_qcow2 }},bus=sata \
+      --import \
+      --os-variant win2k22 \
+      --network bridge=br-nat,model=e1000e \
+      --network bridge=br-cluster,model=e1000e \
+      --graphics vnc,listen=0.0.0.0 \
+      --noautoconsole \
+      --boot uefi
+
+- name: "Power On {{ inventory_hostname.split('.')[0] }}"
+  become: yes
+  shell: |
+    virsh start "{{ inventory_hostname.split('.')[0] }}"
+  register: start_res
+  # Logic: It's only a failure if the return code is non-zero 
+  # AND the error message is NOT "Domain is already active"
+  failed_when: 
+    - start_res.rc != 0 
+    - "'already active' not in start_res.stderr"
+  # Logic: Report 'changed' only if we actually started it
+  changed_when: 
+    - start_res.rc == 0
+
+
+# - name: 1.1 - Discover Maintenance IP from br-nat
+#   vars:
+#     ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
+#   become: yes
+#   shell: |
+#     M_MAC=$(virsh domiflist {{ hostvars[inventory_hostname.split('.')[0]] }} | grep 'br-nat' | awk '{print $5}')
+#     while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
+#     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+#   register: maintenance_ip_raw
+
 - name: Fail if immutable commit command is missing
   assert:
     that:
@@ -116,7 +181,7 @@
 - name: Wait for connection on the NEW IP
   wait_for:
     host: "{{ ProvisionIP }}" # Use the new IP if it changed
-    port: 5985 # or 22 for SSH
+    port: 22
     delay: 15
     timeout: 300
   delegate_to: localhost
