@@ -186,7 +186,9 @@
 - name: Wait for connection on the NEW IP
   wait_for:
     host: "{{ provision_ip }}" # Use the new IP if it changed
-    port: 22- name: Set hostname
+    port: 22
+
+- name: Set hostname
   win_shell: |
     $current = (hostname).Trim()
     $desired = "{{ inventory_hostname.split('.') }}"
@@ -208,7 +210,6 @@
   ansible.windows.win_reboot:
     msg: "Rebooting to apply hostname: {{ inventory_hostname.split('.') }}"
   when: rename_result.changed
-
     delay: 15
     timeout: 300
   delegate_to: localhost
