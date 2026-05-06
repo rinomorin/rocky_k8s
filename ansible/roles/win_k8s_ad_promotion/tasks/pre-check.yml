@@ -36,4 +36,7 @@
     # Ensures the specific qcow2 is gone
     rm -f /var/lib/libvirt/images/${VM}.qcow2
   
-
+- name: 0.4 - Cleanup for Windows Rebuild pause
+  wait_for:
+    timeout: 15
+    
