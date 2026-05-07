@@ -41,7 +41,7 @@
 - name: We need to wait for the server to come back up after promotion before we can do anything else
   wait_for:
     delay: 10
-    timeout: 300
+    timeout: 400
     state: started
   delegate_to: localhost
 
