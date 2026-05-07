@@ -19,7 +19,7 @@
 - name: host name chech
   delegate_to: "{{ kvm_ip }}"
   vars:
-    ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
+    ansible_user: "{{ hostvars[kvm.split('.')[0]]['ansible_user'] }}"
   debug:
     msg: "Host {{ inventory_hostname.split('.')[0] }} is {{ rebuild_win | default(false) }} " 
 
@@ -28,7 +28,7 @@
   become: yes
   when: rebuild_win | default(false) | bool
   vars:
-    ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
+    ansible_user: "{{ hostvars[kvm.split('.')[0]]['ansible_user'] }}"
   shell: |
     # Properly resolve the VM name into a shell variable
     VM="{{ inventory_hostname.split('.')[0] }}"
