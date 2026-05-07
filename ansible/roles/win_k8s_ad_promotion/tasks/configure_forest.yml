@@ -112,14 +112,7 @@
     - inventory_hostname == groups['win_worker_nodes'][0]
     - not forest_done.stat.exists
 
-# - name: Configure Windows DNS Forwarders
-#   community.windows.win_dns_server_settings:
-#     forwarders:
-#       - 10.0.0.20
-#       - 8.8.8.8
-#       - 1.1.1.1
-#     forward_timeout: 3
-#     recursion: yes- name: Verify Forest Health (Service & Role Based)
+- name: Verify Forest Health (Service & Role Based)
   win_shell: !unsafe |
     $ErrorActionPreference = 'Stop'
     # 1. Check if the machine is a Domain Controller (Role 4 or 5)
@@ -150,6 +143,15 @@
   become: yes
   become_method: runas
 
+
+# - name: Configure Windows DNS Forwarders
+#   community.windows.win_dns_server_settings:
+#     forwarders:
+#       - 10.0.0.20
+#       - 8.8.8.8
+#       - 1.1.1.1
+#     forward_timeout: 3
+#     recursion: yes
 
 - name: Set DNS Forwarders using PowerShell
   ansible.windows.win_shell: |
