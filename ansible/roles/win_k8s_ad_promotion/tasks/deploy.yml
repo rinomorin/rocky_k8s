@@ -233,14 +233,6 @@
   register: current_hostname2
   changed_when: false
 
-- name: Debug hostname change results
-  debug:
-    msg: 
-      - "Current Hostname before change: {{ current_hostname.stdout }}"
-      - "Current Hostname after change: {{ current_hostname2.stdout }}"
-      - "Desired Hostname: {{ inventory_hostname.split('.')[0] }}"
-      - "Rename Result: {{ rename_result }}"  
-
 - name: Flush disk buffers (Windows Sync)
   become: yes
   become_method: runas
@@ -250,7 +242,6 @@
   raw: |
     powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
   ignore_errors: yes
-
 
 - name: Force native reboot
   ansible.windows.win_reboot:
