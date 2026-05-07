@@ -30,7 +30,6 @@
 
 
 - name: 1.3 - Create AD forest
-  throttle: 1
   win_shell: |
     $pw = ConvertTo-SecureString "{{ ad_safe_mode_password }}" -AsPlainText -Force
     # Import the module explicitly to be safe
