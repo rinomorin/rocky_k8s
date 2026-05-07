@@ -2,7 +2,7 @@
   delegate_to: "{{ kvm_ip }}"
   become: yes
   vars:
-    ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
+    ansible_user: "{{ hostvars[kvm.split('.')[0]]['ansible_user'] }}"
   shell: |
     if virsh list --all | grep -q "hostvars[inventory_hostname.split('.')[0]] }}"; then
       echo "exists"
