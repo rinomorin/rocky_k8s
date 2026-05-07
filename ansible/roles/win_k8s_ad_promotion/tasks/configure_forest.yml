@@ -23,12 +23,6 @@
   win_reboot:
   when: feature_install.changed
 
-- debug:
-    msg: 
-      - "ad_safe_mode_password: {{ ad_safe_mode_password }}"
-      - "ad_domain_name: {{ ad_domain_name }}"
-
-
 - name: 1.3 - Create AD forest
   win_shell: |
     $pw = ConvertTo-SecureString "{{ ad_safe_mode_password }}" -AsPlainText -Force
@@ -41,6 +35,7 @@
       -Force:$true
     sync; Start-Sleep -Seconds 5
   when: not forest_done.stat.exists
+  no_log: true
   notify: reboot
 
 - name: We need to wait for the server to come back up after promotion before we can do anything else
@@ -94,6 +89,7 @@
   changed_when: false
 
 - name: Verify AD Database Existence
+  delegate_to: br_nat_ip.stdout
   raw: |
     powershell.exe -Command "Test-Path C:\Windows\NTDS\ntds.dit"
   register: db_check
