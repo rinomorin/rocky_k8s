@@ -9,25 +9,37 @@
     path: "{{ windows_state_dir }}\\forest.done"
   register: forest_done
 
-- name: Install AD DS and DNS roles (Raw Mode)
-  raw: powershell.exe -Command "Install-WindowsFeature AD-Domain-Services,DNS -IncludeManagementTools"
-  become: yes
-  become_method: runas
-  when:
-    - inventory_hostname == groups['win_worker_nodes'][0]
-    - not forest_done.stat.exists
+- name: 1.1 - Install AD DS Features and Reboot
+  win_feature:
+    name: 
+      - AD-Domain-Services
+      - RSAT-AD-PowerShell
+      - DNS
+    state: present
+    include_management_tools: yes
+  register: feature_install
 
-- name: Create AD forest (Fixed)
-  ansible.windows.win_shell: |
-    $password = ConvertTo-SecureString "{{ ad_safe_mode_password }}" -AsPlainText -Force
+- name: 1.2 - Reboot if Features were installed
+  win_reboot:
+  when: feature_install.changed
+
+- debug:
+    msg: 
+      - "ad_safe_mode_password: {{ ad_safe_mode_password }}"
+      - "ad_domain_name: {{ ad_domain_name }}"
+
+- name: 1.3 - Create AD forest
+  win_shell: |
+    $pw = ConvertTo-SecureString "{{ ad_safe_mode_password | default('On32Build4SysAdmin!') }}" -AsPlainText -Force
+    # Import the module explicitly to be safe
+    Import-Module ADDSDeployment
     Install-ADDSForest `
       -DomainName "{{ ad_domain_name }}" `
       -InstallDNS:$true `
-      -SafeModeAdministratorPassword $password `
+      -SafeModeAdministratorPassword $pw `
       -Force:$true
-    Sync-Disk; [System.IO.File]::Flush((New-Object System.IO.FileStream('C:\temp.tmp', 'Create')).SafeFileHandle)
-  register: ad_promotion
-  # AD Promotion always requires a reboot; we want to catch that here
+    sync; Start-Sleep -Seconds 5
+  when: not forest_done.stat.exists
   notify: reboot
 
 - name: Flush disk buffers (Windows Sync)
