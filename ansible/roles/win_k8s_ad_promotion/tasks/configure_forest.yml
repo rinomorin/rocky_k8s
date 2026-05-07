@@ -43,6 +43,17 @@
   when: not forest_done.stat.exists
   notify: reboot
 
+- name: Wait for Windows SSH to be ready
+  vars:
+    provision: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
+  wait_for:
+    host: "{{ provision }}"
+    port: 22
+    delay: 10
+    timeout: 900
+    state: started
+  delegate_to: localhost
+
 - name: Flush disk buffers (Windows Sync)
   raw: powershell.exe -NoProfile -NonInteractive -Command "Sync-Disk; [System.IO.File]::Flush((New-Object System.IO.FileStream('C:\temp.tmp', 'Create')).SafeFileHandle)"
   become: yes
@@ -64,6 +75,17 @@
     reboot_timeout: 900
   become: yes
   become_method: runas
+
+- name: Wait for Windows SSH to be ready
+  vars:
+    provision: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
+  wait_for:
+    host: "{{ provision }}"
+    port: 22
+    delay: 10
+    timeout: 900
+    state: started
+  delegate_to: localhost
 
 - name: Verify Forest Survival
   raw: powershell.exe -Command "Test-Path '{{ windows_state_dir }}\\forest.done'"
