@@ -58,6 +58,13 @@
   register: db_check
   failed_when: "'False' in db_check.stdout"
 
+- name: Force native reboot
+  ansible.windows.win_reboot:
+    msg: "Rebooting after hostname change"
+    reboot_timeout: 900
+  become: yes
+  become_method: runas
+
 - name: Verify Forest Survival
   raw: powershell.exe -Command "Test-Path '{{ windows_state_dir }}\\forest.done'"
   register: forest_check
@@ -81,3 +88,24 @@
   when:
     - inventory_hostname == groups['win_worker_nodes'][0]
     - not forest_done.stat.exists
+
+- name: Configure Windows DNS Forwarders
+  community.windows.win_dns_server_settings:
+    forwarders:
+      - 10.0.0.20
+      - 8.8.8.8
+      - 1.1.1.1
+    forward_timeout: 3
+    recursion: yes
+
+# - name: Set DNS Forwarders using PowerShell
+#   ansible.windows.win_shell: |
+#     $targets = @("10.0.0.20", "8.8.8.8", "1.1.1.1")
+#     $current = (Get-DnsServerForwarder).IPAddress
+    
+#     # Check if our targets are already set to avoid unnecessary changes
+#     if (Compare-Object $current $targets) {
+#         Set-DnsServerForwarder -IPAddress $targets -PassThru
+#     }
+#   register: dns_result
+#   changed_when: dns_result.stdout != ""
