@@ -50,7 +50,7 @@
     host: "{{ provision }}"
     port: 22
     delay: 10
-    timeout: 900
+    timeout: 9000
     state: started
   delegate_to: localhost
 
