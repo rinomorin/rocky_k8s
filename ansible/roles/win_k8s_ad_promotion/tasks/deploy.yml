@@ -228,11 +228,6 @@
     - "NV Hostname"
   notify: reboot
 
-- name: Force native reboot
-  ansible.windows.win_reboot:
-    msg: "Rebooting to apply hostname: {{ inventory_hostname.split('.') }}"
-  when: rename_result.changed
-
 - name: get current hostname again
   raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
   register: current_hostname2
