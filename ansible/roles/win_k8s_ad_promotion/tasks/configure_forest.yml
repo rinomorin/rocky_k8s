@@ -30,7 +30,7 @@
 
 - name: 1.3 - Create AD forest
   win_shell: |
-    $pw = ConvertTo-SecureString "{{ ad_safe_mode_password }}" -AsPlainText -Force
+    $pw = ConvertTo-SecureString "{{ ad_safe_mode_password| default('AdS@feM0d3Password~') }}" -AsPlainText -Force
     # Import the module explicitly to be safe
     Import-Module ADDSDeployment
     Install-ADDSForest `
