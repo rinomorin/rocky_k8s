@@ -197,11 +197,6 @@
 # ------------------------------------------------------------
 # Set hostname (requires reboot)
 # ------------------------------------------------------------
-- name: get current hostname
-  raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
-  register: current_hostname
-  changed_when: false
-
 - name: Force hostname into Registry
   win_regedit:
     path: HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName
@@ -228,11 +223,6 @@
     - "NV Hostname"
   notify: reboot
 
-- name: get current hostname again
-  raw: powershell.exe -NoProfile -NonInteractive -Command "hostname"
-  register: current_hostname2
-  changed_when: false
-
 - name: Flush disk buffers (Windows Sync)
   become: yes
   become_method: runas
@@ -243,16 +233,18 @@
     powershell.exe -NoProfile -NonInteractive -Command "Write-VolumeCache -DriveLetter C; fsutil volume dismount C:"
   ignore_errors: yes
 
-- name: Force native reboot
-  ansible.windows.win_reboot:
-    msg: "Rebooting to apply hostname: {{ inventory_hostname.split('.') }}"
-  when: rename_result.changed
+- name: Fail if immutable commit command is missing
+  assert:
+    that:
+      - windows_commit_cmd | length > 0
+    fail_msg: >
+      windows_commit_cmd is not defined.
+      This system uses an immutable disk and WILL lose changes on reboot.
 
-
-- name: Force native reboot
-  ansible.windows.win_reboot:
-    msg: "Rebooting after hostname change"
-    reboot_timeout: 900
-  become: yes
-  become_method: runas
-  when: current_hostname.stdout != hostname
+# - name: Force native reboot
+#   ansible.windows.win_reboot:
+#     msg: "Rebooting after hostname change"
+#     reboot_timeout: 900
+#   become: yes
+#   become_method: runas
+#   when: current_hostname.stdout != hostname
