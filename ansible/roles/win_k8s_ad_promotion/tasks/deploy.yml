@@ -54,16 +54,6 @@
   changed_when: 
     - start_res.rc == 0
 
-# - name: 1.1 - Discover Maintenance IP from br-nat
-#   vars:
-#     ansible_user: "{{ hostvars[kvm]['ansible_user'] }}"
-#   become: yes
-#   shell: |
-#     M_MAC=$(virsh domiflist {{ hostvars[inventory_hostname.split('.')[0]] }} | grep 'br-nat' | awk '{print $5}')
-#     while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
-#     virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
-#   register: maintenance_ip_raw
-
 - name: Fail if immutable commit command is missing
   assert:
     that:
@@ -212,17 +202,30 @@
   register: current_hostname
   changed_when: false
 
-- name: get current hostname
-  raw: hostname
-  register: current_hostname
-  changed_when: false
+- name: Force hostname into Registry
+  win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName
+    name: ComputerName
+    data: "{{ inventory_hostname.split('.')[0] }}"
+    type: string
 
-- name: Set hostname via WMIC
-  raw: |
-    wmic computersystem where name="%COMPUTERNAME%" call rename name="{{ inventory_hostname.split('.')[0] }}"
-  register: wmic_result
-  # WMIC returns '0' on success but needs a reboot
-  changed_when: "'ReturnValue = 0' in wmic_result.stdout"
+- name: Fail if immutable commit command is missing
+  assert:
+    that:
+      - windows_commit_cmd | length > 0
+    fail_msg: >
+      windows_commit_cmd is not defined.
+      This system uses an immutable disk and WILL lose changes on reboot.
+
+- name: Force Active Hostname into Registry
+  win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters
+    name: "{{ item }}"
+    data: "{{ inventory_hostname.split('.')[0] }}"
+    type: string
+  loop:
+    - Hostname
+    - "NV Hostname"
   notify: reboot
 
 - name: Force native reboot
