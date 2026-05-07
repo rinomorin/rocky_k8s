@@ -74,6 +74,24 @@
 #     }
 #     # Final safety sleep
 #     Start-Sleep -Seconds 10
+- name: Discover br-nat IP from KVM
+  delegate_to: "{{ kvm_ip }}"
+  become: yes
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  shell: |
+    # Get MAC for the specific bridge
+    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    
+    # Loop until the lease appears
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
+      sleep 5
+    done
+    
+    # Return just the IP
+    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+  register: br_nat_ip
+  changed_when: false
 
 - name: Verify AD Database Existence
   raw: |
@@ -99,19 +117,27 @@
     state: started
   delegate_to: localhost
 
-
-- name: Ensure AD services are running (Raw Mode)
-  raw: powershell.exe -Command "Set-Service ntds, adws, kdc -StartupType Automatic; Start-Service ntds, adws, kdc"
+- name: Ensure AD services are running and verify
+  ansible.windows.win_shell: |
+    $services = "ntds", "adws", "kdc"
+    foreach ($s in $services) {
+        Set-Service $s -StartupType Automatic
+        Start-Service $s -ErrorAction SilentlyContinue
+    }
+    # Final check: Output only the services that are NOT running
+    Get-Service $services | Where-Object { $_.Status -ne "Running" }
+  register: service_check
+  failed_when: service_check.stdout != ""
   become: yes
   become_method: runas
 
-- name: Mark forest created (Raw Mode)
-  raw: powershell.exe -Command "New-Item -Path '{{ windows_state_dir }}\\forest.done' -ItemType File -Force"
-  become: yes
-  become_method: runas
-  when:
-    - inventory_hostname == groups['win_worker_nodes'][0]
-    - not forest_done.stat.exists
+# - name: Mark forest created (Raw Mode)
+#   raw: powershell.exe -Command "New-Item -Path '{{ windows_state_dir }}\\forest.done' -ItemType File -Force"
+#   become: yes
+#   become_method: runas
+#   when:
+#     - inventory_hostname == groups['win_worker_nodes'][0]
+#     - not forest_done.stat.exists
 
 - name: Verify Forest Health (Service & Role Based)
   win_shell: !unsafe |
