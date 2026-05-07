@@ -175,13 +175,6 @@
     provision_ip: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
     provision_gw: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[0:3] | join('.') }}.1"
 
-
-
-
-# - name: Show NIC provisioning script content
-#   debug:
-#     msg: " ansible_host: {{ ansible_host }}, provision_ip: {{ provision_ip }}, provision_gw: {{ provision_gw }}"
-
 - name: Create one-time task to update IP
   win_scheduled_task:
     name: "UpdateNIC"
@@ -224,23 +217,13 @@
   register: current_hostname
   changed_when: false
 
-- name: Set hostname
-  win_shell: |
-    $current = (hostname).Trim()
-    $desired = "{{ inventory_hostname.split('.') }}"
-    if ($current -ne $desired) {
-        Rename-Computer -NewName $desired -Force -ErrorAction Stop
-        exit 100
-    } else {
-        exit 0
-    }
-  register: rename_result
-  # Force Ansible to see '100' as a change
-  changed_when: rename_result.rc == 100
-  failed_when: rename_result.rc not in [0, 100]
-  become: yes
-  become_method: runas
-  become_user: Administrator
+- name: Set hostname via WMIC
+  raw: |
+    wmic computersystem where name="%COMPUTERNAME%" call rename name="{{ inventory_hostname.split('.')[0] }}"
+  register: wmic_result
+  # WMIC returns '0' on success but needs a reboot
+  changed_when: "'ReturnValue = 0' in wmic_result.stdout"
+  notify: reboot
 
 - name: Force native reboot
   ansible.windows.win_reboot:
