@@ -61,15 +61,18 @@
     state: started
   delegate_to: localhost
 
-
 - name: Flush disk buffers (Windows Sync)
-  raw: powershell.exe -NoProfile -NonInteractive -Command "Sync-Disk; [System.IO.File]::Flush((New-Object System.IO.FileStream('C:\temp.tmp', 'Create')).SafeFileHandle)"
-  become: yes
-  become_method: runas
-  register: sync_result
-  failed_when: false
-  changed_when: false
-  ignore_errors: yes
+  ansible.windows.win_shell: |
+    # Flush all volume buffers to hardware
+    $volumes = Get-Volume | Where-Object { $_.DriveLetter }
+    foreach ($vol in $volumes) {
+        Write-Output "Syncing volume $($vol.DriveLetter)..."
+        # Using native kernel call to flush
+        $drive = "\\.\$($vol.DriveLetter):"
+        & fsutil volume flush $vol.DriveLetter:
+    }
+    # Final safety sleep
+    Start-Sleep -Seconds 10
 
 - name: Verify AD Database Existence
   raw: |

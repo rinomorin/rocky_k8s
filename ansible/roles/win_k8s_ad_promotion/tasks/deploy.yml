@@ -241,6 +241,18 @@
       windows_commit_cmd is not defined.
       This system uses an immutable disk and WILL lose changes on reboot.
 
+- name: Run a clean PowerShell script
+  ansible.windows.win_powershell:
+    script: |
+      $Adapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+      $Result = $Adapter.Name
+  register: ps_result
+
+- name: Access the output
+  debug:
+    msg: "The adapter name is {{ ps_result.output[0] }}"
+
+
 # - name: Force native reboot
 #   ansible.windows.win_reboot:
 #     msg: "Rebooting after hostname change"

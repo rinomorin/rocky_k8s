@@ -1,0 +1,39 @@
+- name: Install all critical and security updates
+  ansible.windows.win_updates:
+    category_names:
+      - CriticalUpdates
+      - SecurityUpdates
+      - UpdateRollups
+    reboot: yes
+    reboot_timeout: 900
+
+- name: Ensure Windows Update service is started
+  ansible.windows.win_service:
+    name: wuauserv
+    state: started
+    start_mode: manual
+
+- name: Search and install all updates (with automatic reboots)
+  ansible.windows.win_updates:
+    category_names: '*'
+    state: installed
+    reboot: yes
+    reboot_timeout: 1200  # 20 minutes for heavy patching
+  register: update_result
+
+- name: Debug update results
+  debug:
+    var: update_result
+
+- name: Flush disk buffers (Windows Sync)
+  ansible.windows.win_shell: |
+    # Flush all volume buffers to hardware
+    $volumes = Get-Volume | Where-Object { $_.DriveLetter }
+    foreach ($vol in $volumes) {
+        Write-Output "Syncing volume $($vol.DriveLetter)..."
+        # Using native kernel call to flush
+        $drive = "\\.\$($vol.DriveLetter):"
+        & fsutil volume flush $vol.DriveLetter:
+    }
+    # Final safety sleep
+    Start-Sleep -Seconds 10
