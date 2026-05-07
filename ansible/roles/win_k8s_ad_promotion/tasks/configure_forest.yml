@@ -101,6 +101,14 @@
 
 - name: Verify AD Database Existence
   raw: |
+    whoami
+  register: whoami_check
+  failed_when: "'False' in whoami_check.stdout"
+- debug:
+    var: whoami_check
+
+- name: Verify AD Database Existence
+  raw: |
     powershell.exe -Command "Test-Path C:\Windows\NTDS\ntds.dit"
   register: db_check
   failed_when: "'False' in db_check.stdout"
@@ -112,9 +120,14 @@
   become: yes
   become_method: runas
 
+- name: We need to wait for the server to come back up after promotion before we can do anything else
+  wait_for:
+    delay: 10
+    timeout: 400
+    state: started
+  delegate_to: localhost
+
 - name: Wait for Windows SSH to be ready
-  vars:
-    provision: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
   wait_for:
     host: "{{ provision }}"
     port: 22
@@ -123,39 +136,7 @@
     state: started
   delegate_to: localhost
 
-- name: Discover br-nat IP from KVM
-  delegate_to: "{{ kvm_ip }}"
-  become: yes
-  vars:
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-  shell: |
-    # Get MAC for the specific bridge
-    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
-    
-    # Loop until the lease appears
-    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
-      sleep 5
-    done
-    
-    # Return just the IP
-    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
-  register: br_nat_ip
-  changed_when: false
-
-- name: Wait for Windows SSH to be ready
-  wait_for:
-    host: "{{ br_nat_ip.stdout }}"
-    port: 22
-    delay: 10
-    timeout: 300
-    state: started
-  delegate_to: localhost
-  when: not skip_win_build
-
 - name: Ensure AD services are running and verify
-  delegate_to: br_nat_ip.stdout-
-  vars:
-    ansible_user: "{{ hostvars[inventory_hostname.split('.')[0]]['ansible_user'] }}"
   ansible.windows.win_shell: |
     $services = "ntds", "adws", "kdc"
     foreach ($s in $services) {
@@ -178,8 +159,6 @@
 #     - not forest_done.stat.exists
 
 - name: Verify Forest Health (Service & Role Based)
-  vars:
-    ansible_user: "{{ hostvars[inventory_hostname.split('.')[0]]['ansible_user'] }}"
   win_shell: !unsafe |
     $ErrorActionPreference = 'Stop'
     # 1. Check if the machine is a Domain Controller (Role 4 or 5)
