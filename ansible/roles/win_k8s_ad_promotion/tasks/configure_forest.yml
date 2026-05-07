@@ -98,16 +98,33 @@
     state: started
   delegate_to: localhost
 
-- name: Verify Forest Survival
-  raw: powershell.exe -Command "Test-Path '{{ windows_state_dir }}\\forest.done'"
-  register: forest_check
+- name: Verify Forest Health (Service & Role Based)
+  win_shell: |
+    $ErrorActionPreference = 'Stop'
+    # 1. Check if the machine is a Domain Controller (Role 4 or 5)
+    $Role = (Get-CimInstance Win32_ComputerSystem).DomainRole
+    if ($Role -lt 4) { throw "Machine is not a Domain Controller (Role: $Role)" }
+
+    # 2. Check critical AD services
+    $Services = Get-Service ntds, adws, kdc, netlogon -ErrorAction SilentlyContinue
+    foreach ($s in $Services) {
+        if ($s.Status -ne 'Running') { throw "$($s.Name) is not running" }
+    }
+    
+    # 3. If we made it here, recreate the state file if it's missing (Self-healing)
+    if (!(Test-Path "{{ windows_state_dir }}\forest.done")) {
+        New-Item -Path "{{ windows_state_dir }}\forest.done" -ItemType File -Force
+    }
+    exit 0
+  register: ad_health_check
+  failed_when: false
   become: yes
   become_method: runas
 
-- name: Fail if forest was wiped by immutability
+- name: Fail only if AD services are truly down
   fail:
-    msg: "The server reverted to a clean state! Active Directory was lost."
-  when: "'False' in forest_check.stdout"
+    msg: "AD Forest is NOT functioning! Services are stopped or Role is incorrect."
+  when: ad_health_check.rc != 0
 
 - name: Ensure AD services are running (Raw Mode)
   raw: powershell.exe -Command "Set-Service ntds, adws, kdc -StartupType Automatic; Start-Service ntds, adws, kdc"

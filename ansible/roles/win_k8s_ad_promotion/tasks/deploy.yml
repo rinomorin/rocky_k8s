@@ -1,5 +1,4 @@
 # roles/rocky_k8s/tasks/deploy.yml
-
 - name: 1.1 - Find the latest gi-win base image
   delegate_to: "{{ kvm_ip }}"
   become: yes
