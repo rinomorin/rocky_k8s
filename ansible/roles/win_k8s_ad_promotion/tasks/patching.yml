@@ -26,6 +26,7 @@
     var: update_result
 
 - name: Flush disk buffers (Windows Sync)
+  throttle: 1
   ansible.windows.win_shell: |
     # Flush all volume buffers to hardware
     $volumes = Get-Volume | Where-Object { $_.DriveLetter }
