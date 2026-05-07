@@ -101,6 +101,8 @@
 
 - name: Verify AD Database Existence
   delegate_to: br_nat_ip.stdout
+  vars:
+    ansible_user: "{{ hostvars[inventory_hostname.split('.')[0]]['ansible_user'] }}"
   raw: |
     powershell.exe -Command "Test-Path C:\Windows\NTDS\ntds.dit"
   register: db_check
