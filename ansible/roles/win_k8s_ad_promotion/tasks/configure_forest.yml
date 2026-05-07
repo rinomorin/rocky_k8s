@@ -43,6 +43,13 @@
   when: not forest_done.stat.exists
   notify: reboot
 
+- name: We need to wait for the server to come back up after promotion before we can do anything else
+  wait_for:
+    delay: 10
+    timeout: 300
+    state: started
+  delegate_to: localhost
+
 - name: Wait for Windows SSH to be ready
   vars:
     provision: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
@@ -53,6 +60,7 @@
     timeout: 9000
     state: started
   delegate_to: localhost
+
 
 - name: Flush disk buffers (Windows Sync)
   raw: powershell.exe -NoProfile -NonInteractive -Command "Sync-Disk; [System.IO.File]::Flush((New-Object System.IO.FileStream('C:\temp.tmp', 'Create')).SafeFileHandle)"
