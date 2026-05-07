@@ -69,7 +69,7 @@
       become: yes
       shell: |
         virt-install \
-          --name {{ guest_member }} \
+          --name {{ guest_member }} 
           --ram {{ tram_size | default(4096) }} \
           --vcpus {{ tcpu_count | default(2) }} \
           --metadata description="build_date={{ build_timestamp }},profile={{ build_profile }}" \

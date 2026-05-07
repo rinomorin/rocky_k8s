@@ -3,13 +3,6 @@
   set_fact:
     guest_configs: {}
 
-# - name: determine which image to clone.
-#   import_tasks: 01_determine_os_identity.yml
-
-# - name: Annouce the deployment type
-#   debug:
-#     msg: "{{ guest_member }} is being cloned from {{ guest_configs[guest_member] }}"
-
 - name: initialize IPs
   set_fact:
     lb_ip_list:
@@ -23,8 +16,6 @@
 - debug:
     msg: "skip_build {{ skip_build }}"
 - block:
-  # # 00: Prep DNS so the network identity exists
-  # - import_tasks: 00_dns_registration.yml
 
   # 01: Create the hardware (VMs) and flip them to static IPs
   - import_tasks: 01_clone_lbs.yml

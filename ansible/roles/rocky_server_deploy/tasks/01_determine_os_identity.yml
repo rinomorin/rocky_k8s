@@ -9,7 +9,7 @@
 
 - name: "Set Final Network and Reclone Facts"
   set_fact:
-    target_network: "{{ 'br-nat' }}"
+    target_network: "{{ 'default' if build_profile == 'infra' else 'br-nat' }}"
     should_reclone: >-
       {{ 
         (guest_check.stdout == 'notfound') or 

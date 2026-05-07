@@ -31,7 +31,7 @@
           grep -q '^search' /etc/resolv.conf || echo 'search' >> /etc/resolv.conf
           
           if ! grep '^search' /etc/resolv.conf | grep -q "$DOMAIN"; then
-            sed -i "/^search/ s/$/ $DOMAIN/" /etc/resolv.conf
+              
           fi
           
           grep -q "nameserver $NS_IP" /etc/resolv.conf || echo "nameserver $NS_IP" >> /etc/resolv.conf
