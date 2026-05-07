@@ -69,6 +69,7 @@
 #     }
 #     # Final safety sleep
 #     Start-Sleep -Seconds 10
+
 - name: Discover br-nat IP from KVM
   delegate_to: "{{ kvm_ip }}"
   become: yes
@@ -152,9 +153,10 @@
   delegate_to: localhost
   when: not skip_win_build
 
-
 - name: Ensure AD services are running and verify
-  delegate_to: br_nat_ip.stdout
+  delegate_to: br_nat_ip.stdout-
+  vars:
+    ansible_user: "{{ hostvars[inventory_hostname.split('.')[0]]['ansible_user'] }}"
   ansible.windows.win_shell: |
     $services = "ntds", "adws", "kdc"
     foreach ($s in $services) {
@@ -177,6 +179,8 @@
 #     - not forest_done.stat.exists
 
 - name: Verify Forest Health (Service & Role Based)
+  vars:
+    ansible_user: "{{ hostvars[inventory_hostname.split('.')[0]]['ansible_user'] }}"
   win_shell: !unsafe |
     $ErrorActionPreference = 'Stop'
     # 1. Check if the machine is a Domain Controller (Role 4 or 5)
@@ -208,6 +212,8 @@
   become_method: runas
 
 - name: Set DNS Forwarders using PowerShell
+  vars:
+    ansible_user: "{{ hostvars[inventory_hostname.split('.')[0]]['ansible_user'] }}"
   ansible.windows.win_shell: |
     $targets = @("10.0.0.20", "8.8.8.8", "1.1.1.1")
     $current = (Get-DnsServerForwarder).IPAddress
