@@ -17,22 +17,18 @@
     - inventory_hostname == groups['win_worker_nodes'][0]
     - not forest_done.stat.exists
 
-- name: Create AD forest (Raw Mode with Force Flush)
-  raw: |
-    powershell.exe -Command "
-      Install-ADDSForest `
-        -DomainName '{{ ad_domain_name }}' `
-        -InstallDNS `
-        -SafeModeAdministratorPassword (ConvertTo-SecureString '{{ ad_safe_mode_password }}' -AsPlainText -Force) `
-        -Force;
-      $WaitLoop = 0;
-      while (!(Get-Service ntds -ErrorAction SilentlyContinue) -and $WaitLoop -lt 10) { Start-Sleep -s 5; $WaitLoop++ };
-      [System.Runtime.InteropServices.Marshal]::PrelinkAll([Class]::forName('System.Diagnostics.Process')) 2>$null;
-    "
-  become: yes
-  become_method: runas
-  when:
-    - inventory_hostname == groups['win_worker_nodes'][0]
+- name: Create AD forest (Fixed)
+  ansible.windows.win_shell: |
+    $password = ConvertTo-SecureString "{{ ad_safe_mode_password }}" -AsPlainText -Force
+    Install-ADDSForest `
+      -DomainName "{{ ad_domain_name }}" `
+      -InstallDNS:$true `
+      -SafeModeAdministratorPassword $password `
+      -Force:$true
+    Sync-Disk; [System.IO.File]::Flush((New-Object System.IO.FileStream('C:\temp.tmp', 'Create')).SafeFileHandle)
+  register: ad_promotion
+  # AD Promotion always requires a reboot; we want to catch that here
+  notify: reboot
 
 - name: Flush disk buffers (Windows Sync)
   raw: powershell.exe -NoProfile -NonInteractive -Command "Sync-Disk; [System.IO.File]::Flush((New-Object System.IO.FileStream('C:\temp.tmp', 'Create')).SafeFileHandle)"
@@ -42,6 +38,12 @@
   failed_when: false
   changed_when: false
   ignore_errors: yes
+
+- name: Verify AD Database Existence
+  raw: |
+    powershell.exe -Command "Test-Path C:\Windows\NTDS\ntds.dit"
+  register: db_check
+  failed_when: "'False' in db_check.stdout"
 
 - name: Force native reboot
   ansible.windows.win_reboot:
