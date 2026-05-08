@@ -141,13 +141,13 @@
     - service_check.rc != 0
     - (service_check.stdout | default('')) != ""
 
-# - name: Mark forest created (Raw Mode)
-#   raw: powershell.exe -Command "New-Item -Path '{{ windows_state_dir }}\\forest.done' -ItemType File -Force"
-#   become: yes
-#   become_method: runas
-#   when:
-#     - inventory_hostname == groups['win_worker_nodes'][0]
-#     - not forest_done.stat.exists
+- name: Test local connection after promotion
+  vars:
+    provision: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
+  ansible.windows.win_shell: |
+    ssh {{ ansible_user }}@{{ provision }} echo $(whoami && date)
+  register: post_promo_whoami
+  failed_when: "'False' in post_promo_whoami.stdout"
 
 - name: Verify Forest Health (Service & Role Based)
   win_shell: !unsafe |
@@ -180,6 +180,15 @@
   become: yes
   become_method: runas
 
+- name: 1.4 - Ensure Reverse Lookup Zone exists
+  community.windows.win_dns_zone:
+    name: "{{ rev_zone }}"
+    replication_scope: "forest"
+    state: present
+  vars:
+    # Logic to clean up the rev_zone string
+    rev_zone: "{{ hostvars[inventory_hostname]['provision_ip'] | ipaddr('network/24') | ipaddr('revdns') | replace('0.in-addr.arpa.', 'in-addr.arpa') }}"
+  
 - name: Set DNS Forwarders using PowerShell
   ansible.windows.win_shell: |
     $targets = @("10.0.0.20", "8.8.8.8", "1.1.1.1")
