@@ -41,7 +41,7 @@
 - name: We need to wait for the server to come back up after promotion before we can do anything else
   wait_for:
     delay: 10
-    timeout: 400
+    timeout: 300
     state: started
   delegate_to: localhost
 
@@ -55,39 +55,6 @@
     timeout: 9000
     state: started
   delegate_to: localhost
-
-# - name: Flush disk buffers (Windows Sync)
-#   throttle: 1
-#   ansible.windows.win_shell: |
-#     # Flush all volume buffers to hardware
-#     $volumes = Get-Volume | Where-Object { $_.DriveLetter }
-#     foreach ($vol in $volumes) {
-#         Write-Output "Syncing volume $($vol.DriveLetter)..."
-#         # Using native kernel call to flush
-#         $drive = "\\.\$($vol.DriveLetter):"
-#         & fsutil volume flush $vol.DriveLetter:
-#     }
-#     # Final safety sleep
-#     Start-Sleep -Seconds 10
-
-- name: Discover br-nat IP from KVM
-  delegate_to: "{{ kvm_ip }}"
-  become: yes
-  vars:
-    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
-  shell: |
-    # Get MAC for the specific bridge
-    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
-    
-    # Loop until the lease appears
-    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
-      sleep 5
-    done
-    
-    # Return just the IP
-    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
-  register: br_nat_ip
-  changed_when: false
 
 - name: Wait for Windows SSH to be ready
   wait_for:
@@ -104,6 +71,7 @@
     whoami
   register: whoami_check
   failed_when: "'False' in whoami_check.stdout"
+
 - debug:
     var: whoami_check
 
@@ -123,11 +91,13 @@
 - name: We need to wait for the server to come back up after promotion before we can do anything else
   wait_for:
     delay: 10
-    timeout: 400
+    timeout: 300
     state: started
   delegate_to: localhost
 
 - name: Wait for Windows SSH to be ready
+  vars:
+    provision: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
   wait_for:
     host: "{{ provision }}"
     port: 22
@@ -190,8 +160,6 @@
   become_method: runas
 
 - name: Set DNS Forwarders using PowerShell
-  vars:
-    ansible_user: "{{ hostvars[inventory_hostname.split('.')[0]]['ansible_user'] }}"
   ansible.windows.win_shell: |
     $targets = @("10.0.0.20", "8.8.8.8", "1.1.1.1")
     $current = (Get-DnsServerForwarder).IPAddress
