@@ -241,7 +241,7 @@
         ipa dnszone-mod "{{ rev_zone }}" \
           --forwarder="{{ win_dc01 }}" \
           --forwarder="{{ win_dc02 }}" \
-          --forward-policy=first
+          --forward-policy=first || grep -q "no modifications"
         echo "REVERSE_CHANGED"
     else
         # Zone doesn't exist at all, create it as a forward zone
