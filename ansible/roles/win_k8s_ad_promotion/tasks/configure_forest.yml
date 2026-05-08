@@ -224,7 +224,6 @@
   vars: 
     ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
     short_name: "{{ inventory_hostname.split('.')[0] }}"
-    # Pre-calculating these prevents the shell block from getting "unbalanced"
     rev_zone: "{{ hostvars[short_name]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
     local_domain: "{{ ad_domain_name.replace('.lcl', '.local') }}"
     win_dc01: "{{ hostvars[groups['win_worker_nodes'][0]]['provision_ip'] }}"
@@ -233,13 +232,24 @@
     set -e
     echo "{{ ipa_pass }}" | kinit admin > /dev/null
     
-    # 1. Add the Reverse Forward Zone
-    if ! ipa dnsforwardzone-show "{{ rev_zone }}" > /dev/null 2>&1; then
-      ipa dnsforwardzone-add "{{ rev_zone }}" \
-        --forwarder="{{ win_dc01 }}" \
-        --forwarder="{{ win_dc02 }}" \
-        --forward-policy=first
-      echo "REVERSE_CHANGED"
+    # 1. Check if it is a Forward Zone or a Regular Zone
+    if ipa dnsforwardzone-show "{{ rev_zone }}" > /dev/null 2>&1; then
+        echo "Forward zone already exists."
+    elif ipa dnszone-show "{{ rev_zone }}" > /dev/null 2>&1; then
+        # It's a regular zone, so we add forwarders to it instead
+        echo "Modifying existing primary zone to include AD forwarders"
+        ipa dnszone-mod "{{ rev_zone }}" \
+          --forwarder="{{ win_dc01 }}" \
+          --forwarder="{{ win_dc02 }}" \
+          --forward-policy=first
+        echo "REVERSE_CHANGED"
+    else
+        # Zone doesn't exist at all, create it as a forward zone
+        ipa dnsforwardzone-add "{{ rev_zone }}" \
+          --forwarder="{{ win_dc01 }}" \
+          --forwarder="{{ win_dc02 }}" \
+          --forward-policy=first
+        echo "REVERSE_CHANGED"
     fi
 
     # 2. Create the CNAME Bridge
@@ -247,7 +257,7 @@
       --cname-rec="{{ short_name }}.{{ ad_domain_name }}." || true
   register: ipa_bridge_result
   changed_when: "'REVERSE_CHANGED' in ipa_bridge_result.stdout"
-  # no_log: true
+  no_log: true
 
 
 - name: Set DNS Forwarders using PowerShell
