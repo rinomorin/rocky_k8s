@@ -173,22 +173,25 @@
   # become_method: runas
 
 - name: 1.4 - Create Reverse Lookup Zone via PowerShell
+  vars:
+    # Get the first 3 octets (e.g., 10.0.0)
+    octets: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] }}"
+    # Create the Network ID (e.g., 10.0.0.0/24)
+    network_id: "{{ octets | join('.') }}.0/24"
+    # Create the Zone Name (e.g., 0.0.10.in-addr.arpa)
+    rev_zone_name: "{{ octets | reverse | join('.') }}.in-addr.arpa"
   win_shell: |
-    $ipParts = "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] }}"
-    $networkId = "$($ipParts -join '.').0/24"
-    $zoneName = "$($ipParts[2]).$($ipParts[1]).$($ipParts[0]).in-addr.arpa"
-    
-    if (-not (Get-DnsServerZone -Name $zoneName -ErrorAction SilentlyContinue)) {
-        Write-Output "Creating Reverse Zone: $zoneName"
-        Add-DnsServerPrimaryZone -NetworkId $networkId -ReplicationScope "Forest"
-        
-        # THIS IS THE RULE: Enable Secure Dynamic Updates
-        Set-DnsServerPrimaryZone -Name $zoneName -DynamicUpdate Secure
-    } else {
-        Write-Output "Zone $zoneName already exists."
-        # Ensure it's set to Secure even if it already existed
-        Set-DnsServerPrimaryZone -Name $zoneName -DynamicUpdate Secure
+    if (-not (Get-DnsServerZone -Name "{{ rev_zone_name }}" -ErrorAction SilentlyContinue)) {
+        Write-Output "Creating Reverse Zone: {{ rev_zone_name }}"
+        Add-DnsServerPrimaryZone -NetworkId "{{ network_id }}" -ReplicationScope "Forest"
     }
+    
+    # This ensures Secure Dynamic Updates are enabled so servers auto-register PTRs
+    Set-DnsServerPrimaryZone -Name "{{ rev_zone_name }}" -DynamicUpdate Secure
+    
+    # Force this DC to register its own PTR record immediately
+    ipconfig /registerdns
+  register: zone_creation
 
 - name: insure dc are in dns
   ansible.windows.win_shell: |
