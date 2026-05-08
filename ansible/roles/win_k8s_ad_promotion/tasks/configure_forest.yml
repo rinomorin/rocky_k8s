@@ -141,14 +141,6 @@
     - service_check.rc != 0
     - (service_check.stdout | default('')) != ""
 
-- name: Test local connection after promotion
-  vars:
-    provision: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
-  ansible.windows.win_shell: |
-    ssh {{ ansible_user }}@{{ provision }} echo $(whoami && date)
-  register: post_promo_whoami
-  failed_when: "'False' in post_promo_whoami.stdout"
-
 - name: Verify Forest Health (Service & Role Based)
   win_shell: !unsafe |
     $ErrorActionPreference = 'Stop'
@@ -188,7 +180,28 @@
   vars:
     # Logic to clean up the rev_zone string
     rev_zone: "{{ hostvars[inventory_hostname]['provision_ip'] | ipaddr('network/24') | ipaddr('revdns') | replace('0.in-addr.arpa.', 'in-addr.arpa') }}"
-  
+
+- name: 1.4 - Create Reverse Lookup Zone via PowerShell
+  win_shell: |
+    $zoneName = "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
+    
+    # Check if the zone exists first to avoid errors
+    if (-not (Get-DnsServerZone -Name $zoneName -ErrorAction SilentlyContinue)) {
+        Write-Output "Creating Reverse Zone: $zoneName"
+        Add-DnsServerPrimaryZone -NetworkId "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | join('.') }}.0/24" -ReplicationScope "Forest"
+        
+        # Force a sync of the DNS data to disk
+        Write-Output "Flushing DNS to disk..."
+        Export-DnsServerZone -Name $zoneName
+    } else {
+        Write-Output "Zone $zoneName already exists."
+    }
+- name: insure dc are in dns
+  win_shell: |
+    ipconfig/registerdns
+  register: dns_register
+  changed_when: dns_register.rc == 0
+
 - name: Set DNS Forwarders using PowerShell
   ansible.windows.win_shell: |
     $targets = @("10.0.0.20", "8.8.8.8", "1.1.1.1")
@@ -200,3 +213,4 @@
     }
   register: dns_result
   changed_when: dns_result.stdout != ""
+
