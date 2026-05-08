@@ -201,8 +201,10 @@
 
 - name: Configure IPA to forward AD domain requests to Windows DCs
   delegate_to: localhost
+  vars:
+    ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
   ansible.builtin.shell: |
-    echo ""{{ lookup('env', 'ipa_admin_password') }}" | kinit admin}
+    echo "{{ ipa_pass }}" | kinit admin}
     if ! ipa dnsforwardzone-show {{ ad_domain_name }} > /dev/null 2>&1; then
       ipa dnsforwardzone-add {{ ad_domain_name }} \
         --forwarder={{ hostvars[groups['win_worker_nodes'][0]]['provision_ip'] }} \
@@ -214,10 +216,13 @@
   changed_when: "'CHANGED' in ipa_dns_result.stdout"
   when: inventory_hostname == groups['win_worker_nodes'][0]
 
+
 - name: Configure IPA Reverse Forwarding and CNAME Bridge
   delegate_to: localhost
+  vars:
+    ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
   ansible.builtin.shell: |
-    echo ""{{ lookup('env', 'ipa_admin_password') }}" | kinit admin}
+    echo "{{ ipa_pass }}" | kinit admin}
     # 1. Define the reverse zone name
     REVERSE_ZONE="{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
     
