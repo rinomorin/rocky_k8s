@@ -179,11 +179,10 @@
     # Check if the zone exists first to avoid errors
     if (-not (Get-DnsServerZone -Name $zoneName -ErrorAction SilentlyContinue)) {
         Write-Output "Creating Reverse Zone: $zoneName"
+        # Using NetworkID for the primary zone creation
         Add-DnsServerPrimaryZone -NetworkId "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | join('.') }}.0/24" -ReplicationScope "Forest"
         
-        # Force a sync of the DNS data to disk
-        Write-Output "Flushing DNS to disk..."
-        Export-DnsServerZone -Name $zoneName
+        # Removed Export-DnsServerZone as it is redundant for AD-integrated zones and missing mandatory parameters
     } else {
         Write-Output "Zone $zoneName already exists."
     }
@@ -191,10 +190,11 @@
 
 - name: insure dc are in dns
   ansible.windows.win_shell: |
-    ipconfig/registerdns
+    ipconfig /registerdns
   register: dns_register
-  changed_when: dns_register.rc == 0
-
+  # We use changed_when because ipconfig always returns rc 0 unless the service is down
+  changed_when: true
+  
 - name: Set DNS Forwarders using PowerShell
   ansible.windows.win_shell: |
     $targets = @("10.0.0.20", "8.8.8.8", "1.1.1.1")
