@@ -257,7 +257,7 @@
       --cname-rec="{{ short_name }}.{{ ad_domain_name }}." || true
   register: ipa_bridge_result
   changed_when: "'REVERSE_CHANGED' in ipa_bridge_result.stdout"
-  no_log: true
+  # no_log: true
 
 
 - name: Set DNS Forwarders using PowerShell
