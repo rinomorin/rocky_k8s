@@ -202,49 +202,52 @@
 - name: Configure IPA to forward AD domain requests to Windows DCs
   delegate_to: localhost
   vars:
-    # Handle the password lookup outside the shell string to avoid quote nesting
     ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
+    win_dc01: "{{ hostvars[groups['win_worker_nodes'][0]]['provision_ip'] }}"
+    win_dc02: "{{ hostvars[groups['win_worker_nodes'][1]]['provision_ip'] }}"
   ansible.builtin.shell: |
-    # Use the variable we defined above
     echo "{{ ipa_pass }}" | kinit admin
-    
     if ! ipa dnsforwardzone-show {{ ad_domain_name }} > /dev/null 2>&1; then
       ipa dnsforwardzone-add {{ ad_domain_name }} \
-        --forwarder={{ hostvars[groups['win_worker_nodes'][0]]['provision_ip'] }} \
-        --forwarder={{ hostvars[groups['win_worker_nodes'][1]]['provision_ip'] }} \
+        --forwarder={{ win_dc01 }} \
+        --forwarder={{ win_dc02 }} \
         --forward-policy=first
       echo "CHANGED"
     fi
   register: ipa_dns_result
   changed_when: "'CHANGED' in ipa_dns_result.stdout"
   when: inventory_hostname == groups['win_worker_nodes'][0]
-  
+  no_log: true
+
 - name: Configure IPA Reverse Forwarding and CNAME Bridge
   delegate_to: localhost
   vars: 
-    ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"    
+    ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
+    # Pre-calculate the logic here so the shell block stays clean
+    short_name: "{{ inventory_hostname.split('.')[0] }}"
+    rev_zone: "{{ hostvars[short_name]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
+    local_domain: "{{ ad_domain_name.replace('.lcl', '.local') }}"
+    win_dc01: "{{ hostvars[groups['win_worker_nodes'][0]]['provision_ip'] }}"
+    win_dc02: "{{ hostvars[groups['win_worker_nodes'][1]]['provision_ip'] }}"
   ansible.builtin.shell: |
     echo "{{ ipa_pass }}" | kinit admin
-    # 1. Define the reverse zone name
-    REVERSE_ZONE="{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
     
-    # 2. Add the Reverse Forward Zone so IPA asks Windows for 10.0.0.x IPs
-    if ! ipa dnsforwardzone-show $REVERSE_ZONE > /dev/null 2>&1; then
-      ipa dnsforwardzone-add $REVERSE_ZONE \
-        --forwarder={{ hostvars[groups['win_worker_nodes'][0]]['provision_ip'] }} \
-        --forwarder={{ hostvars[groups['win_worker_nodes'][1]]['provision_ip'] }} \
+    # 1. Add the Reverse Forward Zone
+    if ! ipa dnsforwardzone-show {{ rev_zone }} > /dev/null 2>&1; then
+      ipa dnsforwardzone-add {{ rev_zone }} \
+        --forwarder={{ win_dc01 }} \
+        --forwarder={{ win_dc02 }} \
         --forward-policy=first
       echo "REVERSE_CHANGED"
     fi
 
-    # 3. Create the CNAME Bridge (local -> lcl)
-    # We use || true so it doesn't fail if the CNAME already exists
-    ipa dnsrecord-add {{ ad_domain_name.replace(".lcl", ".local") }} {{ inventory_hostname.split('.')[0] }} \
-      --cname-rec={{ inventory_hostname.split('.')[0] }}.{{ ad_domain_name }}. || true
+    # 2. Create the CNAME Bridge (local -> lcl)
+    # Using '|| true' ensures we don't fail if the record already exists
+    ipa dnsrecord-add {{ local_domain }} {{ short_name }} \
+      --cname-rec={{ short_name }}.{{ ad_domain_name }}. || true
   register: ipa_bridge_result
   changed_when: "'REVERSE_CHANGED' in ipa_bridge_result.stdout"
-  # On the helper node
-
+  no_log: true
 
 - name: Set DNS Forwarders using PowerShell
   ansible.windows.win_shell: |
