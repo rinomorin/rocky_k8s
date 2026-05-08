@@ -190,9 +190,13 @@
 
 - name: insure dc are in dns
   ansible.windows.win_shell: |
+    # Force the OS to register its IP
     ipconfig /registerdns
+    # Give it a moment to talk to the DNS service
+    Start-Sleep -Seconds 5
+    # Force Netlogon to register AD-specific records
+    nltest /dsregdns
   register: dns_register
-  # We use changed_when because ipconfig always returns rc 0 unless the service is down
   changed_when: true
   
 - name: Set DNS Forwarders using PowerShell
