@@ -1,0 +1,27 @@
+---
+# docker_join.yml - Kubernetes Cluster Integration
+
+- name: 2.1 - Generate join command on Linux Master
+  ansible.builtin.shell: kubeadm token create --print-join-command
+  delegate_to: "{{ controller_node[0]['provision_ip']}}"
+  register: k8s_join_command_raw
+
+- name: 2.2 - Ensure Docker Service is running
+  ansible.windows.win_service:
+    name: docker
+    state: started
+    start_mode: auto
+
+- name: 2.3 - Join Windows Node to Cluster
+  ansible.windows.win_shell: "{{ k8s_join_command_raw.stdout }} --v=5"
+  args:
+    creates: C:\etc\kubernetes\kubelet.conf
+  register: join_result
+
+- name: 2.4 - Verify Node Status on Master
+  ansible.builtin.shell: kubectl get nodes
+  delegate_to: "{{ controller_node[0]['provision_ip'] }}"
+  register: cluster_status
+  until: "inventory_hostname.lower() in cluster_status.stdout.lower() and 'Ready' in cluster_status.stdout"
+  retries: 12
+  delay: 10
