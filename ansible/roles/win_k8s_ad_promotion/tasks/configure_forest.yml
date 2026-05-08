@@ -59,6 +59,8 @@
 - name: Discover br-nat IP from KVM
   delegate_to: "{{ kvm_ip }}"
   become: yes
+  vars:
+    ansible_user: "{{ hostvars[kvm.split('.')[0]]['ansible_user'] }}"
   shell: |
     # Get MAC for the specific bridge
     M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
