@@ -169,24 +169,31 @@
     exit 0
   register: ad_health_check
   failed_when: false
-  become: yes
-  become_method: runas
+  # become: yes
+  # become_method: runas
 
 - name: 1.4 - Create Reverse Lookup Zone via PowerShell
   ansible.windows.win_shell: |
-    $zoneName = "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
+    $ipParts = "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}".Split('.')
+    $networkId = "$($ipParts[0]).$($ipParts[1]).$($ipParts[2]).0/24"
+    $zoneName = "$($ipParts[2]).$($ipParts[1]).$($ipParts[0]).in-addr.arpa"
     
-    # Check if the zone exists first to avoid errors
     if (-not (Get-DnsServerZone -Name $zoneName -ErrorAction SilentlyContinue)) {
-        Write-Output "Creating Reverse Zone: $zoneName"
-        Add-DnsServerPrimaryZone -NetworkId "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | join('.') }}.0/24" -ReplicationScope "Forest"
+        Write-Output "Creating Reverse Zone: $zoneName for Network: $networkId"
         
-        # Force a sync of the DNS data to disk
-        Write-Output "Flushing DNS to disk..."
-        Export-DnsServerZone -Name $zoneName
+        # Create the zone
+        Add-DnsServerPrimaryZone -NetworkId $networkId -ReplicationScope "Forest"
+        
+        # Wait for AD to acknowledge the object creation
+        Start-Sleep -Seconds 2
+        
+        # Force registration of this DC's own records into the new zone
+        ipconfig /registerdns
     } else {
         Write-Output "Zone $zoneName already exists."
     }
+  # Only run on the FIRST DC to avoid race conditions during zone creation
+  when: inventory_hostname == groups['win_worker_nodes'][0]
 
 - name: insure dc are in dns
   ansible.windows.win_shell: |
