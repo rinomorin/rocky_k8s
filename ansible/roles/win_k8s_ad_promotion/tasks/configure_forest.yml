@@ -229,36 +229,38 @@
     win_dc01: "{{ hostvars[groups['win_worker_nodes'][0]]['provision_ip'] }}"
     win_dc02: "{{ hostvars[groups['win_worker_nodes'][1]]['provision_ip'] }}"
   ansible.builtin.shell: |
-    set -e
+    # No 'set -e' here so we can finish the CNAME even if zone-mod 'fails'
     echo "{{ ipa_pass }}" | kinit admin > /dev/null
-    
-    # 1. Check if it is a Forward Zone or a Regular Zone
+
+    # 1. Reverse Zone Handling
     if ipa dnsforwardzone-show "{{ rev_zone }}" > /dev/null 2>&1; then
-        echo "Forward zone already exists."
+        echo "FORWARD_EXISTS"
     elif ipa dnszone-show "{{ rev_zone }}" > /dev/null 2>&1; then
-        # It's a regular zone, so we add forwarders to it instead
-        echo "Modifying existing primary zone to include AD forwarders"
         ipa dnszone-mod "{{ rev_zone }}" \
           --forwarder="{{ win_dc01 }}" \
           --forwarder="{{ win_dc02 }}" \
-          --forward-policy=first || grep -q "no modifications"
-        echo "REVERSE_CHANGED"
+          --forward-policy=first
+        echo "REVERSE_UPDATED"
     else
-        # Zone doesn't exist at all, create it as a forward zone
         ipa dnsforwardzone-add "{{ rev_zone }}" \
           --forwarder="{{ win_dc01 }}" \
           --forwarder="{{ win_dc02 }}" \
           --forward-policy=first
-        echo "REVERSE_CHANGED"
+        echo "REVERSE_CREATED"
     fi
 
-    # 2. Create the CNAME Bridge
+    # 2. CNAME Bridge
     ipa dnsrecord-add "{{ local_domain }}" "{{ short_name }}" \
       --cname-rec="{{ short_name }}.{{ ad_domain_name }}." || true
   register: ipa_bridge_result
-  changed_when: "'REVERSE_CHANGED' in ipa_bridge_result.stdout"
+  # FAIL condition: if rc is not 0 AND the specific error is NOT in stderr
+  failed_when: 
+    - ipa_bridge_result.rc != 0 
+    - "'no modifications to be performed' not in ipa_bridge_result.stderr"
+  # CHANGE condition: if we actually created or updated the zone
+  changed_when: 
+    - "'REVERSE_UPDATED' in ipa_bridge_result.stdout or 'REVERSE_CREATED' in ipa_bridge_result.stdout"
   # no_log: true
-
 
 - name: Set DNS Forwarders using PowerShell
   ansible.windows.win_shell: |
