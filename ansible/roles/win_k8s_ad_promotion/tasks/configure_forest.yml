@@ -172,17 +172,8 @@
   become: yes
   become_method: runas
 
-- name: 1.4 - Ensure Reverse Lookup Zone exists
-  community.windows.win_dns_zone:
-    name: "{{ rev_zone }}"
-    replication_scope: "forest"
-    state: present
-  vars:
-    # Logic to clean up the rev_zone string
-    rev_zone: "{{ hostvars[inventory_hostname]['provision_ip'] | ipaddr('network/24') | ipaddr('revdns') | replace('0.in-addr.arpa.', 'in-addr.arpa') }}"
-
 - name: 1.4 - Create Reverse Lookup Zone via PowerShell
-  win_shell: |
+  ansible.windows.win_shell: |
     $zoneName = "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
     
     # Check if the zone exists first to avoid errors
@@ -196,8 +187,9 @@
     } else {
         Write-Output "Zone $zoneName already exists."
     }
+
 - name: insure dc are in dns
-  win_shell: |
+  ansible.windows.win_shell: |
     ipconfig/registerdns
   register: dns_register
   changed_when: dns_register.rc == 0
