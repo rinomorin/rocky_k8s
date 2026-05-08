@@ -41,7 +41,7 @@
 - name: We need to wait for the server to come back up after promotion before we can do anything else
   wait_for:
     delay: 10
-    timeout: 300
+    timeout: 350
     state: started
   delegate_to: localhost
 
@@ -85,7 +85,7 @@
   delegate_to: localhost
   when: not skip_win_build
 
-- name: Verify AD Database Existence
+- name: Verify whoami Database Existence
   raw: |
     whoami
   register: whoami_check
@@ -109,7 +109,7 @@
 - name: We need to wait for the server to come back up after promotion before we can do anything else
   wait_for:
     delay: 10
-    timeout: 300
+    timeout: 350
     state: started
   delegate_to: localhost
 
