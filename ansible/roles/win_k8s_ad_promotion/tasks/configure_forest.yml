@@ -109,7 +109,7 @@
 - name: We need to wait for the server to come back up after promotion before we can do anything else
   wait_for:
     delay: 10
-    timeout: 350
+    timeout: 150
     state: started
   delegate_to: localhost
 
@@ -128,15 +128,18 @@
   ansible.windows.win_shell: |
     $services = "ntds", "adws", "kdc"
     foreach ($s in $services) {
-        Set-Service $s -StartupType Automatic
-        Start-Service $s -ErrorAction SilentlyContinue
+        if (Get-Service $s -ErrorAction SilentlyContinue) {
+            Set-Service $s -StartupType Automatic
+            Start-Service $s -ErrorAction SilentlyContinue
+        }
     }
-    # Final check: Output only the services that are NOT running
-    Get-Service $services | Where-Object { $_.Status -ne "Running" }
+    Get-Service $services -ErrorAction SilentlyContinue | Where-Object { $_.Status -ne "Running" }
   register: service_check
-  failed_when: service_check.stdout != ""
-  become: yes
-  become_method: runas
+  # Only use become if the connection user is not an admin
+  become: no 
+  failed_when: 
+    - service_check.rc != 0
+    - (service_check.stdout | default('')) != ""
 
 # - name: Mark forest created (Raw Mode)
 #   raw: powershell.exe -Command "New-Item -Path '{{ windows_state_dir }}\\forest.done' -ItemType File -Force"
