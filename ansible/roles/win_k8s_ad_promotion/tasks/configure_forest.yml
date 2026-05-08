@@ -174,19 +174,21 @@
 
 - name: 1.4 - Create Reverse Lookup Zone via PowerShell
   win_shell: |
-    $zoneName = "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
+    $ipParts = "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] }}"
+    $networkId = "$($ipParts -join '.').0/24"
+    $zoneName = "$($ipParts[2]).$($ipParts[1]).$($ipParts[0]).in-addr.arpa"
     
-    # Check if the zone exists first to avoid errors
     if (-not (Get-DnsServerZone -Name $zoneName -ErrorAction SilentlyContinue)) {
         Write-Output "Creating Reverse Zone: $zoneName"
-        # Using NetworkID for the primary zone creation
-        Add-DnsServerPrimaryZone -NetworkId "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | join('.') }}.0/24" -ReplicationScope "Forest"
+        Add-DnsServerPrimaryZone -NetworkId $networkId -ReplicationScope "Forest"
         
-        # Removed Export-DnsServerZone as it is redundant for AD-integrated zones and missing mandatory parameters
+        # THIS IS THE RULE: Enable Secure Dynamic Updates
+        Set-DnsServerPrimaryZone -Name $zoneName -DynamicUpdate Secure
     } else {
         Write-Output "Zone $zoneName already exists."
+        # Ensure it's set to Secure even if it already existed
+        Set-DnsServerPrimaryZone -Name $zoneName -DynamicUpdate Secure
     }
-  when: inventory_hostname == groups['win_worker_nodes'][0]
 
 - name: insure dc are in dns
   ansible.windows.win_shell: |
