@@ -177,7 +177,7 @@
     # Get the first 3 octets (e.g., 10.0.0)
     octets: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] }}"
     # Create the Network ID (e.g., 10.0.0.0/24)
-    network_id: "{{ octets | join('.') }}.0/24"
+    network_id: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | join('.') }}.0/24"
     # Create the Zone Name (e.g., 0.0.10.in-addr.arpa)
     rev_zone_name: "{{ octets | reverse | join('.') }}.in-addr.arpa"
   win_shell: |
