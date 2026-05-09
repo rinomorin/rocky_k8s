@@ -115,14 +115,23 @@
     $url = "https://github.com/Mirantis/cri-dockerd/releases/download/v$version/cri-dockerd-$version.win-amd64.zip"
     $dest = "$env:TEMP\cri-dockerd.zip"
     
-    curl.exe -L $url -o $dest
+    if (-not (Test-Path "C:\Program Files\cri-dockerd")) {
+        New-Item -Path "C:\Program Files\cri-dockerd" -ItemType Directory -Force
+    }
+
+    Invoke-WebRequest -Uri $url -OutFile $dest
     Expand-Archive -Path $dest -DestinationPath "C:\Program Files\cri-dockerd" -Force
     
     # Register the service
-    & "C:\Program Files\cri-dockerd\cri-dockerd.exe" --register-service
-    Start-Service cri-dockerd
+    if (-not (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue)) {
+        & "C:\Program Files\cri-dockerd\cri-dockerd.exe" --register-service
+        Start-Service cri-dockerd
+    }
   become: yes
   become_method: runas
+  become_user: '.\Administrator'  # Use the .\ prefix to specify local admin
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
 
 - name: 1.9.2 - Flush File System Buffers (Disk Sync)
   ansible.windows.win_shell: |
