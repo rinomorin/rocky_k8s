@@ -21,15 +21,26 @@
   become_method: runas
   become_user: Administrator
 
-- name: 1.4 - Install Docker Microsoft Provider
-  community.windows.win_psmodule:
-    name: DockerMsftProvider
-    state: present
+- name: 1.4 - Install Docker Provider and Docker Engine
+  ansible.windows.win_shell: |
+    # Ensure the PSGallery is trusted to avoid interactive prompts
+    Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
+    
+    # Install the Provider if missing
+    if (-not (Get-PackageProvider -Name DockerMsftProvider -ErrorAction SilentlyContinue)) {
+        Install-Module -Name DockerMsftProvider -Force
+    }
+    
+    # Install Docker Engine
+    Install-Package -Name docker -ProviderName DockerMsftProvider -Force
+  args:
+    creates: C:\Program Files\Docker\docker.exe
   become: yes
   become_method: runas
   become_user: Administrator
   vars:
     ansible_become_password: "{{ ad_safe_mode_password }}"
+  register: docker_install
 
 - name: 1.5 - Install Docker Engine (Headless)
   ansible.windows.win_shell: |
