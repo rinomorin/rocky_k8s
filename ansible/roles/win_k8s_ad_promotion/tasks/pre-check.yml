@@ -12,7 +12,10 @@
   register: win_vm_check
   
 - debug:
-    var: skip_win_build
+    msg: 
+      - "skip_win_build: {{ skip_win_build }}"
+      - "win_vm_check.stdout: {{ win_vm_check.stdout }}"
+      - "rebuild_win: {{ rebuild_win }}"
 
 - name: 0.2 - Determine if Windows Build is Required
   set_fact:
