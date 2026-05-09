@@ -1,4 +1,7 @@
 ---
+- debug:
+    msg: "Starting Docker Installation Tasks for Kubernetes {{ kubernetes_version }}"
+
 # docker_install.yml - Headless Environment Prep for Server Core
 - name: 1.1 - Resolve latest patch version for K8s {{ kubernetes_version }}
   ansible.builtin.uri:
