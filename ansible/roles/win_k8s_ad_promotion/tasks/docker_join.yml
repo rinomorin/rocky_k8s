@@ -19,7 +19,7 @@
   register: join_result
 
 - debug:
-  var: join_result
+    var: join_result
 
 - name: 2.4 - Verify Node Status on Master
   ansible.builtin.shell: kubectl get nodes
