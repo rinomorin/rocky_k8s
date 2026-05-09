@@ -1,44 +1,42 @@
 ---
-# docker_install.yml - Headless Environment Prep for Server Core
-- name: 1.1 - Resolve latest patch version for K8s {{ kubernetes_version }}
-  ansible.builtin.uri:
-    url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt"
-    return_content: yes
-  # Run this on the Ansible controller, not the Windows node
-  delegate_to: localhost
-  register: k8s_patch_resolve
+---
+# docker_install.yml - Zero-Hardcode Dynamic Installation
 
-- name: 1.2 - Set actual version fact
+- name: 1.1 - Resolve latest K8s and Docker versions
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    return_content: yes
+  delegate_to: localhost
+  register: version_lookups
+  loop:
+    - { name: 'k8s', url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt" }
+    # This URL returns the latest stable Docker version string for Windows
+    - { name: 'docker', url: "https://download.docker.com/win/static/stable/x86_64/latest.txt" }
+
+- name: 1.2 - Set Version Facts
   ansible.builtin.set_fact:
-    k8s_actual_version: "{{ k8s_patch_resolve.content | trim }}"
+    k8s_actual_version: "{{ version_lookups.results[0].content | trim }}"
+    docker_actual_version: "{{ version_lookups.results[1].content | trim }}"
 
 - name: 1.3 - Ensure Chocolatey is installed
   chocolatey.chocolatey.win_chocolatey:
     name: chocolatey
     state: present
-  # We still need become to jump the UAC fence
   become: yes
   become_method: runas
   become_user: Administrator
 
-- name: 1.4 - Install Docker Provider and Docker Engine
+# docker_install.yml - Zero-Hardcode Dynamic Installation
+- name: 1.4 - Download and Extract Docker Engine (Dynamic Version)
   ansible.windows.win_shell: |
-    # 1. Force TLS 1.2 for the session
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-    # 2. Trust the PSGallery
-    Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
-
-    # 3. Install/Import the Docker Provider
-    if (-not (Get-PackageProvider -Name DockerMsftProvider -ErrorAction SilentlyContinue)) {
-        Install-Module -Name DockerMsftProvider -Force -Confirm:$false
-    }
+    $version = "{{ docker_actual_version }}"
+    $url = "https://download.docker.com/win/static/stable/x86_64/docker-$version.zip"
+    $dest = "$env:TEMP\docker.zip"
     
-    # 4. Explicitly import the provider into the session to register the source
-    Import-PackageProvider -Name DockerMsftProvider
-
-    # 5. Install Docker
-    Install-Package -Name docker -ProviderName DockerMsftProvider -Force -Confirm:$false
+    Write-Output "Fetching Docker version: $version"
+    curl.exe -L $url -o $dest
+    Expand-Archive -Path $dest -DestinationPath "C:\Program Files" -Force
+    Remove-Item $dest
   args:
     creates: C:\Program Files\Docker\docker.exe
   become: yes
@@ -46,18 +44,38 @@
   become_user: Administrator
   vars:
     ansible_become_password: "{{ ad_safe_mode_password }}"
-  register: docker_install
 
-- name: 1.5 - Install Docker Engine (Headless)
+- name: 1.5 - Download Kubernetes Binaries ({{ k8s_actual_version }})
   ansible.windows.win_shell: |
-    Install-Package -Name docker -ProviderName DockerMsftProvider -Force
+    $binaries = @("kubelet", "kubeadm", "kubectl")
+    foreach ($bin in $binaries) {
+        $url = "https://dl.k8s.io/release/{{ k8s_actual_version }}/bin/windows/amd64/$bin.exe"
+        curl.exe -L $url -o "C:\Windows\System32\$bin.exe"
+    }
   args:
-    creates: C:\Program Files\Docker\docker.exe
-  register: docker_install
+    creates: C:\Windows\System32\kubeadm.exe
   become: yes
   become_method: runas
   become_user: Administrator
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
 
+# - name: 1.5 - Download Kubernetes Binaries ({{ k8s_actual_version }})
+#   ansible.windows.win_shell: |
+#     $binaries = @("kubelet", "kubeadm", "kubectl")
+#     foreach ($bin in $binaries) {
+#         $url = "https://dl.k8s.io/release/{{ k8s_actual_version }}/bin/windows/amd64/$bin.exe"
+#         curl.exe -L $url -o "C:\Windows\System32\$bin.exe"
+#     }
+#   args:
+#     creates: C:\Windows\System32\kubeadm.exe
+#   become: yes
+#   become_method: runas
+#   become_user: Administrator
+#   vars:
+#     ansible_become_password: "{{ ad_safe_mode_password }}"
+
+# ... [Registry, Path, and Reboot tasks follow] ...
 - name: 1.6 - Enable Windows Features (Containers and Hyper-V)
   ansible.windows.win_feature:
     name:
