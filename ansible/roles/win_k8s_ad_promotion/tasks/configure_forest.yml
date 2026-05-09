@@ -219,21 +219,34 @@
     - ptr_result.rc == 0
     - "'Added record' in ptr_result.stdout"
 
-- name: 1.6 - Enable Dynamic Updates and PTR Sync on Reverse Zone
-  delegate_to: localhost
-  vars:
-    ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
-    provision_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
-    rev_zone: "{{ provision_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
-  ansible.builtin.shell: |
-    echo "{{ ipa_pass }}" | kinit admin > /dev/null
-    ipa dnszone-mod "{{ rev_zone }}" --dynamic-update=TRUE --allow-sync-ptr=TRUE
-  register: zone_mod_result
-  # Do not fail if the error is just that no changes were needed
-  failed_when: 
-    - zone_mod_result.rc != 0 
-    - "'no modifications to be performed' not in zone_mod_result.stderr"
-  # Only mark as changed if the error message is NOT present
-  changed_when: 
-    - zone_mod_result.rc == 0
-    - "'no modifications to be performed' not in zone_mod_result.stderr"
+- name: Configure Conditional Forwarder for Reverse Zone on Windows
+  ansible.windows.win_shell: |
+    $rev_zone = "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
+    $helper_ip = "10.0.0.20"
+    
+    # Check if a forwarder already exists, if not, create a conditional forwarder
+    if (-not (Get-DnsServerZone -Name $rev_zone -ErrorAction SilentlyContinue)) {
+        Add-DnsServerConditionalForwarderZone -Name $rev_zone -MasterServers $helper_ip -ReplicationScope "Forest"
+        Write-Output "CREATED_FORWARDER"
+    }
+  register: win_forwarder_result
+  changed_when: "'CREATED_FORWARDER' in win_forwarder_result.stdout"
+
+# - name: 1.6 - Enable Dynamic Updates and PTR Sync on Reverse Zone
+#   delegate_to: localhost
+#   vars:
+#     ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
+#     provision_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
+#     rev_zone: "{{ provision_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
+#   ansible.builtin.shell: |
+#     echo "{{ ipa_pass }}" | kinit admin > /dev/null
+#     ipa dnszone-mod "{{ rev_zone }}" --dynamic-update=TRUE --allow-sync-ptr=TRUE
+#   register: zone_mod_result
+#   # Do not fail if the error is just that no changes were needed
+#   failed_when: 
+#     - zone_mod_result.rc != 0 
+#     - "'no modifications to be performed' not in zone_mod_result.stderr"
+#   # Only mark as changed if the error message is NOT present
+#   changed_when: 
+#     - zone_mod_result.rc == 0
+#     - "'no modifications to be performed' not in zone_mod_result.stderr"

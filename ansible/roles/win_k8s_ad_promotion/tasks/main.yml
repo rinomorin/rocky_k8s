@@ -2,20 +2,19 @@
 # roles/rocky_k8s/tasks/main.yml
 - import_tasks: pre-check.yml
   # when: rebuild_win is defined
+
 - import_tasks: deploy.yml
+  when: not skip_win_build | bool
+
 - import_tasks: patching.yml
+  when: not skip_win_build | bool
+
 - import_tasks: reconnect.yml
+  when: not skip_win_build | bool
+
 - import_tasks: configure_forest.yml
-- import_tasks: docker_install.yml
+  # when: not skip_win_build | bool
+
+# - import_tasks: docker_install.yml
 # - import_tasks: docker_join.yml
 
-# - name: Windows VM immutable on KVM alert
-#   include_tasks: deploy.yml
-
-# # STAGE 0: Infrastructure Provisioning (Runs on KVM Host)
-# - name: Provision Windows VM on KVM
-#   include_tasks: deploy_vms.yml
-
-# # STAGE 1: Guest Configuration (Runs on Windows Guest)
-# - name: Configure Windows AD and Environment
-#   include_tasks: config_vms.yml
