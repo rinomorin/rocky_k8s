@@ -13,7 +13,7 @@
   
 - debug:
     msg: 
-      - "chck for {{ hostvars[inventory_hostname.split('.')[0]] }}"
+      - "check for {{ hostvars[inventory_hostname.split('.')[0]] }}"
       - "skip_win_build: {{ skip_win_build }}"
       - "win_vm_check.stdout: {{ win_vm_check.stdout }}"
       - "rebuild_win: {{ rebuild_win }}"
@@ -24,9 +24,13 @@
     skip_win_build: "{{ not (rebuild_win | default(false) | bool) and ('missing' not in win_vm_check.stdout) }}"
 
 - debug:
-    var: skip_win_build
+    msg: 
+      - "check for {{ hostvars[inventory_hostname.split('.')[0]] }}"
+      - "skip_win_build: {{ skip_win_build }}"
+      - "win_vm_check.stdout: {{ win_vm_check.stdout }}"
+      - "rebuild_win: {{ rebuild_win }}"
 
-- name: host name chech
+- name: host name check
   delegate_to: "{{ kvm_ip }}"
   vars:
     ansible_user: "{{ hostvars[kvm.split('.')[0]]['ansible_user'] }}"
