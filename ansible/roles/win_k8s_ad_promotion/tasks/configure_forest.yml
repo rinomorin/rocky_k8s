@@ -197,9 +197,9 @@
   vars:
     ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
     short_name: "{{ inventory_hostname.split('.')[0] }}"
-    provision_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
-    last_octet: "{{ provision_ip.split('.')[-1] }}"
-    rev_zone: "{{ provision_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
+    provision_ip: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'] }}"
+    last_octet: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[-1] }}"
+    rev_zone: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
   ansible.builtin.shell: |
     echo "{{ ipa_pass }}" | kinit admin > /dev/null
     # Ensure the zone exists as a master zone first
@@ -212,8 +212,12 @@
   register: ptr_result
   failed_when: 
     - ptr_result.rc != 0 
+    - "'no modifications to be performed' not in ptr_result.stderr"
     - "'already exists' not in ptr_result.stderr"
-  changed_when: "'Added record' in ptr_result.stdout"
+  # CHANGE only if we actually added a new record
+  changed_when: 
+    - ptr_result.rc == 0
+    - "'Added record' in ptr_result.stdout"
 
 - name: 1.6 - Enable Dynamic Updates and PTR Sync on Reverse Zone
   delegate_to: localhost
