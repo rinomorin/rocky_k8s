@@ -53,7 +53,8 @@
   ansible.windows.win_feature:
     name:
       - Containers
-      - Microsoft-Hyper-V
+      - Hyper-V
+      - Hyper-V-PowerShell
     state: present
   become: yes
   become_method: runas
