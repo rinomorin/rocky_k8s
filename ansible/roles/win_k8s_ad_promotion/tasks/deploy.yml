@@ -109,7 +109,7 @@
   become: false
   shell: |
     ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa -T core@{{ br_nat_ip.stdout }} \
-    "powershell -Command \"[adsi]'WinNT://./Administrator,user' | %{ \$_.SetPassword('On32Build4SysAdmin'); \$_.SetInfo() }\""
+    "powershell -Command \"[adsi]'WinNT://./Administrator,user' | %{ \$_.SetPassword({{ ad_safe_mode_password }}); \$_.SetInfo() }\""
   when: not skip_win_build
 
 - name: Use br-nat IP for SSH
