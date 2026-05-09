@@ -4,7 +4,7 @@
   vars:
     ansible_user: "{{ hostvars[kvm.split('.')[0]]['ansible_user'] }}"
   shell: |
-    if virsh list --all | grep -q "{{ hostvars[inventory_hostname.split('.')[0]] }}"; then
+    if virsh list --all | grep -q "{{ inventory_hostname.split('.')[0] }}"; then
       echo "exists"
     else
       echo "missing"
@@ -13,7 +13,7 @@
   
 - debug:
     msg: 
-      - "check for {{ hostvars[inventory_hostname.split('.')[0]] }}"
+      - "check for {{ inventory_hostname.split('.')[0] }}"
       - "skip_win_build: {{ skip_win_build }}"
       - "win_vm_check.stdout: {{ win_vm_check.stdout }}"
       - "rebuild_win: {{ rebuild_win }}"
