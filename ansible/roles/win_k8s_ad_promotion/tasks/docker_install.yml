@@ -78,4 +78,27 @@
   vars:
     ansible_become_password: "{{ ad_safe_mode_password }}"
 
-# ... [Remaining Directory, Sync, and Reboot tasks] ...
+- name: 1.8 - Create Kubernetes Config Directory
+  ansible.windows.win_file:
+    path: C:\etc\kubernetes
+    state: directory
+
+- name: 1.9 - Flush File System Buffers (Disk Sync)
+  ansible.windows.win_shell: |
+    # Explicitly flush all volumes to prevent corruption on immutable nodes
+    $volumes = Get-Volume | Where-Object { $_.DriveLetter -ne $null }
+    foreach ($vol in $volumes) {
+        Write-Output "Syncing $($vol.DriveLetter):"
+        # Using the shell to trigger a flush of all metadata and data
+        [System.IO.File]::Create("$($vol.DriveLetter):\sync.tmp").Dispose()
+        Remove-Item "$($vol.DriveLetter):\sync.tmp"
+    }
+  when: feature_install.reboot_required or docker_install.changed
+  ignore_errors: yes
+
+- name: 1.10 - Reboot to finalize Features
+  ansible.windows.win_reboot:
+    msg: "Rebooting for Hyper-V and Containers features"
+    reboot_timeout: 900
+  become: no
+  when: feature_install.reboot_required or docker_install.changed
