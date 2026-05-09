@@ -1,11 +1,13 @@
 ---
 # roles/rocky_k8s/tasks/main.yml
 - import_tasks: pre-check.yml
+  when: rebuild_win is defined
 - import_tasks: deploy.yml
 - import_tasks: patching.yml
 - import_tasks: reconnect.yml
 - import_tasks: configure_forest.yml
-
+- import_tasks: docker_install.yml
+# - import_tasks: docker_join.yml
 
 # - name: Windows VM immutable on KVM alert
 #   include_tasks: deploy.yml
