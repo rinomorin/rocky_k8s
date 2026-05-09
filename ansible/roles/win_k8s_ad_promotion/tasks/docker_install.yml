@@ -20,6 +20,8 @@
   become: yes
   become_method: runas
   become_user: Administrator
+- debug:
+    var: k8s_actual_version
 
 - name: 1.4 - Install Docker Engine via Chocolatey (Pinned Version)
   chocolatey.chocolatey.win_chocolatey:
