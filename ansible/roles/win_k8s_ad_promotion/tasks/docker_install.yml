@@ -83,7 +83,26 @@
     path: C:\etc\kubernetes
     state: directory
 
-- name: 1.9 - Flush File System Buffers (Disk Sync)
+
+- name: 1.9.0 - Register Docker as a Windows Service
+  ansible.windows.win_shell: |
+    if (-not (Get-Service -Name docker -ErrorAction SilentlyContinue)) {
+        & "C:\Program Files\Docker\dockerd.exe" --register-service
+        Start-Service -Name docker
+    }
+  become: yes
+  become_method: runas
+  become_user: Administrator
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
+
+- name: 1.0.1 - Ensure Docker Service is running
+  ansible.windows.win_service:
+    name: docker
+    state: started
+    start_mode: auto
+
+- name: 1.9.2 - Flush File System Buffers (Disk Sync)
   ansible.windows.win_shell: |
     # Explicitly flush all volumes to prevent corruption on immutable nodes
     $volumes = Get-Volume | Where-Object { $_.DriveLetter -ne $null }
