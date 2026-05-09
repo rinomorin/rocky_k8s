@@ -8,6 +8,9 @@
   delegate_to: localhost
   register: k8s_patch_resolve
 
+- debug:
+    var: k8s_patch_resolve.content  
+
 - name: 1.2 - Set actual version fact
   ansible.builtin.set_fact:
     k8s_actual_version: "{{ k8s_patch_resolve.content | trim }}"
