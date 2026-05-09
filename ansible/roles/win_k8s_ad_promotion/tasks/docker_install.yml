@@ -104,17 +104,15 @@
   run_once: true
   register: cri_metadata
 
-- name: set latest
+- name: set latest_json for all hosts
   set_fact:
     latest_json: "{{ cri_metadata.content | from_json }}"
-
-- debug:
-    msg: "url: {{ latest_json }}"
+  # No run_once here so all hosts get the variable in their memory
 
 - name: 1.11 - Download and Install latest cri-dockerd
   vars:
-    # We parse the JSON from the content string and filter for the windows asset
-    download_url: "{{ latest_json.assets | selectattr('name', 'contains', 'win-amd64.zip') | map(attribute='browser_download_url') | first }}"
+    # UPDATED: Changed 'win-amd64' to 'win.amd64' to match the actual GitHub asset name
+    download_url: "{{ latest_json.assets | selectattr('name', 'contains', 'win.amd64.zip') | map(attribute='browser_download_url') | first }}"
   ansible.windows.win_shell: |
     $url = "{{ download_url }}"
     $dest = "$env:TEMP\cri-dockerd.zip"
@@ -124,13 +122,13 @@
         New-Item -Path $installDir -ItemType Directory -Force 
     }
 
-    # Reliable download
+    # Use curl.exe for reliable download on Server 2022
     curl.exe -L $url -o $dest
 
     # Extract
     Expand-Archive -Path $dest -DestinationPath $installDir -Force
     
-    # Flatten structure if GitHub zipped it with a root folder
+    # Standardize path: Move files out of nested folder if present
     if (Test-Path "$installDir\cri-dockerd\cri-dockerd.exe") {
         Move-Item "$installDir\cri-dockerd\*" $installDir -Force
         Remove-Item "$installDir\cri-dockerd" -Recurse -Force
@@ -140,6 +138,9 @@
     if (-not (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue)) {
         & "$installDir\cri-dockerd.exe" --register-service
     }
+    
+    # Ensure service is running
+    Set-Service -Name cri-dockerd -StartupType Automatic
     Start-Service cri-dockerd
   become: yes
   become_method: runas
