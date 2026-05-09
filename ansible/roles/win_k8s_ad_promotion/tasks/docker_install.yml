@@ -4,6 +4,8 @@
   ansible.builtin.uri:
     url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt"
     return_content: yes
+  # Run this on the Ansible controller, not the Windows node
+  delegate_to: localhost
   register: k8s_patch_resolve
 
 - name: 1.2 - Set actual version fact
