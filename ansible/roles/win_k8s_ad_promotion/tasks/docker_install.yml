@@ -19,6 +19,10 @@
     iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
   args:
     creates: C:\ProgramData\chocolatey\bin\choco.exe
+  # This is the magic sauce for Error 5
+  become: yes
+  become_method: runas
+  become_user: Administrator
 
 - name: 1.4 - Install Docker Microsoft Provider
   community.windows.win_psmodule:
