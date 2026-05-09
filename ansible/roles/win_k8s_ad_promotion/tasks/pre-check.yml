@@ -11,10 +11,16 @@
     fi
   register: win_vm_check
   
+- debug:
+    var: skip_win_build
+
 - name: 0.2 - Determine if Windows Build is Required
   set_fact:
     # Check stdout of the specific host's check
     skip_win_build: "{{ not (rebuild_win | default(false) | bool) and ('missing' not in win_vm_check.stdout) }}"
+
+- debug:
+    var: skip_win_build
 
 - name: host name chech
   delegate_to: "{{ kvm_ip }}"
