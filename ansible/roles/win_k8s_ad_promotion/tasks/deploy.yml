@@ -8,6 +8,9 @@
     virsh list --name --all | grep "gi-win" | head -n 1
   register: base_image_name
 
+- debug:
+    var: skip_win_build
+
 - name: 1.2 - Create Linked Clone and Define Windows VM
   delegate_to: "{{ kvm_ip }}"
   become: yes
