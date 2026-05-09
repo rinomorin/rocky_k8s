@@ -18,6 +18,9 @@
     creates: C:\etc\kubernetes\kubelet.conf
   register: join_result
 
+- debug:
+  var: join_result
+
 - name: 2.4 - Verify Node Status on Master
   ansible.builtin.shell: kubectl get nodes
   delegate_to: "{{ hostvars[groups['control_nodes'][0]]['provision_ip'] }}"
