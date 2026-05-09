@@ -1,7 +1,7 @@
 ---
 # roles/rocky_k8s/tasks/main.yml
 - import_tasks: pre-check.yml
-  # when: rebuild_win is defined
+  when: rebuild_win is defined
 - import_tasks: deploy.yml
 - import_tasks: patching.yml
 - import_tasks: reconnect.yml
