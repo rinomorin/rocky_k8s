@@ -100,29 +100,37 @@
   ansible.builtin.uri:
     url: "https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest"
     return_content: yes
+  delegate_to: localhost
+  run_once: true
   register: cri_metadata
 
 - name: 1.11 - Download and Install latest cri-dockerd
   vars:
-    # This logic mimics your jq command to find the specific windows zip
-    download_url: "{{ cri_metadata.json.assets | selectattr('name', 'contains', 'win.amd64.zip') | map(attribute='browser_download_url') | first }}"
+    # We parse the JSON from the content string and filter for the windows asset
+    latest_json: "{{ cri_metadata.content | from_json }}"
+    download_url: "{{ latest_json.assets | selectattr('name', 'contains', 'win-amd64.zip') | map(attribute='browser_download_url') | first }}"
   ansible.windows.win_shell: |
     $url = "{{ download_url }}"
     $dest = "$env:TEMP\cri-dockerd.zip"
     $installDir = "C:\Program Files\cri-dockerd"
 
-    if (-not (Test-Path $installDir)) { New-Item -Path $installDir -ItemType Directory -Force }
-
-    # Download using curl.exe for reliability
-    curl.exe -L $url -o $dest
-
-    # Extract and normalize folder structure
-    Expand-Archive -Path $dest -DestinationPath $installDir -Force
-    if (Test-Path "$installDir\cri-dockerd\cri-dockerd.exe") {
-        Move-Item "$installDir\cri-dockerd\*" $installDir -Force
+    if (-not (Test-Path $installDir)) { 
+        New-Item -Path $installDir -ItemType Directory -Force 
     }
 
-    # Register and start
+    # Reliable download
+    curl.exe -L $url -o $dest
+
+    # Extract
+    Expand-Archive -Path $dest -DestinationPath $installDir -Force
+    
+    # Flatten structure if GitHub zipped it with a root folder
+    if (Test-Path "$installDir\cri-dockerd\cri-dockerd.exe") {
+        Move-Item "$installDir\cri-dockerd\*" $installDir -Force
+        Remove-Item "$installDir\cri-dockerd" -Recurse -Force
+    }
+
+    # Register and start the shim
     if (-not (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue)) {
         & "$installDir\cri-dockerd.exe" --register-service
     }
@@ -130,6 +138,8 @@
   become: yes
   become_method: runas
   become_user: '.\Administrator'
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
 
 - name: 1.0.1 - Ensure Docker Service is running
   ansible.windows.win_service:
