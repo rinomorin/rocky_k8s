@@ -108,6 +108,9 @@
   set_fact:
     latest_json: "{{ cri_metadata.content | from_json }}"
 
+- debug:
+    msg: "url: {{ latest_json }}"
+
 - name: 1.11 - Download and Install latest cri-dockerd
   vars:
     # We parse the JSON from the content string and filter for the windows asset
