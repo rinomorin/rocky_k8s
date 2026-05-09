@@ -1,7 +1,4 @@
----
----
-# docker_install.yml - Zero-Hardcode Dynamic Installation
-
+# 1.1 - Resolve latest K8s and Docker versions via Controller
 - name: 1.1 - Resolve latest K8s and Docker versions
   ansible.builtin.uri:
     url: "{{ item.url }}"
@@ -10,7 +7,6 @@
   register: version_lookups
   loop:
     - { name: 'k8s', url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt" }
-    # This URL returns the latest stable Docker version string for Windows
     - { name: 'docker', url: "https://download.docker.com/win/static/stable/x86_64/latest.txt" }
 
 - name: 1.2 - Set Version Facts
@@ -25,15 +21,13 @@
   become: yes
   become_method: runas
   become_user: Administrator
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
 
-# docker_install.yml - Zero-Hardcode Dynamic Installation
-- name: 1.4 - Download and Extract Docker Engine (Dynamic Version)
+- name: 1.4 - Download and Extract Docker Engine ({{ docker_actual_version }})
   ansible.windows.win_shell: |
-    $version = "{{ docker_actual_version }}"
-    $url = "https://download.docker.com/win/static/stable/x86_64/docker-$version.zip"
+    $url = "https://download.docker.com/win/static/stable/x86_64/docker-{{ docker_actual_version }}.zip"
     $dest = "$env:TEMP\docker.zip"
-    
-    Write-Output "Fetching Docker version: $version"
     curl.exe -L $url -o $dest
     Expand-Archive -Path $dest -DestinationPath "C:\Program Files" -Force
     Remove-Item $dest
@@ -44,8 +38,22 @@
   become_user: Administrator
   vars:
     ansible_become_password: "{{ ad_safe_mode_password }}"
+  register: docker_install
 
-- name: 1.5 - Download Kubernetes Binaries ({{ k8s_actual_version }})
+- name: 1.5 - Enable Windows Features (Containers and Hyper-V)
+  ansible.windows.win_feature:
+    name:
+      - Containers
+      - Microsoft-Hyper-V
+    state: present
+  become: yes
+  become_method: runas
+  become_user: Administrator
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
+  register: feature_install
+
+- name: 1.6 - Download Kubernetes Binaries ({{ k8s_actual_version }})
   ansible.windows.win_shell: |
     $binaries = @("kubelet", "kubeadm", "kubectl")
     foreach ($bin in $binaries) {
@@ -60,58 +68,22 @@
   vars:
     ansible_become_password: "{{ ad_safe_mode_password }}"
 
-# - name: 1.5 - Download Kubernetes Binaries ({{ k8s_actual_version }})
-#   ansible.windows.win_shell: |
-#     $binaries = @("kubelet", "kubeadm", "kubectl")
-#     foreach ($bin in $binaries) {
-#         $url = "https://dl.k8s.io/release/{{ k8s_actual_version }}/bin/windows/amd64/$bin.exe"
-#         curl.exe -L $url -o "C:\Windows\System32\$bin.exe"
-#     }
-#   args:
-#     creates: C:\Windows\System32\kubeadm.exe
-#   become: yes
-#   become_method: runas
-#   become_user: Administrator
-#   vars:
-#     ansible_become_password: "{{ ad_safe_mode_password }}"
-
-# ... [Registry, Path, and Reboot tasks follow] ...
-- name: 1.6 - Enable Windows Features (Containers and Hyper-V)
-  ansible.windows.win_feature:
-    name:
-      - Containers
-      - Microsoft-Hyper-V
-    state: present
-  register: feature_install
-
-- name: 1.7 - Download Kubernetes Binaries ({{ k8s_actual_version }})
-  ansible.windows.win_get_url:
-    url: "https://dl.k8s.io/release/{{ k8s_actual_version }}/bin/windows/amd64/{{ item }}.exe"
-    dest: "C:\\Windows\\System32\\{{ item }}.exe"
-  loop:
-    - kubelet
-    - kubeadm
-    - kubectl
-
-- name: 1.8 - Create Kubernetes Config Directory
+- name: 1.7 - Create Kubernetes Config Directory
   ansible.windows.win_file:
     path: C:\etc\kubernetes
     state: directory
 
-- name: 1.9 - Flush File System Buffers (Disk Sync)
+- name: 1.8 - Flush File System Buffers (Disk Sync)
   ansible.windows.win_shell: |
-    # Explicitly flush all volumes to prevent corruption on immutable nodes
     $volumes = Get-Volume | Where-Object { $_.DriveLetter -ne $null }
     foreach ($vol in $volumes) {
-        Write-Output "Syncing $($vol.DriveLetter):"
-        # Using the shell to trigger a flush of all metadata and data
         [System.IO.File]::Create("$($vol.DriveLetter):\sync.tmp").Dispose()
         Remove-Item "$($vol.DriveLetter):\sync.tmp"
     }
   when: feature_install.reboot_required or docker_install.changed
   ignore_errors: yes
 
-- name: 1.10 - Reboot to finalize Features
+- name: 1.9 - Reboot to finalize Features
   ansible.windows.win_reboot:
     msg: "Rebooting for Hyper-V and Containers features"
     reboot_timeout: 900
