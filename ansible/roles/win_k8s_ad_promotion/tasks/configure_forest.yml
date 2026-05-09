@@ -172,110 +172,64 @@
   # become: yes
   # become_method: runas
 
-- name: 1.4 - Create Reverse Lookup Zone via PowerShell
+- name: 1.4 - Ensure local Reverse Zone is ABSENT (Helper is the Source of Truth)
   vars:
-    # Get the first 3 octets (e.g., 10.0.0)
     octets: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] }}"
-    # Create the Network ID (e.g., 10.0.0.0/24)
-    network_id: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | join('.') }}.0/24"
-    # Create the Zone Name (e.g., 0.0.10.in-addr.arpa)
     rev_zone_name: "{{ octets | reverse | join('.') }}.in-addr.arpa"
   win_shell: |
-    if (-not (Get-DnsServerZone -Name "{{ rev_zone_name }}" -ErrorAction SilentlyContinue)) {
-        Write-Output "Creating Reverse Zone: {{ rev_zone_name }}"
-        Add-DnsServerPrimaryZone -NetworkId "{{ network_id }}" -ReplicationScope "Forest"
+    # We remove the local zone to force Windows to resolve via the Helper (10.0.0.20)
+    if (Get-DnsServerZone -Name "{{ rev_zone_name }}" -ErrorAction SilentlyContinue) {
+        Remove-DnsServerZone -Name "{{ rev_zone_name }}" -Force
+        Write-Output "REMOVED_LOCAL_ZONE"
     }
-    
-    # This ensures Secure Dynamic Updates are enabled so servers auto-register PTRs
-    Set-DnsServerPrimaryZone -Name "{{ rev_zone_name }}" -DynamicUpdate Secure
-    
-    # Force this DC to register its own PTR record immediately
-    ipconfig /registerdns
-  register: zone_creation
+  register: zone_removal
+  changed_when: "'REMOVED_LOCAL_ZONE' in zone_removal.stdout"
 
-- name: insure dc are in dns
+- name: Set Windows DNS Client to use Helper
   ansible.windows.win_shell: |
-    # Force the OS to register its IP
-    ipconfig /registerdns
-    # Give it a moment to talk to the DNS service
-    Start-Sleep -Seconds 5
-    # Force Netlogon to register AD-specific records
-    nltest /dsregdns
-  register: dns_register
-  changed_when: true
+    # Ensure Ethernet 2 (our lab network) uses the Helper (10.0.0.20)
+    Set-DnsClientServerAddress -InterfaceAlias "Ethernet 2" -ServerAddresses ("10.0.0.20")
+    ipconfig /flushdns
+  changed_when: false
 
-- name: Configure IPA to forward AD domain requests to Windows DCs
+- name: Create PTR records in IPA for Windows nodes
   delegate_to: localhost
   vars:
     ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
-    win_dc01: "{{ hostvars[groups['win_worker_nodes'][0]]['provision_ip'] }}"
-    win_dc02: "{{ hostvars[groups['win_worker_nodes'][1]]['provision_ip'] }}"
-  ansible.builtin.shell: |
-    echo "{{ ipa_pass }}" | kinit admin
-    if ! ipa dnsforwardzone-show {{ ad_domain_name }} > /dev/null 2>&1; then
-      ipa dnsforwardzone-add {{ ad_domain_name }} \
-        --forwarder={{ win_dc01 }} \
-        --forwarder={{ win_dc02 }} \
-        --forward-policy=first
-      echo "CHANGED"
-    fi
-  register: ipa_dns_result
-  changed_when: "'CHANGED' in ipa_dns_result.stdout"
-  when: inventory_hostname == groups['win_worker_nodes'][0]
-  no_log: true
-
-- name: Configure IPA Reverse Forwarding and CNAME Bridge
-  delegate_to: localhost
-  vars: 
-    ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
     short_name: "{{ inventory_hostname.split('.')[0] }}"
-    rev_zone: "{{ hostvars[short_name]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
-    local_domain: "{{ ad_domain_name.replace('.lcl', '.local') }}"
-    win_dc01: "{{ hostvars[groups['win_worker_nodes'][0]]['provision_ip'] }}"
-    win_dc02: "{{ hostvars[groups['win_worker_nodes'][1]]['provision_ip'] }}"
+    provision_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
+    last_octet: "{{ provision_ip.split('.')[-1] }}"
+    rev_zone: "{{ provision_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
   ansible.builtin.shell: |
-    # No 'set -e' here so we can finish the CNAME even if zone-mod 'fails'
     echo "{{ ipa_pass }}" | kinit admin > /dev/null
-
-    # 1. Reverse Zone Handling
-    if ipa dnsforwardzone-show "{{ rev_zone }}" > /dev/null 2>&1; then
-        echo "FORWARD_EXISTS"
-    elif ipa dnszone-show "{{ rev_zone }}" > /dev/null 2>&1; then
-        ipa dnszone-mod "{{ rev_zone }}" \
-          --forwarder="{{ win_dc01 }}" \
-          --forwarder="{{ win_dc02 }}" \
-          --forward-policy=first
-        echo "REVERSE_UPDATED"
-    else
-        ipa dnsforwardzone-add "{{ rev_zone }}" \
-          --forwarder="{{ win_dc01 }}" \
-          --forwarder="{{ win_dc02 }}" \
-          --forward-policy=first
-        echo "REVERSE_CREATED"
+    # Ensure the zone exists as a master zone first
+    if ! ipa dnszone-show "{{ rev_zone }}" > /dev/null 2>&1; then
+      ipa dnszone-add "{{ rev_zone }}"
     fi
-
-    # 2. CNAME Bridge
-    ipa dnsrecord-add "{{ local_domain }}" "{{ short_name }}" \
-      --cname-rec="{{ short_name }}.{{ ad_domain_name }}." || true
-  register: ipa_bridge_result
-  # FAIL condition: if rc is not 0 AND the specific error is NOT in stderr
+    # Add the PTR record
+    ipa dnsrecord-add "{{ rev_zone }}" "{{ last_octet }}" \
+      --ptr-rec="{{ short_name }}.{{ ad_domain_name }}."
+  register: ptr_result
   failed_when: 
-    - ipa_bridge_result.rc != 0 
-    - "'no modifications to be performed' not in ipa_bridge_result.stderr"
-  # CHANGE condition: if we actually created or updated the zone
+    - ptr_result.rc != 0 
+    - "'already exists' not in ptr_result.stderr"
+  changed_when: "'Added record' in ptr_result.stdout"
+
+- name: 1.6 - Enable Dynamic Updates and PTR Sync on Reverse Zone
+  delegate_to: localhost
+  vars:
+    ipa_pass: "{{ lookup('env', 'ipa_admin_password') }}"
+    provision_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
+    rev_zone: "{{ provision_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
+  ansible.builtin.shell: |
+    echo "{{ ipa_pass }}" | kinit admin > /dev/null
+    ipa dnszone-mod "{{ rev_zone }}" --dynamic-update=TRUE --allow-sync-ptr=TRUE
+  register: zone_mod_result
+  # Do not fail if the error is just that no changes were needed
+  failed_when: 
+    - zone_mod_result.rc != 0 
+    - "'no modifications to be performed' not in zone_mod_result.stderr"
+  # Only mark as changed if the error message is NOT present
   changed_when: 
-    - "'REVERSE_UPDATED' in ipa_bridge_result.stdout or 'REVERSE_CREATED' in ipa_bridge_result.stdout"
-  # no_log: true
-
-- name: Set DNS Forwarders using PowerShell
-  ansible.windows.win_shell: |
-    $targets = @("10.0.0.20", "8.8.8.8", "1.1.1.1")
-    $current = (Get-DnsServerForwarder).IPAddress
-    
-    # Check if our targets are already set to avoid unnecessary changes
-    if (Compare-Object $current $targets) {
-        Set-DnsServerForwarder -IPAddress $targets -PassThru
-    }
-  register: dns_result
-  changed_when: dns_result.stdout != ""
-
+    - zone_mod_result.rc == 0
+    - "'no modifications to be performed' not in zone_mod_result.stderr"
