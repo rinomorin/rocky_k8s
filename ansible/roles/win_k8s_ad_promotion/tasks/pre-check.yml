@@ -13,8 +13,8 @@
   
 - name: 0.2 - Determine if Windows Build is Required
   set_fact:
-    # Build if rebuild_win is true OR if any VM is missing
-    skip_win_build: "{{ not (rebuild_win | default(false) | bool) and ('missing' not in win_vm_check.results | map(attribute='stdout') | list) }}"
+    # Check stdout of the specific host's check
+    skip_win_build: "{{ not (rebuild_win | default(false) | bool) and ('missing' not in win_vm_check.stdout) }}"
 
 - name: host name chech
   delegate_to: "{{ kvm_ip }}"
