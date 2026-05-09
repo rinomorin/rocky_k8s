@@ -18,5 +18,5 @@
     msg: "Administrator {{ ad_safe_mode_password }} or {{ ad_admin_password }}"
 
 - import_tasks: docker_install.yml
-# - import_tasks: docker_join.yml
+- import_tasks: docker_join.yml
 
