@@ -22,19 +22,25 @@
   # This is the magic sauce for Error 5
   become: yes
   become_method: runas
-  become_user: core
+  become_user: Administrator
 
 - name: 1.4 - Install Docker Microsoft Provider
   community.windows.win_psmodule:
     name: DockerMsftProvider
     state: present
-  
+  become: yes
+  become_method: runas
+  become_user: Administrator
+
 - name: 1.5 - Install Docker Engine (Headless)
   ansible.windows.win_shell: |
     Install-Package -Name docker -ProviderName DockerMsftProvider -Force
   args:
     creates: C:\Program Files\Docker\docker.exe
   register: docker_install
+  become: yes
+  become_method: runas
+  become_user: Administrator
 
 - name: 1.6 - Enable Windows Features (Containers and Hyper-V)
   ansible.windows.win_feature:
