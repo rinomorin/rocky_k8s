@@ -13,6 +13,7 @@
   
 - debug:
     msg: 
+      - "chck for hostvars[inventory_hostname.split('.')[0]] }}"
       - "skip_win_build: {{ skip_win_build }}"
       - "win_vm_check.stdout: {{ win_vm_check.stdout }}"
       - "rebuild_win: {{ rebuild_win }}"
