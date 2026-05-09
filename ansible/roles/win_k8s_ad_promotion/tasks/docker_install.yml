@@ -96,42 +96,47 @@
   vars:
     ansible_become_password: "{{ ad_safe_mode_password }}"
 
+- name: 1.10 - Get latest cri-dockerd release metadata
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest"
+    return_content: yes
+  register: cri_metadata
+
+- name: 1.11 - Download and Install latest cri-dockerd
+  vars:
+    # This logic mimics your jq command to find the specific windows zip
+    download_url: "{{ cri_metadata.json.assets | selectattr('name', 'contains', 'win.amd64.zip') | map(attribute='browser_download_url') | first }}"
+  ansible.windows.win_shell: |
+    $url = "{{ download_url }}"
+    $dest = "$env:TEMP\cri-dockerd.zip"
+    $installDir = "C:\Program Files\cri-dockerd"
+
+    if (-not (Test-Path $installDir)) { New-Item -Path $installDir -ItemType Directory -Force }
+
+    # Download using curl.exe for reliability
+    curl.exe -L $url -o $dest
+
+    # Extract and normalize folder structure
+    Expand-Archive -Path $dest -DestinationPath $installDir -Force
+    if (Test-Path "$installDir\cri-dockerd\cri-dockerd.exe") {
+        Move-Item "$installDir\cri-dockerd\*" $installDir -Force
+    }
+
+    # Register and start
+    if (-not (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue)) {
+        & "$installDir\cri-dockerd.exe" --register-service
+    }
+    Start-Service cri-dockerd
+  become: yes
+  become_method: runas
+  become_user: '.\Administrator'
+
 - name: 1.0.1 - Ensure Docker Service is running
   ansible.windows.win_service:
     name: docker
     state: started
     start_mode: auto
 
-- name: 1.10 - Resolve latest cri-dockerd version
-  ansible.builtin.uri:
-    url: "https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest"
-    return_content: yes
-  delegate_to: localhost
-  register: cri_dockerd_json
-
-- name: 1.11 - Download and Install cri-dockerd
-  ansible.windows.win_shell: |
-    $version = "{{ (cri_dockerd_json.content | from_json).tag_name | replace('v','') }}"
-    $url = "https://github.com/Mirantis/cri-dockerd/releases/download/v$version/cri-dockerd-$version.win-amd64.zip"
-    $dest = "$env:TEMP\cri-dockerd.zip"
-    
-    if (-not (Test-Path "C:\Program Files\cri-dockerd")) {
-        New-Item -Path "C:\Program Files\cri-dockerd" -ItemType Directory -Force
-    }
-
-    Invoke-WebRequest -Uri $url -OutFile $dest
-    Expand-Archive -Path $dest -DestinationPath "C:\Program Files\cri-dockerd" -Force
-    
-    # Register the service
-    if (-not (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue)) {
-        & "C:\Program Files\cri-dockerd\cri-dockerd.exe" --register-service
-        Start-Service cri-dockerd
-    }
-  become: yes
-  become_method: runas
-  become_user: '.\Administrator'  # Use the .\ prefix to specify local admin
-  vars:
-    ansible_become_password: "{{ ad_safe_mode_password }}"
 
 - name: 1.9.2 - Flush File System Buffers (Disk Sync)
   ansible.windows.win_shell: |
