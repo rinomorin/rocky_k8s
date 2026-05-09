@@ -21,26 +21,13 @@
   become_method: runas
   become_user: Administrator
 
-- name: 1.4 - Install Docker Provider and Docker Engine
-  ansible.windows.win_shell: |
-    # 1. Force TLS 1.2 for the session
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-    # 2. Trust the PSGallery
-    Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
-
-    # 3. Install/Import the Docker Provider
-    if (-not (Get-PackageProvider -Name DockerMsftProvider -ErrorAction SilentlyContinue)) {
-        Install-Module -Name DockerMsftProvider -Force -Confirm:$false
-    }
-    
-    # 4. Explicitly import the provider into the session to register the source
-    Import-PackageProvider -Name DockerMsftProvider
-
-    # 5. Install Docker
-    Install-Package -Name docker -ProviderName DockerMsftProvider -Force -Confirm:$false
-  args:
-    creates: C:\Program Files\Docker\docker.exe
+- name: 1.4 - Install Docker Engine via Chocolatey (Pinned Version)
+  chocolatey.chocolatey.win_chocolatey:
+    name: docker-engine
+    # We can specify the exact version here
+  # We still need become to jump the UAC fence
+    version: "{{ k8s_actual_version | regex_replace('v', '') }}" 
+    state: present
   become: yes
   become_method: runas
   become_user: Administrator
