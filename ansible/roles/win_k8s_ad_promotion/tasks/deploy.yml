@@ -107,10 +107,10 @@
 - name: Set Administrator password for first login
   delegate_to: localhost
   become: false
+  vars:
+    output: "powershell -Command \"[adsi]'WinNT://./Administrator,user' | %{ \$_.SetPassword({{ ad_safe_mode_password }}); \$_.SetInfo() }\" "
   shell: |
-    mypwd="{{ ad_safe_mode_password }}"
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa -T core@{{ br_nat_ip.stdout }} \
-    "powershell -Command \"[adsi]'WinNT://./Administrator,user' | %{ \$_.SetPassword($mypwd); \$_.SetInfo() }\" "
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa -T core@{{ br_nat_ip.stdout }} "{{ ouyput }}"
   when: not skip_win_build
 
 - name: Use br-nat IP for SSH
