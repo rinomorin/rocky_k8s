@@ -1,26 +1,32 @@
-- name: 1.3 - Fix Routes and Firewall via Route Command
+- name: 1.3 - Force PERMANENT Routing Table and GW Priority
   vars:
-    # We pull from hostvars directly to ensure the split works in one go
-    provision_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
-    provision_gw: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | join('.') }}.1"
-    nat_gw: "{{ br_nat_ip.stdout.split('.')[:3] | join('.') }}.1"
-  ansible.windows.win_shell: |
-    # 1. Clean up NAT gateway preference using standard route commands
-    # We delete the specific NAT route to stop it from being the default
-    route delete 0.0.0.0 mask 0.0.0.0 {{ nat_gw }}
+    # Use the raw source for every definition to avoid evaluation errors
+    p_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
+    p_gw: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | join('.') }}.1"
     
-    # 2. Set the Provisioning network as the high-priority default
-    route change 0.0.0.0 mask 0.0.0.0 {{ provision_gw }} metric 10
+    n_ip: "{{ br_nat_ip.stdout | trim }}"
+    n_net: "{{ br_nat_ip.stdout.split('.')[:3] | join('.') }}.0"
+    n_gw: "{{ br_nat_ip.stdout.split('.')[:3] | join('.') }}.1"
+  ansible.windows.win_shell: |
+    # 1. Get Interface Indices using the direct IPs
+    $clusterIdx = (Get-NetIPAddress -IPAddress "{{ p_ip }}").InterfaceIndex
+    $natIdx = (Get-NetIPAddress -IPAddress "{{ n_ip }}").InterfaceIndex
 
-    # 3. Setup Firewall
-    $ports = @(2379,2380,6443,10250,10251,10252,10255,10256,179,4789)
-    if (-not (Get-NetFirewallRule -DisplayName "K8s-Join-Ports" -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule -DisplayName "K8s-Join-Ports" -Direction Inbound -LocalPort $ports -Protocol TCP -Action Allow
-        New-NetFirewallRule -DisplayName "K8s-UDP-Overlay" -Direction Inbound -LocalPort 4789 -Protocol UDP -Action Allow
+    # 2. Disable "Automatic Metric" and set static weights
+    Set-NetIPInterface -InterfaceIndex $clusterIdx -AutomaticMetric Disabled -InterfaceMetric 10
+    Set-NetIPInterface -InterfaceIndex $natIdx -AutomaticMetric Disabled -InterfaceMetric 100
+
+    # 3. Clear existing transient routes
+    route delete 0.0.0.0 mask 0.0.0.0 {{ n_gw }}
+    route delete 0.0.0.0 mask 0.0.0.0 {{ p_gw }}
+
+    # 4. Add PERSISTENT routes
+    route -p add 0.0.0.0 mask 0.0.0.0 {{ p_gw }} metric 10 if $clusterIdx
+    
+    # 5. Ensure the NAT Subnet is always reachable on-link
+    if (-not (route print | findstr "{{ n_net }}")) {
+        route -p add {{ n_net }} mask 255.255.255.0 0.0.0.0 metric 300 if $natIdx
     }
-
-    # 4. Test Internal DNS (Using AD name)
-    nslookup {{ inventory_hostname.split('.')[0] }}.{{ ad_domain_name }}
   register: route_fix_out
 - debug:
     var: route_fix_out
