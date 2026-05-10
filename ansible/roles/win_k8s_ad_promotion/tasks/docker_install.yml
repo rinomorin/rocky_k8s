@@ -109,36 +109,42 @@
   set_fact:
     download_url: "{{ cri_url_raw.stdout | trim }}"
 - debug:
-    msg: "{{ cri_url_raw.stdout }}"
+    msg: "{{ cri_url_raw.stdout }} to download_url {{ download_url }}"
 
 - name: 1.11 - Download and Install latest cri-dockerd
   ansible.windows.win_shell: |
     $url = "{{ download_url }}"
     $dest = "$env:TEMP\cri-dockerd.zip"
     $installDir = "C:\Program Files\cri-dockerd"
+    $binPath = "$installDir\cri-dockerd.exe"
 
     if (-not (Test-Path $installDir)) { 
         New-Item -Path $installDir -ItemType Directory -Force 
     }
 
-    # Reliable download on Server 2022
+    # Download
     curl.exe -L $url -o $dest
 
     # Extract
     Expand-Archive -Path $dest -DestinationPath $installDir -Force
     
-    # Normalize folder structure
+    # Flatten directory structure if nested
     if (Test-Path "$installDir\cri-dockerd\cri-dockerd.exe") {
         Move-Item "$installDir\cri-dockerd\*" $installDir -Force
         Remove-Item "$installDir\cri-dockerd" -Recurse -Force
     }
 
-    # Register the service
+    # Manual Service Registration (since --register-service is deprecated)
     if (-not (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue)) {
-        & "$installDir\cri-dockerd.exe" --register-service
+        # Note: We must specify the network pipe endpoint explicitly here
+        New-Service -Name "cri-dockerd" `
+                    -BinaryPathName "`"$binPath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd" `
+                    -DisplayName "CRI-Docker Service" `
+                    -StartupType Automatic `
+                    -Description "CRI support for Docker on Windows"
     }
-    
-    Set-Service -Name cri-dockerd -StartupType Automatic
+
+    # Ensure it is running
     Start-Service cri-dockerd
   become: yes
   become_method: runas
