@@ -105,6 +105,9 @@
   register: cri_url_raw
   changed_when: false
 
+- debug:
+    msg: "{{ cri_url_raw.stdout }}"
+
 - name: 1.11 - Download and Install latest cri-dockerd
   vars:
     # Use .stdout to get the URL from the previous task
