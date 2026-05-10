@@ -146,6 +146,16 @@
   become_method: runas
   become_user: '.\Administrator'
 
+- name: Install Windows Containers feature
+  ansible.windows.win_feature:
+    name: Containers
+    state: present
+  register: container_feature
+
+- name: Reboot if Containers feature requires it
+  ansible.windows.win_reboot:
+  when: container_feature.reboot_required
+
 - name: 1.0.1 - Ensure Docker Service is running
   ansible.windows.win_service:
     name: docker
