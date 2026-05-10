@@ -9,26 +9,26 @@
     $clusterIdx = (Get-NetIPAddress -IPAddress "{{ p_ip }}").InterfaceIndex
     $natIdx = (Get-NetIPAddress -IPAddress "{{ n_ip }}").InterfaceIndex
 
-    # 1. REMOVE GATEWAY from the NAT interface permanently
-    # This stops the 172.16.0.1 zombie from reappearing in the routing table
+    # 1. REMOVE GATEWAY from the NAT interface
     Set-NetIPAddress -InterfaceIndex $natIdx -IPAddress "{{ n_ip }}" -PrefixLength 24 -DefaultGateway $null
 
     # 2. Force Metric Priority
     Set-NetIPInterface -InterfaceIndex $clusterIdx -AutomaticMetric Disabled -InterfaceMetric 10
     Set-NetIPInterface -InterfaceIndex $natIdx -AutomaticMetric Disabled -InterfaceMetric 100
 
-    # 3. Flush the garbage and set Persistent Routes
+    # 3. Persistent Default Gateway
     route delete 0.0.0.0 mask 0.0.0.0 {{ n_gw }} 2>$null
-    route -p add 0.0.0.0 mask 0.0.0.0 {{ p_gw }} metric 10 if $clusterIdx 2>$null
-    
-    # 4. Force the 172.16 subnet to be Persistent and On-Link
-    # We delete first to ensure we don't get 'Route already exists' errors
+    route -p add 0.0.0.0 mask 0.0.0.0 {{ p_gw }} metric 10 if $clusterIdx
+
+    # 4. Persistent Subnet Route
     route delete {{ n_net }} mask 255.255.255.0 2>$null
     route -p add {{ n_net }} mask 255.255.255.0 0.0.0.0 metric 300 if $natIdx
 
-    # 5. Disable IPv6 to prevent DNS leaks/loopback issues
-    Disable-NetAdapterBinding -Name (Get-NetAdapter -InterfaceIndex $natIdx).Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
-    Disable-NetAdapterBinding -Name (Get-NetAdapter -InterfaceIndex $clusterIdx).Name -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+    # 5. Disable IPv6
+    $natName = (Get-NetAdapter -InterfaceIndex $natIdx).Name
+    $clusterName = (Get-NetAdapter -InterfaceIndex $clusterIdx).Name
+    Disable-NetAdapterBinding -Name $natName -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
+    Disable-NetAdapterBinding -Name $clusterName -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue
   register: route_fix_out
 - debug:
     var: route_fix_out
