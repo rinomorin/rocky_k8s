@@ -309,6 +309,35 @@
   # become: yes
   # become_method: runas
 
+
+- name: 1.6 - Configure DNS Forwarding Chain (Shell - Verified)
+  ansible.windows.win_shell: |
+    # 1. Check and Set Global Forwarder
+    $currentForwarders = (Get-DnsServerForwarder).IPAddress
+    $targetForwarder = "10.0.0.20"
+
+    if ($currentForwarders -notcontains $targetForwarder -or $currentForwarders.Count -ne 1) {
+        Write-Host "Updating Global Forwarders to $targetForwarder"
+        Set-DnsServerForwarder -IPAddress $targetForwarder -Timeout 3 -Force
+    }
+
+    # 2. Enable Recursion
+    if ((Get-DnsServerSetting).IsRecursionEnabled -eq $false) {
+        Set-DnsServerSetting -IsRecursionEnabled $true
+    }
+
+    # 3. Check and Set Conditional Reverse Forwarder
+    $zoneName = "0.0.10.in-addr.arpa"
+    $exists = Get-DnsServerZone -Name $zoneName -ErrorAction SilentlyContinue
+
+    if (-not $exists) {
+        Write-Host "Creating Reverse Conditional Zone: $zoneName"
+        Add-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers "10.0.0.20" -ReplicationScope "Forest"
+    } else {
+        # Ensure the master server is correct even if the zone exists
+        Set-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers "10.0.0.20"
+    }
+
 # - name: 1.4 - Ensure local Reverse Zone is ABSENT (Helper is the Source of Truth)
 #   vars:
 #     octets: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] }}"
@@ -355,6 +384,13 @@
 #   changed_when: 
 #     - ptr_result.rc == 0
 #     - "'Added record' in ptr_result.stdout"
+
+# - name: Step 1 & 2 - Set dns_3 to forward all unknown to dns_2
+#   community.windows.win_dns_server_forwarder:
+#     address:
+#       - 10.0.0.20
+#     timeout: 3
+#     # Ensure recursion is enabled so it follows the chain
 
 # - name: Configure Conditional Forwarder for Reverse Zone on Windows
 #   ansible.windows.win_shell: |
