@@ -35,13 +35,14 @@
 
 - name: 1.5 - Permanently Block NAT Gateway via Interface Policy
   vars:
-    n_ip: "{{ br_nat_ip.stdout | trim }}"
+    # Defining these cleanly at the task level
+    n_ip_val: "{{ br_nat_ip.stdout | trim }}"
+    p_ip_val: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
   ansible.windows.win_shell: |
     # 1. Identify the NAT interface
-    $natIdx = (Get-NetIPAddress -IPAddress "{{ n_ip }}").InterfaceIndex
+    $natIdx = (Get-NetIPAddress -IPAddress $env:NAT_IP).InterfaceIndex
 
     # 2. Tell Windows to ignore the DHCP-provided gateway for this NIC
-    # This is the nuclear option that prevents the route from returning after reboot
     Set-NetIPInterface -InterfaceIndex $natIdx -IgnoreDefaultRoutes $true
 
     # 3. Clean up the current table one last time
@@ -49,9 +50,11 @@
     Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Where-Object { $_.NextHop -like "172.16.0.*" } | Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
 
     # 4. Ensure our Provisioning interface is still the boss
-    $p_ip = "{{ hostvars[inventory_hostname]['provision_ip'] }}"
-    $clusterIdx = (Get-NetIPAddress -IPAddress $p_ip).InterfaceIndex
+    $clusterIdx = (Get-NetIPAddress -IPAddress $env:PROV_IP).InterfaceIndex
     Set-NetIPInterface -InterfaceIndex $clusterIdx -IgnoreDefaultRoutes $false -InterfaceMetric 10
+  environment:
+    NAT_IP: "{{ n_ip_val }}"
+    PROV_IP: "{{ p_ip_val }}"
 
 - name: Ensure state directory exists
   ansible.windows.win_file:
