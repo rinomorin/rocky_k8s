@@ -35,26 +35,19 @@
 
 - name: 1.5 - Permanently Block NAT Gateway via Interface Policy
   vars:
-    # Defining these cleanly at the task level
-    n_ip_val: "{{ br_nat_ip.stdout | trim }}"
-    p_ip_val: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
+    n_ip: "{{ br_nat_ip.stdout | trim }}"
+    p_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
   ansible.windows.win_shell: |
-    # 1. Identify the NAT interface
-    $natIdx = (Get-NetIPAddress -IPAddress $env:NAT_IP).InterfaceIndex
+    $n_addr = "{{ n_ip }}"
+    $p_addr = "{{ p_ip }}"
+    
+    $natIdx = (Get-NetIPAddress -IPAddress $n_addr).InterfaceIndex
+    $clusterIdx = (Get-NetIPAddress -IPAddress $p_addr).InterfaceIndex
 
-    # 2. Tell Windows to ignore the DHCP-provided gateway for this NIC
     Set-NetIPInterface -InterfaceIndex $natIdx -IgnoreDefaultRoutes $true
-
-    # 3. Clean up the current table one last time
-    # This removes the ghost route if it's currently active
-    Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Where-Object { $_.NextHop -like "172.16.0.*" } | Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-
-    # 4. Ensure our Provisioning interface is still the boss
-    $clusterIdx = (Get-NetIPAddress -IPAddress $env:PROV_IP).InterfaceIndex
     Set-NetIPInterface -InterfaceIndex $clusterIdx -IgnoreDefaultRoutes $false -InterfaceMetric 10
-  environment:
-    NAT_IP: "{{ n_ip_val }}"
-    PROV_IP: "{{ p_ip_val }}"
+
+    Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Where-Object { $_.NextHop -match "172\.16\." } | Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
 
 - name: Ensure state directory exists
   ansible.windows.win_file:
