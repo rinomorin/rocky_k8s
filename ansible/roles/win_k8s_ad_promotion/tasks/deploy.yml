@@ -108,9 +108,9 @@
   delegate_to: localhost
   become: false
   vars:
-    output: "powershell -Command \"[adsi]'WinNT://./Administrator,user' | %{ \$_.SetPassword({{ ad_safe_mode_password }}); \$_.SetInfo() }\" "
+    cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa -T core@{{ br_nat_ip.stdout }}"
   shell: |
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa -T core@{{ br_nat_ip.stdout }} "{{ ouyput }}"
+    {{cmd }} "powershell -Command \"[adsi]'WinNT://./Administrator,user' | %{ \$_.SetPassword({{ ad_safe_mode_password }}); \$_.SetInfo() }\" "
   when: not skip_win_build
 
 - name: Use br-nat IP for SSH
