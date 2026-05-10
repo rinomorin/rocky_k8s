@@ -114,30 +114,24 @@
 - name: 1.11 - Download and Install latest cri-dockerd
   ansible.windows.win_shell: |
     $installDir = "C:\Program Files\cri-dockerd"
-    $binPath = "$installDir\cri-dockerd.exe"
+    $exePath = "$installDir\cri-dockerd.exe"
+    $serviceName = "cri-dockerd"
+    $args = "--container-runtime-endpoint npipe:////./pipe/cri-dockerd"
 
-    # 1. Test binary manually to catch missing DLLs or immediate crashes
-    $test = Start-Process -FilePath $binPath -ArgumentList "--version" -PassThru -Wait -NoNewWindow
-    if ($test.ExitCode -ne 0) {
-        Write-Error "Binary check failed. Verify if cri-dockerd.exe is corrupted or missing dependencies."
-        exit 1
+    # Cleanup if it exists
+    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+        Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
+        Remove-Service $serviceName -ErrorAction SilentlyContinue
     }
 
-    # 2. Re-create service with explicit account
-    if (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue) {
-        sc.exe stop cri-dockerd | Out-Null
-        sc.exe delete cri-dockerd | Out-Null
-        Start-Sleep -Seconds 2
-    }
+    # Create the service using native PowerShell (handles quotes automatically)
+    New-Service -Name $serviceName `
+                -BinaryPathName "$exePath $args" `
+                -DisplayName "CRI-Docker Service" `
+                -StartupType Automatic
 
-    $binPathQuoted = "`"`"$binPath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd`""
-    sc.exe create cri-dockerd binpath= $binPathQuoted start= auto obj= "LocalSystem"
-    
-    # 3. Add recovery options (helps if it crashes on startup)
-    sc.exe failure cri-dockerd reset= 86400 actions= restart/5000/restart/5000/restart/5000
-
-    # 4. Start the service
-    Start-Service cri-dockerd
+    # Start the service
+    Start-Service $serviceName
   become: yes
   become_method: runas
   become_user: '.\Administrator'
