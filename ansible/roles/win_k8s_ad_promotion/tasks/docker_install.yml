@@ -113,49 +113,34 @@
 
 - name: 1.11 - Download and Install latest cri-dockerd
   ansible.windows.win_shell: |
-    $url = "{{ download_url }}"
-    $dest = "$env:TEMP\cri-dockerd.zip"
     $installDir = "C:\Program Files\cri-dockerd"
     $binPath = "$installDir\cri-dockerd.exe"
 
-    if (-not (Test-Path $installDir)) { 
-        New-Item -Path $installDir -ItemType Directory -Force 
+    # 1. Test binary manually to catch missing DLLs or immediate crashes
+    $test = Start-Process -FilePath $binPath -ArgumentList "--version" -PassThru -Wait -NoNewWindow
+    if ($test.ExitCode -ne 0) {
+        Write-Error "Binary check failed. Verify if cri-dockerd.exe is corrupted or missing dependencies."
+        exit 1
     }
 
-    # Download and Extract
-    curl.exe -L $url -o $dest
-    Expand-Archive -Path $dest -DestinationPath $installDir -Force
+    # 2. Re-create service with explicit account
+    if (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue) {
+        sc.exe stop cri-dockerd | Out-Null
+        sc.exe delete cri-dockerd | Out-Null
+        Start-Sleep -Seconds 2
+    }
+
+    $binPathQuoted = "`"`"$binPath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd`""
+    sc.exe create cri-dockerd binpath= $binPathQuoted start= auto obj= "LocalSystem"
     
-    # Flatten directory structure
-    if (Test-Path "$installDir\cri-dockerd\cri-dockerd.exe") {
-        Move-Item "$installDir\cri-dockerd\*" $installDir -Force
-        Remove-Item "$installDir\cri-dockerd" -Recurse -Force
-    }
+    # 3. Add recovery options (helps if it crashes on startup)
+    sc.exe failure cri-dockerd reset= 86400 actions= restart/5000/restart/5000/restart/5000
 
-    # Ensure Docker is actually running before we try to start the shim
-    $dockerService = Get-Service -Name docker -ErrorAction SilentlyContinue
-    if ($dockerService.Status -ne 'Running') {
-        Start-Service docker
-        Start-Sleep -Seconds 5
-    }
-
-    # Manual Service Registration using sc.exe (more reliable for escaping)
-    if (-not (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue)) {
-        # Note the specific spacing: 'binpath= ' is required by sc.exe
-        $scArgs = "binpath= `"`"$binPath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd`" start= auto"
-        Start-Process -FilePath "sc.exe" -ArgumentList "create cri-dockerd $scArgs" -Wait
-        
-        # Set the description
-        Start-Process -FilePath "sc.exe" -ArgumentList "description cri-dockerd `"CRI support for Docker on Windows`"" -Wait
-    }
-
-    # Try to start the service
-    Restart-Service cri-dockerd -Force
+    # 4. Start the service
+    Start-Service cri-dockerd
   become: yes
   become_method: runas
   become_user: '.\Administrator'
-  vars:
-    ansible_become_password: "{{ ad_safe_mode_password }}"
 
 - name: 1.0.1 - Ensure Docker Service is running
   ansible.windows.win_service:
