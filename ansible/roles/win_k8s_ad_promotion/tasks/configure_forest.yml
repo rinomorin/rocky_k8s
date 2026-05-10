@@ -57,30 +57,30 @@
 # - debug:
 #     var: route_fix_out
 
-- name: 1.5 - Split-Horizon Routing Configuration
+- name: 1.5 - Configure Split-Horizon (Internal vs Internet)
   vars:
     n_ip: "{{ br_nat_ip.stdout | trim }}"
-    n_gw: "{{ br_nat_ip.stdout.split('.')[:3] | join('.') }}.1"
     p_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
   ansible.windows.win_shell: |
     $natIdx = (Get-NetIPAddress -IPAddress "{{ n_ip }}").InterfaceIndex
     $clusterIdx = (Get-NetIPAddress -IPAddress "{{ p_ip }}").InterfaceIndex
 
-    # 1. NIC 1 (Internet) gets a low metric (Higher Priority for 0.0.0.0)
-    Set-NetIPInterface -InterfaceIndex $natIdx -InterfaceMetric 10 -AutomaticMetric Disabled
-
-    # 2. NIC 2 (AD/Internal) gets a high metric (Lower Priority for 0.0.0.0)
-    Set-NetIPInterface -InterfaceIndex $clusterIdx -InterfaceMetric 500 -AutomaticMetric Disabled
-
-    # 3. Ensure NIC 2 has NO default gateway assigned at the OS level
-    # This prevents the "Destination port unreachable" from 10.0.0.1
+    # 1. Strip the Gateway from NIC 2 (Internal/AD)
+    # This prevents the "Destination port unreachable" and 10.0.0.1 interference
     Set-NetIPAddress -InterfaceIndex $clusterIdx -DefaultGateway $null -ErrorAction SilentlyContinue
 
-    # 4. Add the Permanent Internet Route to NIC 1
-    route -p add 0.0.0.0 mask 0.0.0.0 {{ n_gw }} metric 10 if $natIdx
+    # 2. Set Interface Metrics
+    # NIC 1 (Internet) gets high priority (Low number)
+    Set-NetIPInterface -InterfaceIndex $natIdx -InterfaceMetric 10
+    # NIC 2 (Internal) gets low priority (High number) for general traffic
+    Set-NetIPInterface -InterfaceIndex $clusterIdx -InterfaceMetric 500
 
-    # 5. Force all 10.0.0.0/8 traffic to stay on NIC 2
-    # This ensures AD and DNS never try to leak out to the 172.16 network
+    # 3. Clean the Routing Table
+    # Nuke the persistent and active 10.0.0.1 gateways
+    route delete 0.0.0.0 mask 0.0.0.0 10.0.0.1 2>$null
+
+    # 4. Add the "Internal Boss" Route
+    # This forces EVERYTHING destined for 10.x.x.x to stay on NIC 2
     route -p add 10.0.0.0 mask 255.0.0.0 0.0.0.0 metric 1 if $clusterIdx
 
 - name: 1.3 - Create AD forest
