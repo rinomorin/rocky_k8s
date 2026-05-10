@@ -122,30 +122,35 @@
         New-Item -Path $installDir -ItemType Directory -Force 
     }
 
-    # Download
+    # Download and Extract
     curl.exe -L $url -o $dest
-
-    # Extract
     Expand-Archive -Path $dest -DestinationPath $installDir -Force
     
-    # Flatten directory structure if nested
+    # Flatten directory structure
     if (Test-Path "$installDir\cri-dockerd\cri-dockerd.exe") {
         Move-Item "$installDir\cri-dockerd\*" $installDir -Force
         Remove-Item "$installDir\cri-dockerd" -Recurse -Force
     }
 
-    # Manual Service Registration (since --register-service is deprecated)
-    if (-not (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue)) {
-        # Note: We must specify the network pipe endpoint explicitly here
-        New-Service -Name "cri-dockerd" `
-                    -BinaryPathName "`"$binPath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd" `
-                    -DisplayName "CRI-Docker Service" `
-                    -StartupType Automatic `
-                    -Description "CRI support for Docker on Windows"
+    # Ensure Docker is actually running before we try to start the shim
+    $dockerService = Get-Service -Name docker -ErrorAction SilentlyContinue
+    if ($dockerService.Status -ne 'Running') {
+        Start-Service docker
+        Start-Sleep -Seconds 5
     }
 
-    # Ensure it is running
-    Start-Service cri-dockerd
+    # Manual Service Registration using sc.exe (more reliable for escaping)
+    if (-not (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue)) {
+        # Note the specific spacing: 'binpath= ' is required by sc.exe
+        $scArgs = "binpath= `"`"$binPath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd`" start= auto"
+        Start-Process -FilePath "sc.exe" -ArgumentList "create cri-dockerd $scArgs" -Wait
+        
+        # Set the description
+        Start-Process -FilePath "sc.exe" -ArgumentList "description cri-dockerd `"CRI support for Docker on Windows`"" -Wait
+    }
+
+    # Try to start the service
+    Restart-Service cri-dockerd -Force
   become: yes
   become_method: runas
   become_user: '.\Administrator'
