@@ -117,36 +117,46 @@
     $exePath = "$installDir\cri-dockerd.exe"
     $serviceName = "cri-dockerd"
     
-    # 1. Fix the "Access Denied" Registry Issue
+    # 1. Ensure the registry key exists (previous fix)
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
     if (-not (Test-Path $regPath)) {
         New-Item -Path $regPath -Force | Out-Null
     }
 
-    # 2. Cleanup existing service
+    # 2. Cleanup existing service to ensure a fresh state
     if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
         Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
-        # We use sc.exe to delete because it's more immediate than Remove-Service
         sc.exe delete $serviceName
         Start-Sleep -Seconds 2
     }
 
-    # 3. Create Service with correct quoting for paths with spaces
-    # We wrap the exe path in escaped quotes inside the string
+    # 3. Create the Service with a dependency on Docker
+    # This ensures Docker is fully up before cri-dockerd tries to bind to the pipe
     $binaryPathName = "`"$exePath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd"
     
     New-Service -Name $serviceName `
                 -BinaryPathName $binaryPathName `
                 -DisplayName "CRI-Docker Service" `
-                -StartupType Automatic
+                -StartupType Automatic `
+                -DependsOn "docker"
 
-    # 4. Start it and wait a moment to ensure it doesn't immediately crash
-    Start-Service $serviceName
-    Start-Sleep -Seconds 2
-    
-    if ((Get-Service $serviceName).Status -ne 'Running') {
-        throw "Service started but stopped immediately. Check Event Viewer for registry or pipe errors."
+    # 4. Final attempt to start
+    # Sometimes the pipe takes a moment to become available after Docker starts
+    $retryCount = 0
+    while ($retryCount -lt 3) {
+        try {
+            Start-Service $serviceName
+            Start-Sleep -Seconds 5
+            if ((Get-Service $serviceName).Status -eq 'Running') {
+                return # Success!
+            }
+        } catch {
+            $retryCount++
+            Start-Sleep -Seconds 5
+        }
     }
+
+    throw "Service failed to stay running after 3 attempts. Check Event Viewer -> Windows Logs -> System for 'Service Control Manager' errors."
   become: yes
   become_method: runas
   become_user: '.\Administrator'
