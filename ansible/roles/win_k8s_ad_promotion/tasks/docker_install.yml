@@ -117,46 +117,31 @@
     $exePath = "$installDir\cri-dockerd.exe"
     $serviceName = "cri-dockerd"
     
-    # 1. Ensure the registry key exists (previous fix)
+    # 1. Final Registry and Service Cleanup
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
-    if (-not (Test-Path $regPath)) {
-        New-Item -Path $regPath -Force | Out-Null
-    }
+    if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
 
-    # 2. Cleanup existing service to ensure a fresh state
     if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
         Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
         sc.exe delete $serviceName
         Start-Sleep -Seconds 2
     }
 
-    # 3. Create the Service with a dependency on Docker
-    # This ensures Docker is fully up before cri-dockerd tries to bind to the pipe
-    $binaryPathName = "`"$exePath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd"
+    # 2. Create the service using sc.exe with explicit spacing
+    # Note: 'binpath= ' and 'start= ' MUST have the space after the '='
+    $binArgs = "`"$exePath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd"
+    sc.exe create $serviceName binpath= $binArgs start= auto DisplayName= "CRI-Docker Service"
     
-    New-Service -Name $serviceName `
-                -BinaryPathName $binaryPathName `
-                -DisplayName "CRI-Docker Service" `
-                -StartupType Automatic `
-                -DependsOn "docker"
+    # 3. Increase the service timeout (gives the binary more time to initialize)
+    # This adds a 60-second window for the service to report 'Running'
+    New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "ServicesPipeTimeout" -Value 60000 -PropertyType DWord -Force | Out-Null
 
-    # 4. Final attempt to start
-    # Sometimes the pipe takes a moment to become available after Docker starts
-    $retryCount = 0
-    while ($retryCount -lt 3) {
-        try {
-            Start-Service $serviceName
-            Start-Sleep -Seconds 5
-            if ((Get-Service $serviceName).Status -eq 'Running') {
-                return # Success!
-            }
-        } catch {
-            $retryCount++
-            Start-Sleep -Seconds 5
-        }
-    }
-
-    throw "Service failed to stay running after 3 attempts. Check Event Viewer -> Windows Logs -> System for 'Service Control Manager' errors."
+    # 4. Start the service
+    Start-Service $serviceName
+    
+    # 5. Final check
+    Start-Sleep -Seconds 2
+    Get-Service $serviceName
   become: yes
   become_method: runas
   become_user: '.\Administrator'
