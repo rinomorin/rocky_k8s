@@ -119,6 +119,22 @@
   delegate_to: localhost
   when: not skip_win_build
 
+- name: 1.3 - Create AD forest
+  win_shell: |
+    $pw = ConvertTo-SecureString "{{ ad_safe_mode_password }}" -AsPlainText -Force
+    # Import the module explicitly to be safe
+    Import-Module ADDSDeployment
+    Install-ADDSForest `
+      -DomainName "{{ ad_domain_name }}" `
+      -InstallDNS:$true `
+      -SafeModeAdministratorPassword $pw `
+      -Force:$true
+    sync; Start-Sleep -Seconds 5
+  when: not forest_done.stat.exists
+  no_log: true
+  notify: reboot
+
+
 - name: Verify whoami Database Existence
   raw: |
     whoami
