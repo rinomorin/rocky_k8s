@@ -105,13 +105,13 @@
   register: cri_url_raw
   changed_when: false
 
+- name: set cri url
+  set_fact:
+    download_url: "{{ cri_url_raw.stdout | trim }}"
 - debug:
     msg: "{{ cri_url_raw.stdout }}"
 
 - name: 1.11 - Download and Install latest cri-dockerd
-  vars:
-    # Use .stdout to get the URL from the previous task
-    download_url: "{{ cri_url_raw.stdout | trim }}"
   ansible.windows.win_shell: |
     $url = "{{ download_url }}"
     $dest = "$env:TEMP\cri-dockerd.zip"
