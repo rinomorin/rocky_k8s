@@ -116,22 +116,37 @@
     $installDir = "C:\Program Files\cri-dockerd"
     $exePath = "$installDir\cri-dockerd.exe"
     $serviceName = "cri-dockerd"
-    $args = "--container-runtime-endpoint npipe:////./pipe/cri-dockerd"
-
-    # Cleanup if it exists
-    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
-        Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
-        Remove-Service $serviceName -ErrorAction SilentlyContinue
+    
+    # 1. Fix the "Access Denied" Registry Issue
+    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
+    if (-not (Test-Path $regPath)) {
+        New-Item -Path $regPath -Force | Out-Null
     }
 
-    # Create the service using native PowerShell (handles quotes automatically)
+    # 2. Cleanup existing service
+    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+        Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
+        # We use sc.exe to delete because it's more immediate than Remove-Service
+        sc.exe delete $serviceName
+        Start-Sleep -Seconds 2
+    }
+
+    # 3. Create Service with correct quoting for paths with spaces
+    # We wrap the exe path in escaped quotes inside the string
+    $binaryPathName = "`"$exePath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd"
+    
     New-Service -Name $serviceName `
-                -BinaryPathName "$exePath $args" `
+                -BinaryPathName $binaryPathName `
                 -DisplayName "CRI-Docker Service" `
                 -StartupType Automatic
 
-    # Start the service
+    # 4. Start it and wait a moment to ensure it doesn't immediately crash
     Start-Service $serviceName
+    Start-Sleep -Seconds 2
+    
+    if ((Get-Service $serviceName).Status -ne 'Running') {
+        throw "Service started but stopped immediately. Check Event Viewer for registry or pipe errors."
+    }
   become: yes
   become_method: runas
   become_user: '.\Administrator'
