@@ -96,23 +96,19 @@
   vars:
     ansible_become_password: "{{ ad_safe_mode_password }}"
 
-- name: 1.10 - Get latest cri-dockerd release metadata
-  ansible.builtin.uri:
-    url: "https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest"
-    return_content: yes
+- name: 1.10 - Get latest cri-dockerd release URL via shell
+  ansible.builtin.shell: >
+    curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
+    jq -r '.assets[] | select(.name | contains("win.amd64.zip")) | .browser_download_url'
   delegate_to: localhost
   run_once: true
-  register: cri_metadata
-
-- name: set latest_json for all hosts
-  set_fact:
-    latest_json: "{{ cri_metadata.content | from_json }}"
-  # No run_once here so all hosts get the variable in their memory
+  register: cri_url_raw
+  changed_when: false
 
 - name: 1.11 - Download and Install latest cri-dockerd
   vars:
-    # UPDATED: Changed 'win-amd64' to 'win.amd64' to match the actual GitHub asset name
-    download_url: "{{ latest_json.assets | selectattr('name', 'contains', 'win.amd64.zip') | map(attribute='browser_download_url') | first }}"
+    # Use .stdout to get the URL from the previous task
+    download_url: "{{ cri_url_raw.stdout | trim }}"
   ansible.windows.win_shell: |
     $url = "{{ download_url }}"
     $dest = "$env:TEMP\cri-dockerd.zip"
@@ -122,24 +118,23 @@
         New-Item -Path $installDir -ItemType Directory -Force 
     }
 
-    # Use curl.exe for reliable download on Server 2022
+    # Reliable download on Server 2022
     curl.exe -L $url -o $dest
 
     # Extract
     Expand-Archive -Path $dest -DestinationPath $installDir -Force
     
-    # Standardize path: Move files out of nested folder if present
+    # Normalize folder structure
     if (Test-Path "$installDir\cri-dockerd\cri-dockerd.exe") {
         Move-Item "$installDir\cri-dockerd\*" $installDir -Force
         Remove-Item "$installDir\cri-dockerd" -Recurse -Force
     }
 
-    # Register and start the shim
+    # Register the service
     if (-not (Get-Service -Name cri-dockerd -ErrorAction SilentlyContinue)) {
         & "$installDir\cri-dockerd.exe" --register-service
     }
     
-    # Ensure service is running
     Set-Service -Name cri-dockerd -StartupType Automatic
     Start-Service cri-dockerd
   become: yes
