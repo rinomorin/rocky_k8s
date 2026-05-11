@@ -371,6 +371,7 @@
 
 - name: Add A record for Windows node in IPA (.local zone)
   delegate_to: localhost
+  when: "{{ 'win_worker_nodes' in group_names }}"
   ansible.builtin.shell: |
     # 1. Get Kerberos ticket
     echo "{{ lookup('env', 'ipa_admin_password') }}" | kinit admin
