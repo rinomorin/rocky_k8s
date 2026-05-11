@@ -351,7 +351,7 @@
     last_octet: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[-1] }}"
     rev_zone: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
   ansible.builtin.shell: |
-    echo "{{ ipa_passw }}" | kinit admin > /dev/null
+    echo "{{ ipa_pass }}" | kinit admin > /dev/null
     # Ensure the zone exists as a master zone first
     if ! ipa dnszone-show "{{ rev_zone }}" > /dev/null 2>&1; then
       ipa dnszone-add "{{ rev_zone }}"
