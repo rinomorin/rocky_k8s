@@ -351,7 +351,7 @@
     last_octet: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[-1] }}"
     rev_zone: "{{ hostvars[inventory_hostname.split('.')[0]]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
   ansible.builtin.shell: |
-    echo "{{ ipa_admin_password }}" | kinit admin > /dev/null
+    echo "{{ ipa_passw }}" | kinit admin > /dev/null
     # Ensure the zone exists as a master zone first
     if ! ipa dnszone-show "{{ rev_zone }}" > /dev/null 2>&1; then
       ipa dnszone-add "{{ rev_zone }}"
@@ -373,7 +373,7 @@
   delegate_to: localhost
   ansible.builtin.shell: |
     # 1. Get Kerberos ticket
-    echo "{{ ipa_admin_password }}" | kinit admin
+    echo "{{ lookup('env', 'ipa_admin_password') }}" | kinit admin
 
     ipa dnsrecord-add {{ b_zone }} {{ cname_short }} \
         --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }} || \
@@ -384,6 +384,7 @@
     b_zone: "{{ hostvars[inventory_hostname.split('.')[0]]['domain'] | replace('lcl', 'local') }}"
     # worker03
     cname_short: "{{ hostvars[inventory_hostname.split('.')[0]] }}"
+
 
 # - name: Create CNAME in IPA for Windows Node (Shell)
 #   delegate_to: localhost
