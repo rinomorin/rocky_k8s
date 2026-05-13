@@ -122,12 +122,12 @@
   become: yes
   ansible.builtin.shell: |
     # Request the FreeIPA CA engine to sign the CSR under the HTTP principal track
-    ipa cert-request /tmp/tls.csr \
-      --principal=HTTP/nginx.api.{{ cloud_zone }} \
-      --certificate-out=/tmp/tls.crt
-
-    # Open read rights to the certificate file for retrieval
-    chmod 644 /tmp/tls.crt
+    if [[ -z /tmp/tls.crt ]]; then 
+      echo "{{ ipa_admin_password }}" | kinit admin
+      ipa cert-request /tmp/tls.csr \
+        --principal=HTTP/nginx.api.{{ cloud_zone }} \
+        --certificate-out=/tmp/tls.crt
+    fi
   run_once: true
 
 - name: 7.4.5 - Pull Signed Certificate back to Local Control Host
