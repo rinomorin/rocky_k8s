@@ -41,7 +41,7 @@
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
 
-- name: 7.2c - Give the API a moment to breathe againt
+- name: 7.2c - Give the API a moment to breathe again
   pause:
     seconds: 20
 
@@ -74,28 +74,38 @@
   retries: 10
   delay: 15
 
-# - name: 7.5 - Expose Nginx Smoke Test via MetalLB
-#   shell: |
-#     cat <<EOF | kubectl apply -f -
-#     apiVersion: v1
-#     kind: Service
-#     metadata:
-#       name: nginx-lb
-#     spec:
-#       selector:
-#         app: nginx
-#       ports:
-#         - protocol: TCP
-#           port: 80
-#           targetPort: 80
-#       type: LoadBalancer
-#       loadBalancerIP: {{ metallb_vip }}
-#     EOF
-#   delegate_to: localhost
-#   environment:
-#     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+- name: 7.4b - Generate FreeIPA Signed TLS Certificate for Smoke Test
+  delegate_to: localhost
+  shell: |
+    # 1. Authenticate with FreeIPA Kerberos KDC
+    echo "{{ ipa_admin_password }}" | kinit admin
 
-- name: 7.5 - Expose Nginx Smoke Test via MetalLB
+    # 2. Add the service principal if it does not already exist
+    ipa service-add HTTP/nginx.api.cloud.home.morinsoft.ca || true
+
+    # 3. Generate a local key and a matching standard CSR
+    openssl req -new -nodes -newkey rsa:2048 \
+      -keyout /tmp/tls.key \
+      -out /tmp/tls.csr \
+      -subj "/CN=nginx.api.cloud.home.morinsoft.ca/O=Morinsoft" \
+      -addext "subjectAltName = DNS:nginx.api.cloud.home.morinsoft.ca, DNS:*.api.cloud.home.morinsoft.ca"
+
+    # 4. Request the FreeIPA CA to sign the CSR using the service identity
+    ipa cert-request /tmp/tls.csr \
+      --principal=HTTP/nginx.api.cloud.home.morinsoft.ca \
+      --certificate-out=/tmp/tls.crt
+  args:
+    executable: /bin/bash
+
+- name: 7.4c - Upload FreeIPA Signed TLS Secret to Kubernetes
+  delegate_to: localhost
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  shell: |
+    kubectl delete secret nginx-tls-secret --ignore-not-found=true
+    kubectl create secret tls nginx-tls-secret --cert=/tmp/tls.crt --key=/tmp/tls.key
+
+- name: 7.5 - Expose Nginx Smoke Test via MetalLB and Ingress HTTPS
   shell: |
     cat <<EOF | kubectl apply -f -
     apiVersion: apps/v1
@@ -131,6 +141,29 @@
           targetPort: 80
       type: LoadBalancer
       loadBalancerIP: {{ metallb_vip }}
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: nginx-smoke-test-ingress
+      annotations:
+        kubernetes.io/ingress.class: nginx
+    spec:
+      tls:
+      - hosts:
+        - nginx.api.cloud.home.morinsoft.ca
+        secretName: nginx-tls-secret
+      rules:
+      - host: nginx.api.cloud.home.morinsoft.ca
+        http:
+          paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-lb
+                port:
+                  number: 80
     EOF
   delegate_to: localhost
   environment:
