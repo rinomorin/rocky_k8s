@@ -76,6 +76,7 @@
 
 - name: 7.4b - Generate FreeIPA Signed TLS Certificate for Smoke Test
   delegate_to: localhost
+  become: yes
   shell: |
     # 1. Authenticate with FreeIPA Kerberos KDC
     echo "{{ ipa_admin_password }}" | kinit admin
@@ -97,8 +98,8 @@
     ipa cert-request /tmp/tls.csr \
       --principal=HTTP/nginx.api.cloud.home.morinsoft.ca \
       --certificate-out=/tmp/tls.crt
-  args:
-    executable: /bin/bash
+  # args:
+  #   executable: /bin/bash
 
 
 - name: 7.4c - Upload FreeIPA Signed TLS Secret to Kubernetes
