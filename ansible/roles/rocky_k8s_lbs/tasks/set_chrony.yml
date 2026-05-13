@@ -8,7 +8,7 @@
     MY_PROVIDER_IP: "{{ hostvars[inventory_hostname]['provider_ip'] | default('') }}"
     IS_IPA01: "{{ 'true' if inventory_hostname == groups['ipa'][0] else 'false' }}"
     IS_HELPER: "{{ 'true' if inventory_hostname in groups['helpers'] else 'false' }}"
-  delegate_to: "{{ lb_node }}"
+  
   ansible.builtin.shell: |
     # Use a partial match for the anchor to be safe
     ANCHOR="pool.ntp.org/join.html"
@@ -53,10 +53,7 @@
         fi
     fi
   register: shell_output
-  loop: "{{ groups['hahost'] }}"
-  loop_control:
-    loop_var: lb_node
-    
+  
   
 - name: Open Firewall for NTP Service
   ansible.posix.firewalld:
