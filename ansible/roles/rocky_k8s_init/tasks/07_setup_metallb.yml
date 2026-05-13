@@ -191,6 +191,14 @@
   when: not tls_cert.stat.exists
   run_once: true
 
+- name: Copy signed certificate from IPA master to localhost
+  ansible.builtin.fetch:
+    src: /tmp/tls.crt
+    dest: /tmp/tls.crt
+    flat: yes
+  delegate_to: "{{ ipa_master_fqdn }}"
+  run_once: true
+
 - name: 7.4c - Upload FreeIPA Signed TLS Secret to Kubernetes Cluster
   delegate_to: localhost
   become: false
