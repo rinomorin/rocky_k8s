@@ -2,7 +2,7 @@
   delegate_to: localhost
   run_once: true
   environment:
-    KUBECONFIG: "/home/{{ ansible_user_id }}/.kube/config"
+    KUBECONFIG: "/home/{{ hostvars[groups['helper']]['ansible_user'] }}/.kube/config"
   ansible.builtin.shell: |
     kubectl get namespace ingress-nginx --no-headers
   register: ingress_ns_check
