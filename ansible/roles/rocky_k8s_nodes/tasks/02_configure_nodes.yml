@@ -62,12 +62,12 @@
         - hostvars[cloud_node] != (groups['helpers'][0] | default('none'))
         - item.0 != "0.0.0.0."    
 
-- name: Add Repos configurations
-  include_tasks: repo.yml
-  when: 
-    - hostvars[cloud_node] != (groups['kvm'][0] | default('none'))
+    - name: Add Repos configurations
+      include_tasks: repo.yml
+      when: 
+        - hostvars[cloud_node] != (groups['kvm'][0] | default('none'))
 
-- name: Add packages
-  include_tasks: install_package.yml
-  when: 
-    - hostvars[cloud_node] != (groups['kvm'][0] | default('none'))
+    - name: Add packages
+      include_tasks: install_package.yml
+      when: 
+        - hostvars[cloud_node] != (groups['kvm'][0] | default('none'))

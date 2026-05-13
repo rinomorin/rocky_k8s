@@ -2,7 +2,7 @@
 - name: Run on cloud nodes (excluding primary KVM host)
   when: 
     - cloud_node != (groups['kvm'][0] | default('none'))
-    - cloud_node in groups['cloud_node']
+    - cloud_node in groups['cluster_nodes']
   block:
     - name: processing task
       ansible.builtin.debug:
