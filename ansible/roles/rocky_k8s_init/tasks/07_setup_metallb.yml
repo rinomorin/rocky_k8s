@@ -128,6 +128,7 @@
         --principal=HTTP/nginx.api.{{ cloud_zone }} \
         --certificate-out=/tmp/tls.crt
     fi
+    ls -l /tmp/tls*
   run_once: true
   register: cert_view
 
