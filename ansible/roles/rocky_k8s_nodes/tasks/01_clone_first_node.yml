@@ -268,7 +268,7 @@
       ignore_errors: yes
       changed_when: false
       # We fail ONLY if the exit code is something other than 0 or 1
-      failed_when: "ping_check.rc not in [0, 1]"
+      failed_when: "ping_results.rc not in [0, 1]"
       loop:
         - "{{ hostvars[groups['ipa'][0]]['ansible_host'] }}"
         - "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"

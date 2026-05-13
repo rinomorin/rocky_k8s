@@ -129,6 +129,10 @@
         --certificate-out=/tmp/tls.crt
     fi
   run_once: true
+  register: cert_view
+
+- debug:
+    var: cert_view
 
 - name: 7.4.5 - Pull Signed Certificate back to Local Control Host
   delegate_to: localhost
