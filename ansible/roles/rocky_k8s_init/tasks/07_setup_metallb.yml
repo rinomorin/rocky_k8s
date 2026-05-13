@@ -88,6 +88,7 @@
 
 - name: 7.4.3 - Generate Private Key & CSR Locally and Push to FreeIPA
   delegate_to: localhost
+  become: false
   vars: 
     ipa_ip: "{{ hostvars[ipa_master_fqdn.split('.')[0]]['ansible_host'] }}"
   shell: |
@@ -104,6 +105,7 @@
 
 - name: 7.4.4 - Execute FreeIPA CA Certificate Sign Request
   delegate_to: "{{ ipa_master_fqdn }}"
+  become: yes
   ansible.builtin.shell: |
     # Request the FreeIPA CA engine to sign the CSR under the HTTP principal track
     ipa cert-request /tmp/tls.csr \
@@ -116,6 +118,7 @@
 
 - name: 7.4.5 - Pull Signed Certificate back to Local Control Host
   delegate_to: localhost
+  become: false
   vars: 
     ipa_ip: "{{ hostvars[ipa_master_fqdn.split('.')[0]]['ansible_host'] }}"
   shell: |
@@ -124,6 +127,7 @@
 
 - name: 7.4c - Upload FreeIPA Signed TLS Secret to Kubernetes Cluster
   delegate_to: localhost
+  become: false
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
   shell: |
@@ -132,6 +136,7 @@
   run_once: true
 
 - name: 7.5 - Expose Nginx Smoke Test via MetalLB and Ingress HTTPS
+  become: false
   shell: |
     cat <<EOF | kubectl apply -f -
     apiVersion: apps/v1
