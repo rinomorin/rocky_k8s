@@ -117,6 +117,10 @@
   delegate_to: "{{ ipa_master_fqdn }}"
   run_once: true
 
+- debug:
+    msg: "{{ cloud_zone }} "
+
+
 - name: 7.4.4 - Execute FreeIPA CA Certificate Sign Request
   delegate_to: "{{ ipa_master_fqdn }}"
   become: yes
@@ -124,6 +128,9 @@
     # Request the FreeIPA CA engine to sign the CSR under the HTTP principal track
     if [[ -z /tmp/tls.crt ]]; then 
       echo "{{ ipa_admin_password }}" | kinit admin
+      ipa host-add nginx.api.{{ cloud_zone }} 
+      ipa service-add HTTP/nginx.api.{{ cloud_zone }} 
+      
       ipa cert-request /tmp/tls.csr \
         --principal=HTTP/nginx.api.{{ cloud_zone }} \
         --certificate-out=/tmp/tls.crt
