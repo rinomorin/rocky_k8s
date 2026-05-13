@@ -121,35 +121,39 @@
     msg: "{{ cloud_zone }} "
 
 
-- name: 7.4.4 - Execute FreeIPA CA Certificate Sign Request
-  delegate_to: "{{ ipa_master_fqdn }}"
-  become: yes
-  ansible.builtin.shell: |
-    # Request the FreeIPA CA engine to sign the CSR under the HTTP principal track
-    if [[ -z /tmp/tls.crt ]]; then 
-      echo "{{ ipa_admin_password }}" | kinit admin
-      ipa host-add nginx.api.{{ cloud_zone }} 
-      ipa service-add HTTP/nginx.api.{{ cloud_zone }} 
-      
-      ipa cert-request /tmp/tls.csr \
-        --principal=HTTP/nginx.api.{{ cloud_zone }} \
-        --certificate-out=/tmp/tls.crt
-    fi
-    ls -l /tmp/tls*
-  run_once: true
-  register: cert_view
+- name: Check if certificate already exists
+  stat:
+    path: /tmp/tls.crt
+  register: tls_cert
 
-- debug:
-    var: cert_view
+- name: Ensure host exists
+  command: ipa host-add nginx.api.{{ cloud_zone }}
+  ignore_errors: yes
+  when: not tls_cert.stat.exists
 
-- name: 7.4.5 - Pull Signed Certificate back to Local Control Host
-  delegate_to: localhost
-  become: false
-  vars: 
-    ipa_ip: "{{ hostvars[ipa_master_fqdn.split('.')[0]]['ansible_host'] }}"
-  shell: |
-    scp -o StrictHostKeyChecking=no {{ ipa_ip }}:/tmp/tls.crt /tmp/tls.crt
-  run_once: true
+- name: Ensure service principal exists
+  command: ipa service-add HTTP/nginx.api.{{ cloud_zone }}
+  ignore_errors: yes
+  when: not tls_cert.stat.exists
+
+- name: Submit CSR to FreeIPA
+  command: >
+    ipa cert-request /tmp/tls.csr
+      --principal=HTTP/nginx.api.{{ cloud_zone }}
+  register: cert_request
+  when: not tls_cert.stat.exists
+
+- name: Extract Request ID
+  set_fact:
+    cert_request_id: "{{ cert_request.stdout | regex_search('Request ID: ([0-9]+)', '\\1') }}"
+  when: not tls_cert.stat.exists
+
+- name: Retrieve signed certificate
+  command: >
+    ipa cert-show {{ cert_request_id }} --certificate-out=/tmp/tls.crt
+  when: not tls_cert.stat.exists
+
+
 
 - name: 7.4c - Upload FreeIPA Signed TLS Secret to Kubernetes Cluster
   delegate_to: localhost
