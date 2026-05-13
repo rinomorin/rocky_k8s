@@ -101,7 +101,7 @@
       -keyout /tmp/tls.key \
       -out /tmp/tls.csr \
       -subj "/CN=nginx.api.{{ cloud_zone }}/O={{ lookup('env','ACCOUNT') | default('Morinsoft') }}" \
-      -addext "subjectAltName = DNS:nginx.api.{{ cloud_zone }}, DNS:*.api.{{ cloud_zone }}"
+      -addext "subjectAltName = DNS:nginx.api.{{ cloud_zone }}"
 
     chmod 644 /tmp/tls.csr
   run_once: true
