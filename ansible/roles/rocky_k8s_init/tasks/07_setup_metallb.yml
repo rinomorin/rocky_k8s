@@ -86,6 +86,11 @@
   run_once: true
   changed_when: false
 
+- name: 7.4.2.1 cleanup old
+  become: yes
+  shell: 
+    rm -f /tmp/tls.*
+
 - name: 7.4.3 - Generate Private Key & CSR Locally and Push to FreeIPA
   delegate_to: localhost
   become: false

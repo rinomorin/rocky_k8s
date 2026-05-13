@@ -19,6 +19,9 @@
   set_fact:
     id_rsa_pub_content_decoded: "{{ id_rsa_pub_content.content | b64decode }}"
 
+- name: set chrony
+  import_tasks: set_chrony.yml
+
 - name: Kubernetes Node Provisioning Block
   block:
     # - import_tasks: 00_dns_register.yml
