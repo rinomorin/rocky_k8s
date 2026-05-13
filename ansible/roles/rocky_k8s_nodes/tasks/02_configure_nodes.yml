@@ -62,11 +62,8 @@
         - hostvars[cloud_node] != (groups['helpers'][0] | default('none'))
         - item.0 != "0.0.0.0."    
 
-- name: Setup Repos and Packages for non-KVM nodes
-  when: "'kvm' not in group_names"
-  block:
-    - name: Add Repos configurations
-      include_tasks: repo.yml  
+- name: Add Repos configurations
+  include_tasks: repo.yml  
 
-    - name: Add packages
-      include_tasks: install_package.yml
+- name: Add packages
+  include_tasks: install_package.yml

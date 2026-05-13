@@ -10,25 +10,29 @@
       become: true
       shell: |
         dnf install -y podman
+      when: "{{'kvm' not in group_names}}"
     # --------------------------------------------------------
     # Install kubeadm, kubelet, kubectl
     # --------------------------------------------------------
     - name: Install kubeadm, kubelet, kubectl
       shell: |
         dnf install -y kubeadm kubelet kubectl bind-utils
-
+      when: "'kvm' not in group_names"
+  
     # --------------------------------------------------------
     # Install crictl
     # --------------------------------------------------------
     - name: Set crictl version
       set_fact:
         crictl_version: "{{ lookup('env','crictl_version') | default('1.30.0', true) }}"
+      when: "'kvm' not in group_names"
 
     - name: Download crictl
       become: false
       get_url:
         url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ crictl_version }}/crictl-v{{ crictl_version }}-linux-amd64.tar.gz qqq"
         dest: "/tmp/crictl.tar.gz"
+      when: "'kvm' not in group_names"
 
     - name: upload crictl to golden-base and extract
       shell: |
@@ -36,12 +40,14 @@
         chmod 755 /usr/local/bin/crictl
         ln -s /usr/local/bin/crictl /usr/bin/crictl
         rm -f /tmp/crictl.tar.gz
-        
+      when: "'kvm' not in group_names"
+
     # Install cri-o
     # --------------------------------------------------------
     - name: Install cri-o
       shell: |
         dnf install -y cri-o
+      when: "'kvm' not in group_names"
 
     # --------------------------------------------------------
     # Validate binaries
@@ -52,6 +58,7 @@
       register: kubeadm_check
       changed_when: false
       failed_when: kubeadm_check.rc != 0
+      when: "'kvm' not in group_names"
 
     - name: Validate kubectl
       shell: |
@@ -59,22 +66,26 @@
       register: kubectl_check
       changed_when: false
       failed_when: kubectl_check.rc != 0
+      when: "'kvm' not in group_names"
 
     - name: Validate crictl
       command: "crictl --version"
       register: crictl_check
       changed_when: false
       failed_when: crictl_check.rc != 0
+      when: "'kvm' not in group_names"
 
     - name: set etcd_ver
       set_fact:
         etcd_ver: "{{ lookup('env','etcd_ver') | default('v3.5.12', true) }}"
+      when: "'kvm' not in group_names"
 
     - name: Download ectd
       become: false
       get_url:
         url: "https://github.com/etcd-io/etcd/releases/download/v3.5.12/etcd-{{ etcd_ver }}-linux-amd64.tar.gz"
         dest: "/tmp/etcd-{{ etcd_ver }}-linux-amd64.tar.gz"
+      when: "'kvm' not in group_names"
 
     - name: upload ectd to golden-base and extract
       shell: |
@@ -83,14 +94,16 @@
         chmod +x /usr/local/bin/etcdctl
         ln -s /usr/local/bin/etcdctl /usr/bin/etcdctl
         rm -f /tmp/etcd-{{ etcd_ver }}-linux-amd64.tar.gz
+      when: "'kvm' not in group_names"
 
     - name: Clear dnf cache
       shell: |
         dnf clean all
-      
+      when: "'kvm' not in group_names"
+
     - name: Force disk sync inside VMs
       become: yes
       command: sync
       loop: "{{ groups['cluster_nodes'] | default([]) }}"
-
+      when: "'kvm' not in group_names"
     
