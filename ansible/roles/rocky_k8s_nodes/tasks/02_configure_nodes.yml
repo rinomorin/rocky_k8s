@@ -59,7 +59,7 @@
         label: "Scanning for network prefix: {{ item.0 }}"
       when: 
         - hostvars[cloud_node] != (groups['kvm'][0] | default('none'))
-        - hostvars[cloud_node] != (groups['helpers'][0] | default('none'))
+        - hostvars[cloud_node] not in groups['helpers']
         - item.0 != "0.0.0.0."    
 
     - name: Add Repos configurations
