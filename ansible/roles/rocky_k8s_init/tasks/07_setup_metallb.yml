@@ -45,7 +45,7 @@
   pause:
     seconds: 20
 
-- name: 7.4 - Configure MetalLB IP Pool and L2 Advertisement
+- name: 7.4 - Configure MetalLB Service + Maintenance Pools
   delegate_to: localhost
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
@@ -54,20 +54,38 @@
     apiVersion: metallb.io/v1beta1
     kind: IPAddressPool
     metadata:
-      name: first-pool
+      name: service-pool
       namespace: metallb-system
     spec:
       addresses:
-      - 10.0.0.200-10.0.0.200
+      - {{ backend_service_ip }}-{{ backend_service_ip }}
+    ---
+    apiVersion: metallb.io/v1beta1
+    kind: IPAddressPool
+    metadata:
+      name: maintenance-pool
+      namespace: metallb-system
+    spec:
+      addresses:
+      - {{ backend_maint_ip }}-{{ backend_maint_ip }}
     ---
     apiVersion: metallb.io/v1beta1
     kind: L2Advertisement
     metadata:
-      name: example-ad
+      name: service-ad
       namespace: metallb-system
     spec:
       ipAddressPools:
-      - first-pool
+      - service-pool
+    ---
+    apiVersion: metallb.io/v1beta1
+    kind: L2Advertisement
+    metadata:
+      name: maintenance-ad
+      namespace: metallb-system
+    spec:
+      ipAddressPools:
+      - maintenance-pool
     EOF
   register: apply_result
   until: apply_result.rc == 0
@@ -139,8 +157,7 @@
 - name: Submit CSR to FreeIPA
   delegate_to: "{{ ipa_master_fqdn }}"
   command: >
-    ipa cert-request /tmp/tls.csr
-      --principal=HTTP/api.{{ cloud_zone }}
+    ipa cert-request /tmp/tls.csr --principal=HTTP/api.{{ cloud_zone }}
   register: cert_request
   when: not tls_cert.stat.exists
   run_once: true
@@ -151,9 +168,19 @@
   when: not tls_cert.stat.exists
   run_once: true
 
-- name: Extract Request ID
+# - name: Extract Request ID
+#   set_fact:
+#     cert_request_id: "{{ cert_request.stdout | regex_search('Request ID: ([0-9]+)', '\\1') }}"
+#   when: not tls_cert.stat.exists
+#   run_once: true
+
+- name: Extract Request ID or Serial Number
   set_fact:
-    cert_request_id: "{{ cert_request.stdout | regex_search('Request ID: ([0-9]+)', '\\1') }}"
+    cert_request_id: >-
+      {{ 
+        (cert_request.stdout | regex_search('Request ID: ([0-9]+)', '\\1')) 
+        | default(cert_request.stdout | regex_search('Serial number: ([0-9]+)', '\\1'), true)
+      }}
   when: not tls_cert.stat.exists
   run_once: true
 
