@@ -1,6 +1,12 @@
 # - name: 1.3.4 - Set Lead Master Maintenance IP Fact
-    
-    # ============================================================
+- name: Run on cloud nodes (excluding primary KVM host)
+  when: 
+    - cloud_node != (groups['kvm'][0] | default('none'))
+    - cloud_node in groups['cloud_node']
+  block:
+    - name: processing task
+      ansible.builtin.debug:
+        msg: "Processing node: {{ cloud_node }}"    # ============================================================
     # PLAY 2 — Provision Golden Image (runs inside VM)
     # ============================================================
     # --------------------------------------------------------
