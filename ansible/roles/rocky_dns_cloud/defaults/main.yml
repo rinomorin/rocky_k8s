@@ -25,6 +25,7 @@ dns_helper_hostname_short: "{{ dns_helper_hostname.split('.')[0] }}"
 dns_helper_provider_ip: "{{ hostvars[dns_helper_host_key]['provider_ip'] }}"
 dns_helper_provision_ip: "{{ hostvars[dns_helper_host_key]['provision_ip'] }}"
 
+
 # Reverse DNS Logic
 dns_reverse_zone: "{{ dns_helper_provider_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa."
 dns_provision_rev_zone: "{{ dns_helper_provision_ip.split('.')[:3] | reverse | join('.') }}.in-addr.arpa."
