@@ -80,22 +80,26 @@
     # 1. Authenticate with FreeIPA Kerberos KDC
     echo "{{ ipa_admin_password }}" | kinit admin
 
-    # 2. Add the service principal if it does not already exist
-    ipa service-add HTTP/nginx.api.cloud.home.morinsoft.ca || true
+    # 2. Ensure the host object exists in the FreeIPA identity database
+    ipa host-add msrlv9mast01.cloud.home.morinsoft.ca --force || true
 
-    # 3. Generate a local key and a matching standard CSR
+    # 3. Link the HTTP service routing principal to the correct subdomain host profile
+    ipa service-add HTTP/nginx.api.cloud.home.morinsoft.ca --host=msrlv9mast01.cloud.home.morinsoft.ca || true
+
+    # 4. Generate a local key and a matching standard CSR
     openssl req -new -nodes -newkey rsa:2048 \
       -keyout /tmp/tls.key \
       -out /tmp/tls.csr \
       -subj "/CN=nginx.api.cloud.home.morinsoft.ca/O=Morinsoft" \
       -addext "subjectAltName = DNS:nginx.api.cloud.home.morinsoft.ca, DNS:*.api.cloud.home.morinsoft.ca"
 
-    # 4. Request the FreeIPA CA to sign the CSR using the service identity
+    # 5. Request the FreeIPA CA to sign the CSR using the linked identity track
     ipa cert-request /tmp/tls.csr \
       --principal=HTTP/nginx.api.cloud.home.morinsoft.ca \
       --certificate-out=/tmp/tls.crt
   args:
     executable: /bin/bash
+
 
 - name: 7.4c - Upload FreeIPA Signed TLS Secret to Kubernetes
   delegate_to: localhost
