@@ -41,6 +41,34 @@
   retries: 5
   delay: 15
 
+- name: 6.1.1.b - Register Service and Maintenance DNS Records in FreeIPA
+  shell: |
+    # 1. Authenticate with FreeIPA Kerberos KDC
+    echo "{{ ipa_admin_password }}" | kinit admin
+
+    # --- SERVICE NETWORK TRAFFIC (192.168.100.30) ---
+    # Base: api.cloud.home.morinsoft.ca
+    ipa dnsrecord-del cloud.home.morinsoft.ca api --del-all || true
+    ipa dnsrecord-add cloud.home.morinsoft.ca api --a-rec=192.168.100.30
+
+    # Wildcard: *.api.cloud.home.morinsoft.ca
+    ipa dnsrecord-del cloud.home.morinsoft.ca *.api --del-all || true
+    ipa dnsrecord-add cloud.home.morinsoft.ca *.api --a-rec=192.168.100.30
+
+
+    # --- MAINTENANCE TRAFFIC (192.168.100.29) ---
+    # Base: maint.cloud.home.morinsoft.ca
+    ipa dnsrecord-del cloud.home.morinsoft.ca maint --del-all || true
+    ipa dnsrecord-add cloud.home.morinsoft.ca maint --a-rec=192.168.100.29
+
+    # Wildcard: *.maint.cloud.home.morinsoft.ca
+    ipa dnsrecord-del cloud.home.morinsoft.ca *.maint --del-all || true
+    ipa dnsrecord-add cloud.home.morinsoft.ca *.maint --a-rec=192.168.100.29
+  run_once: true
+  delegate_to: localhost
+  # args:
+  #   executable: /bin/bash
+
 - name: 6.1.2 - Ingress Deployment Summary & Next Steps
   run_once: true
   delegate_to: localhost
@@ -49,7 +77,7 @@
       - "---------------------------------------------------------------"
       - "STAGE 1 COMPLETE: INGRESS CONTROLLER & METALLB ONLINE"
       - "---------------------------------------------------------------"
-      - "Web Access: http://nginx.{{ cloud_zone }}"
+      - "Web Access: http://nginx.api.{{ cloud_zone }}"
       - "(Note: HTTPS is not yet implemented)"
       - ""
       - "VERIFICATION STEPS:"

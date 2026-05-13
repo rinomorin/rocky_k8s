@@ -30,8 +30,9 @@ vrrp_instance VI_1 {
 
     virtual_ipaddress {
         {{ k8s_api_vip }} dev {{ hostvars[lb_node].provider_interface | default('enp3s0') }}
+        {{ k8s_maint_vip }} dev {{ hostvars[lb_node].provider_interface | default('enp3s0') }}
     }
-
+    
     track_script {
         check_haproxy
     }
