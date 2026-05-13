@@ -93,14 +93,24 @@
     ipa_ip: "{{ hostvars[ipa_master_fqdn.split('.')[0]]['ansible_host'] }}"
   shell: |
     # Generate local private key and Certificate Signing Request (CSR)
-    openssl req -new -nodes -newkey rsa:2048 \
+    openssl req -new -nodes -newkey rsa:4096 \
       -keyout /tmp/tls.key \
       -out /tmp/tls.csr \
       -subj "/CN=nginx.api.{{ cloud_zone }}/O={{ lookup('env','ACCOUNT') | default('Morinsoft') }}" \
       -addext "subjectAltName = DNS:nginx.api.{{ cloud_zone }}, DNS:*.api.{{ cloud_zone }}"
 
-    # Push only the CSR out to the FreeIPA instance for validation signing
-    scp -o StrictHostKeyChecking=no /tmp/tls.csr {{ ipa_ip }}:/tmp/tls.csr
+    chmod 644 /tmp/tls.csr
+  run_once: true
+
+- name: 7.4.3.2 - Push CSR to IPA Master
+  # We use the copy module which is much more reliable than shell scp
+  ansible.builtin.copy:
+    src: /tmp/tls.csr
+    dest: /tmp/tls.csr
+    owner: root
+    group: root
+    mode: '0644'
+  delegate_to: "{{ ipa_master_fqdn }}"
   run_once: true
 
 - name: 7.4.4 - Execute FreeIPA CA Certificate Sign Request

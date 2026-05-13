@@ -1,0 +1,76 @@
+- name: Calculate Chrony Specific Facts
+  set_fact:
+    chrony_provider_ip: "{{ hostvars[groups['ipa'][0]]['ansible_host'] }}"
+    chrony_provision_ip: "{{ hostvars[groups['helpers'][0]]['provision_ip'] | default('') }}"
+    chrony_provider_subnet: "{{ hostvars[groups['ipa'][0]]['ansible_host'].split('.')[:3] | join('.') }}.0/24"
+    chrony_provision_subnet: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | join('.') ~ '.0/24' if hostvars[inventory_hostname]['provision_ip'] is defined else '' }}"
+
+- name: Update Chrony Sources via sed Anchor
+  shell: |
+    # 1. CLEANUP: Remove vendor-provided pool/server lines
+    sed -i '/^pool /d' /etc/chrony.conf
+    sed -i '/^server /d' /etc/chrony.conf
+
+    # 2. ANCHOR LOGIC
+    {% set anchor = '# Please consider joining the pool (https://www.pool.ntp.org/join.html).' %}
+
+    {% if inventory_hostname == groups['ipa'][0] %}
+    # Primary IPA: Append external pools and allow provider subnet
+    sed -i '/{{ anchor | regex_escape }}/a pool 0.ca.pool.ntp.org iburst\npool 1.ca.pool.ntp.org iburst' /etc/chrony.conf
+    sed -i 's|^#allow.*|allow {{ chrony_provider_subnet }}|' /etc/chrony.conf
+
+    {% else %}
+    # FOR ALL OTHER NODES:
+
+    # Add Provider Source (Primary IPA) if provider_ip exists
+    {% if hostvars[inventory_hostname]['provider_ip'] is defined %}
+    sed -i '/{{ anchor | regex_escape }}/a server {{ chrony_provider_ip }} iburst' /etc/chrony.conf
+    {% endif %}
+
+    # Add Provision Source (Helper) if provision_ip exists and we aren't the helper
+    {% if hostvars[inventory_hostname]['provision_ip'] is defined and inventory_hostname not in groups['helpers'] %}
+    # Check if we already inserted the provider server to maintain order
+    if grep -q "server {{ chrony_provider_ip }}" /etc/chrony.conf; then
+      sed -i '/server {{ chrony_provider_ip }}/a server {{ chrony_provision_ip }} iburst' /etc/chrony.conf
+    else
+      sed -i '/{{ anchor | regex_escape }}/a server {{ chrony_provision_ip }} iburst' /etc/chrony.conf
+    fi
+    {% endif %}
+
+    # For Helper: update allow rule for the provision network
+    {% if inventory_hostname in groups['helpers'] %}
+    sed -i 's|^#allow.*|allow {{ chrony_provision_subnet }}|' /etc/chrony.conf
+    {% endif %}
+    {% endif %}
+  notify: Restart Chrony
+
+- name: Open Firewall for NTP Service
+  ansible.posix.firewalld:
+    service: ntp
+    permanent: yes
+    state: enabled
+    immediate: yes
+  when: >
+    inventory_hostname == groups['ipa'][0] or 
+    inventory_hostname in groups['helpers']
+
+- name: Open Firewall for NTP (UDP 123)
+  ansible.posix.firewalld:
+    port: 123/udp
+    permanent: yes
+    state: enabled
+    immediate: yes
+  when: >
+    inventory_hostname == groups['ipa'][0] or 
+    inventory_hostname in groups['helpers']
+    
+- name: Ensure Chrony is Started and Enabled
+  service:
+    name: chronyd
+    state: restarted
+    enabled: yes
+
+- name: Sync disk to persist golden image state
+  command: sync
+  changed_when: false
+

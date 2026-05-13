@@ -1,3 +1,9 @@
 - name: "Reboot for FIPS"
   reboot:
     msg: "Rebooting to enable FIPS mode for IPA compatibility"
+
+- name: Restart Chrony
+  service:
+    name: chronyd
+    state: restarted
+    enabled: yes

@@ -32,6 +32,9 @@
 
 # - name: Update Member network connectivity
 #   import_tasks: 03_Config_guest.yml
+- name: set chrony
+  include_task: set_chrony.yml
+  
 - name: post initialise fips
   vars:
     pro_seg: "{{ net_provider }}"

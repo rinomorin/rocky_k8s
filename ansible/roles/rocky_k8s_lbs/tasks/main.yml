@@ -22,6 +22,7 @@
 
   # 02: Install services and push HA configurations
   - import_tasks: 02_configure_lbs.yml
+  - impart_task: set_chrony.yml
 
   # 03: Final Test 
   - import_tasks: 03_final_test.yml
