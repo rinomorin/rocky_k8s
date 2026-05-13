@@ -118,7 +118,7 @@
   run_once: true
 
 - debug:
-    msg: "{{ cloud_zone }} "
+    msg: "{{ cloud_zone }} at {{ ipa_master_fqdn }}"
 
 
 - name: Check if certificate already exists
@@ -127,16 +127,19 @@
   register: tls_cert
 
 - name: Ensure host exists
+  delegate_to: "{{ ipa_master_fqdn }}"
   command: ipa host-add nginx.api.{{ cloud_zone }}
   ignore_errors: yes
   when: not tls_cert.stat.exists
 
 - name: Ensure service principal exists
+  delegate_to: "{{ ipa_master_fqdn }}"
   command: ipa service-add HTTP/nginx.api.{{ cloud_zone }}
   ignore_errors: yes
   when: not tls_cert.stat.exists
 
 - name: Submit CSR to FreeIPA
+  delegate_to: "{{ ipa_master_fqdn }}"
   command: >
     ipa cert-request /tmp/tls.csr
       --principal=HTTP/nginx.api.{{ cloud_zone }}
@@ -149,11 +152,10 @@
   when: not tls_cert.stat.exists
 
 - name: Retrieve signed certificate
+  delegate_to: "{{ ipa_master_fqdn }}"
   command: >
     ipa cert-show {{ cert_request_id }} --certificate-out=/tmp/tls.crt
   when: not tls_cert.stat.exists
-
-
 
 - name: 7.4c - Upload FreeIPA Signed TLS Secret to Kubernetes Cluster
   delegate_to: localhost
