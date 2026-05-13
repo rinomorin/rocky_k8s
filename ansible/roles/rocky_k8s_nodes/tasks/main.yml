@@ -19,9 +19,6 @@
   set_fact:
     id_rsa_pub_content_decoded: "{{ id_rsa_pub_content.content | b64decode }}"
 
-- name: set chrony
-  import_tasks: set_chrony.yml
-
 - name: Kubernetes Node Provisioning Block
   block:
     # - import_tasks: 00_dns_register.yml
@@ -33,5 +30,7 @@
       loop: "{{ groups['cluster_nodes'] }}"
       loop_control:
         loop_var: cloud_node
-
+    
+    - name: set chrony
+      import_tasks: set_chrony.
   when: not skip_build | bool
