@@ -32,4 +32,3 @@
         loop_var: cloud_node
 
   when: not skip_build | bool
-

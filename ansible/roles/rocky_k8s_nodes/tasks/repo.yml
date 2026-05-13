@@ -9,7 +9,6 @@
   delegate_to: "{{ hostvars[cloud_node]['provision_ip'] | default('127.0.0.1') }}"
   vars:
     ansible_user: "{{ hostvars[cloud_node]['ansible_user'] | default('core') }}"
-  when: "'kvm' not in group_names"
   block:
     - name: set hostname
       become: yes
