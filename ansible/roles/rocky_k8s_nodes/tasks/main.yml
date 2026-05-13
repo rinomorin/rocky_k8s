@@ -32,5 +32,5 @@
         loop_var: cloud_node
     
     - name: set chrony
-      import_tasks: set_chrony.
+      import_tasks: set_chrony.yml
   when: not skip_build | bool
