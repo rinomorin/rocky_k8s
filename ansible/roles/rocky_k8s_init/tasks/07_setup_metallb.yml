@@ -98,6 +98,9 @@
     ipa cert-request /tmp/tls.csr \
       --principal=HTTP/nginx.api.cloud.home.morinsoft.ca \
       --certificate-out=/tmp/tls.crt
+
+    # set permissions
+    chmod 644 /tmp/tls.crt /tmp/tls.key
   # args:
   #   executable: /bin/bash
 
