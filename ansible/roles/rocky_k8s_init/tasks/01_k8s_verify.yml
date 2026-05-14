@@ -2,7 +2,7 @@
 - name: 1.1 - Verify Unique Identity
   assert:
     that:
-      - ansible_machine_id != hostvars[groups['control_nodes'][1]]['ansible_machine_id']
+      - ansible_facts['machine_id'] != hostvars[groups['control_nodes'][1]]['ansible_facts']['machine_id']
     fail_msg: "CRITICAL: Nodes share the same machine-id! Sysprep failed."
   when: inventory_hostname == groups['control_nodes'][0]
 

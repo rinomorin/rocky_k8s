@@ -102,7 +102,6 @@
 
 - name: 7.4.1 - Login to FreeIPA Master Node
   delegate_to: localhost
-  become: yes
   ansible.builtin.shell: echo "{{ ipa_admin_password }}" | kinit admin
   run_once: true
   changed_when: false
@@ -183,6 +182,16 @@
     var: cert_request.stdout
   when: not tls_cert.stat.exists
   run_once: true
+
+- name: get Serial number
+  ansible.builtin.shell: |
+    echo "{{ cert_request.stdout }}" | grep -i "Serial number:" | awk -F': ' '{print $2}'
+  register: serno
+  changed_when: false
+
+- name: Show Serial Number
+  ansible.builtin.debug:
+    msg: "The Serial Number is: {{ serno.stdout }}"
 
 # - name: Extract Request ID
 #   set_fact:
