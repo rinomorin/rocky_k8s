@@ -3,7 +3,9 @@ driftfile /var/lib/chrony/drift
 makestep 1.0 3
 
 # Sync with the public-facing IPA host
-server {{ ipa_master_host }} iburst
+{% for host in groups['ipa'] %}
+server {{ hostvars[host]['ansible_host'] }} iburst
+{% endfor %}
 
 # Allow the private provisioning zone
 allow {{ helper_zone_cidr }}
