@@ -5,10 +5,6 @@ makestep 1.0 3
 {% set ipa_zone = '192.168.100.0/24' %}
 {% set helper_zone = '10.0.0.0/24' %}
 
-###############################################################################
-# SERVER SELECTION LOGIC
-###############################################################################
-
 {# 1: Skip if this host is already a master/helper #}
 {% if 'ipa' not in group_names and 'helpers' not in group_names %}
 

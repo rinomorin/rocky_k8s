@@ -1,5 +1,6 @@
 ---
 - name: Restart chrony
+  become: yes
   ansible.builtin.service:
     name: chronyd
     state: restarted
