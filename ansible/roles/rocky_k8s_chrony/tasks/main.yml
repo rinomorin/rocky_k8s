@@ -16,7 +16,8 @@
     dest: /etc/localtime
     state: link
     force: yes  # Overwrites the existing /etc/localtime
-    
+  when: inventory_hostname not in groups['win_worker_nodes']
+
 - name: Configure Primary IPA Master
   become: yes
   ansible.builtin.template:
