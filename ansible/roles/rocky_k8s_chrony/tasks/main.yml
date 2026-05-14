@@ -53,3 +53,4 @@
     name: chronyd
     state: started
     enabled: yes
+  when: inventory_hostname not in groups('win_worker_nodes')
