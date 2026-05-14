@@ -1,0 +1,11 @@
+---
+# Split the environment variable into a list
+primary_pools: "{{ lookup('env', 'my_ntp_pool').split(',') }}"
+
+# Get the source IPs for reference
+ipa_master_host: "{{ hostvars[groups['ipa'][0]]['ansible_host'] }}"
+helper_prov_ip: "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
+
+# Generate CIDRs by taking the first 3 octets
+ipa_zone_cidr: "{{ ipa_master_host.split('.')[:3] | join('.') }}.0/24"
+helper_zone_cidr: "{{ helper_prov_ip.split('.')[:3] | join('.') }}.0/24"
