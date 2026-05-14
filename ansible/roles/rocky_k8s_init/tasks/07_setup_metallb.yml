@@ -50,8 +50,8 @@
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
   shell: |
-    cat <<EOF | kubectl apply --validate=false -f -
-    apiVersion: metallb.universe.tf/v1beta1
+    cat <<EOF | kubectl apply -f -
+    apiVersion: metallb.io/v1beta1
     kind: IPAddressPool
     metadata:
       name: service-pool
@@ -60,7 +60,7 @@
       addresses:
       - 10.0.0.200-10.0.0.210
     ---
-    apiVersion: metallb.universe.tf/v1beta1
+    apiVersion: metallb.io/v1beta1
     kind: IPAddressPool
     metadata:
       name: maintenance-pool
@@ -69,14 +69,22 @@
       addresses:
       - 10.0.0.221-10.0.0.231
     ---
-    apiVersion: metallb.universe.tf/v1beta1
+    apiVersion: metallb.io/v1beta1
     kind: L2Advertisement
     metadata:
-      name: l2-adv
+      name: service-ad
       namespace: metallb-system
     spec:
       ipAddressPools:
       - service-pool
+    ---
+    apiVersion: metallb.io/v1beta1
+    kind: L2Advertisement
+    metadata:
+      name: maintenance-ad
+      namespace: metallb-system
+    spec:
+      ipAddressPools:
       - maintenance-pool
     EOF
   register: apply_result
