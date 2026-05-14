@@ -67,6 +67,17 @@
   delegate_to: localhost
   # args:
   #   executable: /bin/bash
+- name: 6.1.1.c - Force Static NodePorts for Ingress Controller
+  run_once: true
+  delegate_to: msrlv9mast01
+  become: false
+  environment:
+    KUBECONFIG: "/home/core/.kube/config"
+  ansible.builtin.shell: |
+    kubectl patch svc ingress-nginx-controller -n ingress-nginx --type='json' -p='[
+      {"op": "replace", "path": "/spec/ports/0/nodePort", "value": 30080},
+      {"op": "replace", "path": "/spec/ports/1/nodePort", "value": 30443}
+    ]'
 
 - name: 6.1.2 - Ingress Deployment Summary & Next Steps
   run_once: true

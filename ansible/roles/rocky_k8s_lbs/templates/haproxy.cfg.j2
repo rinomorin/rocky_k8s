@@ -37,7 +37,6 @@ frontend k8s-ingress-https
 backend k8s-ingress-backend-https
     mode tcp
     balance roundrobin
-    # Directly targeting Master NodePorts to bypass MetalLB VIP issues
     {% for host in groups['control_nodes'] %}
     server {{ host }} {{ hostvars[host].provision_ip }}:30443 check
     {% endfor %}
@@ -51,12 +50,12 @@ frontend k8s-ingress-http
 backend k8s-ingress-backend-http
     mode tcp
     balance roundrobin
-    # Directly targeting Master NodePorts to bypass MetalLB VIP issues
     {% for host in groups['control_nodes'] %}
     server {{ host }} {{ hostvars[host].provision_ip }}:30080 check
     {% endfor %}
 
-# --- MAINTENANCE TRAFFIC ROUTING ---
+# --- MAINTENANCE TRAFFIC (API - 5443) ---
+# This is our dedicated "Control Center" API entrance
 frontend k8s_maint_front
     bind {{ k8s_maint_vip }}:5443
     mode tcp
@@ -65,10 +64,10 @@ frontend k8s_maint_front
 backend k8s_maint_back
     mode tcp
     balance roundrobin
-    # Routes only to your maintenance backend IP
-    server master_maint {{ backend_maint_ip }}:5443 check
+    server master_maint {{ backend_maint_ip }}:6443 check
 
-# --- MAINTENANCE HTTP TRAFFIC ---
+# --- MAINTENANCE HTTP TRAFFIC (Port 80) ---
+# Routes the Maintenance VIP (192.168.100.29) to the Dashboard/Ingress
 frontend k8s-maint-http
     bind {{ k8s_maint_vip }}:80
     mode tcp
@@ -77,7 +76,9 @@ frontend k8s-maint-http
 backend k8s-maint-backend-http
     mode tcp
     balance roundrobin
-    # Maintenance routes directly to the maintenance backend
-    server master_maint {{ backend_maint_ip }}:30180 check
+    # Pointing to the secure Ingress NodePort for the Management UI
+    {% for host in groups['control_nodes'] %}
+    server {{ host }} {{ hostvars[host].provision_ip }}:30443 check
+    {% endfor %}
 
-# MANDATORY EMPTY LINE BELOW
+# MANDATORY EMPTY LINE BELOW - DO NOT DELETE

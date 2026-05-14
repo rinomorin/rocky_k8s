@@ -41,6 +41,13 @@
   roles:
     - role: rocky_k8s_nodes
 
+- name: Set Chrony and Timezone 
+  gather_facts: false
+  hosts: all:!kvm
+  become: false
+  roles:
+    - role: rocky_k8s_chrony
+
 # # 5. Initialize Kubernetes Cluster
 - name: Initialize Kubernetes Cluster
   hosts: cluster_nodes:!helpers
