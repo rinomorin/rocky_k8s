@@ -93,9 +93,16 @@
   delay: 15
 
 # ---------- FreeIPA + TLS for single hostname: api.<cloud_zone> ----------
+- name: who running 
+  shell: |
+    whoami
+  register: whoami_check
+- debug:
+    msg: "{{ whoami_check }}"
 
 - name: 7.4.1 - Login to FreeIPA Master Node
   delegate_to: localhost
+  become: yes
   ansible.builtin.shell: echo "{{ ipa_admin_password }}" | kinit admin
   run_once: true
   changed_when: false
@@ -147,6 +154,9 @@
   delegate_to: localhost
   command: ipa host-add api.{{ cloud_zone }}
   ignore_errors: yes
+  register: host_rc
+  failed_when:
+    - "'already exists' not in host_rc.stderr"  
   when: not tls_cert.stat.exists
   run_once: true
 
@@ -154,6 +164,9 @@
   delegate_to: localhost
   command: ipa service-add HTTP/api.{{ cloud_zone }}
   ignore_errors: yes
+    register: host_rc2
+  failed_when:
+    - "'already exists' not in host_rc2.stderr"  
   when: not tls_cert.stat.exists
   run_once: true
 
@@ -181,8 +194,9 @@
   set_fact:
     cert_request_id: >-
       {{ 
-        (cert_request.stdout | regex_search('Request ID: ([0-9]+)', '\\1')) 
-        | default(cert_request.stdout | regex_search('Serial number: ([0-9]+)', '\\1'), true)
+        (cert_request.stdout | regex_findall('Request ID: ([0-9]+)') | first)
+        | default(cert_request.stdout | regex_findall('Serial number: ([0-9]+)') | first, true)
+        | default('NOT_FOUND')
       }}
   when: not tls_cert.stat.exists
   run_once: true
