@@ -9,6 +9,11 @@
       - "ipa_zone_cidr: {{ ipa_master_host.split('.')[:3] | join('.') }}.0/24"
       - "helper_zone_cidr: {{ helper_prov_ip.split('.')[:3] | join('.') }}.0/24"
 
+- name: Set system timezone to America/Toronto
+  become: yes
+  community.general.timezone:
+    name: "{{ mytime_zone }}"
+
 - name: Configure Primary IPA Master
   become: yes
   ansible.builtin.template:

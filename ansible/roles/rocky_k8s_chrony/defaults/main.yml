@@ -9,3 +9,4 @@ helper_prov_ip: "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
 # Generate CIDRs by taking the first 3 octets
 ipa_zone_cidr: "{{ ipa_master_host.split('.')[:3] | join('.') }}.0/24"
 helper_zone_cidr: "{{ helper_prov_ip.split('.')[:3] | join('.') }}.0/24"
+mytime_zone: "{{ lookup('env', 'mytime_zone')| default('America/Toronto')}}"
