@@ -55,7 +55,6 @@ backend k8s-ingress-backend-http
     {% endfor %}
 
 # --- MAINTENANCE TRAFFIC (API - 5443) ---
-# This is our dedicated "Control Center" API entrance
 frontend k8s_maint_front
     bind {{ k8s_maint_vip }}:5443
     mode tcp
@@ -67,7 +66,6 @@ backend k8s_maint_back
     server master_maint {{ backend_maint_ip }}:6443 check
 
 # --- MAINTENANCE HTTP TRAFFIC (Port 80) ---
-# Routes the Maintenance VIP (192.168.100.29) to the Dashboard/Ingress
 frontend k8s-maint-http
     bind {{ k8s_maint_vip }}:80
     mode tcp
@@ -76,9 +74,8 @@ frontend k8s-maint-http
 backend k8s-maint-backend-http
     mode tcp
     balance roundrobin
-    # Pointing to the secure Ingress NodePort for the Management UI
     {% for host in groups['control_nodes'] %}
     server {{ host }} {{ hostvars[host].provision_ip }}:30443 check
     {% endfor %}
 
-# MANDATORY EMPTY LINE BELOW - DO NOT DELETE
+# THE LINE BELOW IS THE FIX FOR THE "MISSING LF" ERROR - DO NOT DELETE IT
