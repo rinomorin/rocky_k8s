@@ -14,14 +14,14 @@ makestep 1.0 3
 
   {# 2 & 3: Add sources based on reachable zone #}
   {% if has_ipa_access %}
-    # Node is in 192.x zone - Pointing to IPA Masters
+    {# Node is in 192.x zone - Pointing to IPA Masters #} 
     {% for host in groups['ipa'] %}
       {# Pull the 192.x address from the IPA host #}
 server {{ hostvars[host]['ansible_host'] }} iburst
     {% endfor %}
 
   {% elif has_helper_access %}
-    # Node is in 10.x zone - Pointing to Helper
+    {# Node is in 10.x zone - Pointing to Helper #}
     {% for host in groups['helpers'] %}
       {# Pull the 10.x (provision_ip) from the Helper host #}
 server {{ hostvars[host]['provision_ip'] }} iburst
