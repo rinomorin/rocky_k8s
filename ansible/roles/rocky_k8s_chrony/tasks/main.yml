@@ -43,8 +43,8 @@
     src: chrony_generic.conf.j2
     dest: /etc/chrony.conf
   when: 
-    - inventory_hostname not in groups['helpers'][0]
-    - inventory_hostname not in groups['ipa'][0]
+    - inventory_hostname not in groups['helpers']
+    - inventory_hostname not in groups['ipa']
     - inventory_hostname not in groups['win_worker_nodes']
   notify: Restart chrony
 
