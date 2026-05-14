@@ -1,15 +1,9 @@
-# Helper syncs with our own internal IPA Masters
-# This loops through our 'ntp' inventory group dynamically
-{% for host in groups['ntp'] %}
-server {{ hostvars[host]['ansible_host'] }} iburst
-{% endfor %}
-
+# Helper Configuration for acme
 driftfile /var/lib/chrony/drift
 makestep 1.0 3
-rtcsync
 
-# We allow the Windows workers on the 10.0.0.0/24 subnet to query us
-allow 10.0.0.0/24
+# Sync with the public-facing IPA host
+server {{ ipa_master_host }} iburst
 
-# Fallback if the IPA masters are unreachable
-local stratum 11
+# Allow the private provisioning zone
+allow {{ helper_zone_cidr }}

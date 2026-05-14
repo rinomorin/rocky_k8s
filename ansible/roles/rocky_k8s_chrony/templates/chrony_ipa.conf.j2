@@ -1,0 +1,11 @@
+# Primary IPA Configuration for acme
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+
+# Add pools one at a time from the split list
+{% for pool in primary_pools %}
+pool {{ pool }} iburst
+{% endfor %}
+
+# Allow the IPA network zone
+allow {{ ipa_zone_cidr }}

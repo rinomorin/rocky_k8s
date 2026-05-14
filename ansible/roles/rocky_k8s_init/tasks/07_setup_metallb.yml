@@ -95,13 +95,13 @@
 # ---------- FreeIPA + TLS for single hostname: api.<cloud_zone> ----------
 
 - name: 7.4.1 - Login to FreeIPA Master Node
-  delegate_to: "{{ ipa_master_fqdn }}"
+  delegate_to: localhost
   ansible.builtin.shell: echo "{{ ipa_admin_password }}" | kinit admin
   run_once: true
   changed_when: false
 
 - name: 7.4.2 - Ensure HTTP Service Principal exists on FreeIPA Master
-  delegate_to: "{{ ipa_master_fqdn }}"
+  delegate_to: localhost
   ansible.builtin.shell: "ipa service-add HTTP/api.{{ cloud_zone }} || true"
   run_once: true
   changed_when: false
@@ -137,28 +137,28 @@
   run_once: true
 
 - name: Check if certificate already exists on IPA master
-  delegate_to: "{{ ipa_master_fqdn }}"
+  delegate_to: localhost
   stat:
     path: /tmp/tls.crt
   register: tls_cert
   run_once: true
 
 - name: Ensure host exists for api.<cloud_zone>
-  delegate_to: "{{ ipa_master_fqdn }}"
+  delegate_to: localhost
   command: ipa host-add api.{{ cloud_zone }}
   ignore_errors: yes
   when: not tls_cert.stat.exists
   run_once: true
 
 - name: Ensure service principal exists for api.<cloud_zone>
-  delegate_to: "{{ ipa_master_fqdn }}"
+  delegate_to: localhost
   command: ipa service-add HTTP/api.{{ cloud_zone }}
   ignore_errors: yes
   when: not tls_cert.stat.exists
   run_once: true
 
 - name: Submit CSR to FreeIPA
-  delegate_to: "{{ ipa_master_fqdn }}"
+  delegate_to: localhost
   command: >
     ipa cert-request /tmp/tls.csr --principal=HTTP/api.{{ cloud_zone }}
   register: cert_request
@@ -188,19 +188,19 @@
   run_once: true
 
 - name: Retrieve signed certificate
-  delegate_to: "{{ ipa_master_fqdn }}"
+  delegate_to: localhost
   command: >
     ipa cert-show {{ cert_request_id }} --certificate-out=/tmp/tls.crt
   when: not tls_cert.stat.exists
   run_once: true
 
-- name: Copy signed certificate from IPA master to localhost
-  ansible.builtin.fetch:
-    src: /tmp/tls.crt
-    dest: /tmp/tls.crt
-    flat: yes
-  delegate_to: "{{ ipa_master_fqdn }}"
-  run_once: true
+# - name: Copy signed certificate from IPA master to localhost
+#   ansible.builtin.fetch:
+#     src: /tmp/tls.crt
+#     dest: /tmp/tls.crt
+#     flat: yes
+#   delegate_to: "{{ ipa_master_fqdn }}"
+#   run_once: true
 
 - name: 7.4c - Upload FreeIPA Signed TLS Secret to Kubernetes Cluster
   delegate_to: localhost

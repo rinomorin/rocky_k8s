@@ -1,86 +1,27 @@
-- name: Configure Chrony via Pure Shell
-  become: yes
-  environment:
-    PROVIDER_IP: "{{ hostvars[groups['ipa'][0]]['ansible_host'] }}"
-    PROVISION_IP: "{{ hostvars[groups['helpers'][0]]['provision_ip'] | default('') }}"
-    PROVIDER_SUBNET: "{{ hostvars[groups['ipa'][0]]['ansible_host'].split('.')[:3] | join('.') }}.0/24"
-    MY_PROVISION_IP: "{{ hostvars[inventory_hostname]['provision_ip'] | default('') }}"
-    MY_PROVIDER_IP: "{{ hostvars[inventory_hostname]['provider_ip'] | default('') }}"
-    IS_IPA01: "{{ 'true' if inventory_hostname == groups['ipa'][0] else 'false' }}"
-    IS_HELPER: "{{ 'true' if inventory_hostname in groups['helpers'] else 'false' }}"
-  
-  ansible.builtin.shell: |
-    # Use a partial match for the anchor to be safe
-    ANCHOR="pool.ntp.org/join.html"
-    CONF='/etc/chrony.conf'
+---
+# TASK 1: Only run on the Primary IPA Node
+- name: Configure Primary IPA Master
+  ansible.builtin.template:
+    src: chrony_ipa.conf.j2
+    dest: /etc/chrony.conf
+  when: inventory_hostname == groups['ipa'][0]
+  notify: Restart chrony
 
-    # 1. CLEANUP: Force removal of any existing pool or server lines
-    # We use a broad match to ensure rocky.pool.ntp.org is gone
-    sed -i '/^pool /d' "$CONF"
-    sed -i '/^server /d' "$CONF"
+# TASK 2: Only run on the Primary Helper Node
+- name: Configure Primary Helper
+  ansible.builtin.template:
+    src: chrony_helper.conf.j2
+    dest: /etc/chrony.conf
+  when: inventory_hostname == groups['helpers'][0]
+  notify: Restart chrony
 
-    # 2. PRIMARY IPA LOGIC
-    if [ "$IS_IPA01" = "true" ]; then
-        sed -i "/$ANCHOR/a pool 0.ca.pool.ntp.org iburst\npool 1.ca.pool.ntp.org iburst" "$CONF"
-        sed -i "s|^#allow 192.168.0.0/16|allow $PROVIDER_SUBNET|" "$CONF"
-        exit 0
-    fi
-
-    # 3. PROVIDER NETWORK (192.x)
-    if [ -n "$MY_PROVIDER_IP" ]; then
-        # Append immediately after the anchor comment
-        sed -i "/$ANCHOR/a server $PROVIDER_IP iburst" "$CONF"
-    fi
-
-    # 4. PROVISION NETWORK (10.x)
-    if [ -n "$MY_PROVISION_IP" ] && [ "$IS_HELPER" = "false" ]; then
-        # If we added the 192 server, append after it. Otherwise, after anchor.
-        if grep -q "server $PROVIDER_IP" "$CONF"; then
-            sed -i "/server $PROVIDER_IP/a server $PROVISION_IP iburst" "$CONF"
-        else
-            sed -i "/$ANCHOR/a server $PROVISION_IP iburst" "$CONF"
-        fi
-    fi
-
-    # 5. HELPER LOGIC
-    if [ "$IS_HELPER" = "true" ]; then
-        PROV_SUB=$(echo "$MY_PROVISION_IP" | cut -d. -f1-3).0/24
-        # Match the specific commented line from your cat output
-        sed -i "s|^#allow 192.168.0.0/16|allow $PROV_SUB|" "$CONF"
-        # Helper still needs to point to IPA for its 192 interface
-        if ! grep -q "$PROVIDER_IP" "$CONF"; then
-            sed -i "/$ANCHOR/a server $PROVIDER_IP iburst" "$CONF"
-        fi
-    fi
-  register: shell_output
-   
-- name: Open Firewall for NTP Service
-  ansible.posix.firewalld:
-    service: ntp
-    permanent: yes
-    state: enabled
-    immediate: yes
-  when: >
-    inventory_hostname == groups['ipa'][0] or 
-    inventory_hostname in groups['helpers']
-
-- name: Open Firewall for NTP (UDP 123)
-  ansible.posix.firewalld:
-    port: 123/udp
-    permanent: yes
-    state: enabled
-    immediate: yes
-  when: >
-    inventory_hostname == groups['ipa'][0] or 
-    inventory_hostname in groups['helpers']
-    
-- name: Ensure Chrony is Started and Enabled
-  service:
-    name: chronyd
-    state: restarted
-    enabled: yes
-
-- name: Sync disk to persist golden image state
-  command: sync
-  changed_when: false
-
+# TASK 3: Run on all infrastructure hosts (excluding the masters configured above)
+- name: Configure generic infrastructure hosts based on interface availability
+  ansible.builtin.template:
+    src: chrony_generic.conf.j2
+    dest: /etc/chrony.conf
+  when: 
+    - inventory_hostname in groups[chrony_group]
+    - inventory_hostname != groups['ipa'][0]
+    - inventory_hostname != groups['helpers'][0]
+  notify: Restart chrony
