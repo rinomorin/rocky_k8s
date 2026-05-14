@@ -4,7 +4,7 @@
     msg: "Processing {{ inventory_hostname }} using {{ ansible_user }}"
 
 - name: Configure Primary IPA Master
-  becomre: yes
+  become: yes
   ansible.builtin.template:
     src: chrony_ipa.conf.j2
     dest: /etc/chrony.conf
