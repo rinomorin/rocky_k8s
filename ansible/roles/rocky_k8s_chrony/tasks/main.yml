@@ -1,7 +1,13 @@
 ---
 # TASK 1: Only run on the Primary IPA Node
 - debug: 
-    msg: "Processing {{ inventory_hostname }} using {{ ansible_user }}"
+    msg: 
+      - "Processing {{ inventory_hostname }} using {{ ansible_user }}"
+      - "primary_pools: {{ lookup('env', 'my_ntp_pool').split(',') }}"
+      - "ipa_master_host: {{ hostvars[groups['ipa'][0]]['ansible_host'] }}"
+      - "helper_prov_ip: {{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
+      - "ipa_zone_cidr: {{ ipa_master_host.split('.')[:3] | join('.') }}.0/24"
+      - "helper_zone_cidr: {{ helper_prov_ip.split('.')[:3] | join('.') }}.0/24"
 
 - name: Configure Primary IPA Master
   become: yes
