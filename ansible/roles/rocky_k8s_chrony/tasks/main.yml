@@ -26,6 +26,16 @@
   when: inventory_hostname in  groups['helpers']
   notify: Restart chrony
 
+
+- name: Open NTP Port on IPA Masters
+  become: yes
+  ansible.posix.firewalld:
+    service: ntp
+    permanent: yes
+    state: enabled
+    immediate: yes
+  when: group_names | intersect(['ipa', 'helpers']) | length > 0
+
 # # TASK 3: Run on all infrastructure hosts (excluding the masters configured above)
 # - name: Configure generic infrastructure hosts based on interface availability
 #   ansible.builtin.template:
@@ -36,3 +46,10 @@
 #     - inventory_hostname != groups['ipa'][0]
 #     - inventory_hostname != groups['helpers'][0]
 #   notify: Restart chrony
+
+- name: Ensure Chrony is enabled and running
+  become: yes
+  ansible.builtin.service:
+    name: chronyd
+    state: started
+    enabled: yes
