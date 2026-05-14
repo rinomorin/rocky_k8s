@@ -1,7 +1,7 @@
 # STAGE 1b: Windows Infrastructure - AD Creation
 - name: "Stage 1b: Build Windows AD Forest"
   gather_facts: false
-  hosts: ALL:!kvm
+  hosts: all:!kvm
   become: false
   roles:
     - role: rocky_k8s_chrony
