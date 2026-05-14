@@ -1,5 +1,7 @@
 ---
 # TASK 1: Only run on the Primary IPA Node
+- debug: msg="Processing {{ inventory_hostname }} using "{{ ansible_user }}"
+
 - name: Configure Primary IPA Master
   ansible.builtin.template:
     src: chrony_ipa.conf.j2
@@ -7,21 +9,21 @@
   when: inventory_hostname == groups['ipa'][0]
   notify: Restart chrony
 
-# TASK 2: Only run on the Primary Helper Node
-- name: Configure Primary Helper
-  ansible.builtin.template:
-    src: chrony_helper.conf.j2
-    dest: /etc/chrony.conf
-  when: inventory_hostname == groups['helpers'][0]
-  notify: Restart chrony
+# # TASK 2: Only run on the Primary Helper Node
+# - name: Configure Primary Helper
+#   ansible.builtin.template:
+#     src: chrony_helper.conf.j2
+#     dest: /etc/chrony.conf
+#   when: inventory_hostname == groups['helpers'][0]
+#   notify: Restart chrony
 
-# TASK 3: Run on all infrastructure hosts (excluding the masters configured above)
-- name: Configure generic infrastructure hosts based on interface availability
-  ansible.builtin.template:
-    src: chrony_generic.conf.j2
-    dest: /etc/chrony.conf
-  when: 
-    - inventory_hostname in groups[chrony_group]
-    - inventory_hostname != groups['ipa'][0]
-    - inventory_hostname != groups['helpers'][0]
-  notify: Restart chrony
+# # TASK 3: Run on all infrastructure hosts (excluding the masters configured above)
+# - name: Configure generic infrastructure hosts based on interface availability
+#   ansible.builtin.template:
+#     src: chrony_generic.conf.j2
+#     dest: /etc/chrony.conf
+#   when: 
+#     - inventory_hostname in groups[chrony_group]
+#     - inventory_hostname != groups['ipa'][0]
+#     - inventory_hostname != groups['helpers'][0]
+#   notify: Restart chrony
