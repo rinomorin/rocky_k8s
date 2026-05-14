@@ -1,6 +1,7 @@
 ---
 # TASK 1: Only run on the Primary IPA Node
-- debug: msg="Processing {{ inventory_hostname }} using "{{ ansible_user }}"
+- debug: 
+    msg: "Processing {{ inventory_hostname }} using {{ ansible_user }}"
 
 - name: Configure Primary IPA Master
   ansible.builtin.template:
