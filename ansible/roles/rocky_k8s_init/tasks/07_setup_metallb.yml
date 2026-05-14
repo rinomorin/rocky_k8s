@@ -130,6 +130,7 @@
     owner: root
     group: root
     mode: '0644'
+    force: true
   delegate_to: "{{ ipa_master_fqdn }}"
   run_once: true
 

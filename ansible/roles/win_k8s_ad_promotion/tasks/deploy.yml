@@ -5,7 +5,7 @@
   vars:
     ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
   shell: |
-    virsh list --name --all | grep "gi-win" | head -n 1
+    virsh list --name --all | grep "^win" | head -n 1
   register: base_image_name
 
 - name: 1.2 - Create Linked Clone and Define Windows VM
