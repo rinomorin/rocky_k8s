@@ -288,9 +288,14 @@
       selector:
         app: nginx
       ports:
-        - protocol: TCP
+        - name: http
+          protocol: TCP
           port: 80
           targetPort: 80
+        - name: https      # <--- Add this section
+          protocol: TCP
+          port: 443
+          targetPort: 80   # Nginx pod listens on 80; Ingress/LB handles the SSL
       type: LoadBalancer
       loadBalancerIP: {{ metallb_vip }}
     ---
