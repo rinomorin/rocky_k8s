@@ -9,6 +9,7 @@
   when: inventory_hostname == groups['ipa'][0]
   notify: Restart chrony
 
+
 # # TASK 2: Only run on the Primary Helper Node
 # - name: Configure Primary Helper
 #   ansible.builtin.template:
