@@ -23,7 +23,7 @@
   ansible.builtin.template:
     src: chrony_helper.conf.j2
     dest: /etc/chrony.conf
-  when: inventory_hostname == groups['helpers']
+  when: inventory_hostname in  groups['helpers']
   notify: Restart chrony
 
 # # TASK 3: Run on all infrastructure hosts (excluding the masters configured above)
