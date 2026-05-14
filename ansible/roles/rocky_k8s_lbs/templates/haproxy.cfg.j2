@@ -37,11 +37,9 @@ frontend k8s-ingress-https
 backend k8s-ingress-backend-https
     mode tcp
     balance roundrobin
-    # Primary: Point to the MetalLB VIP (Part 1 Logic)
-    server metallb-vip {{ metallb_vip }}:443 check
-    # Secondary/Alternative: Point to NodePorts (Part 2 Logic) if preferred
+    # Directly targeting Master NodePorts to bypass MetalLB VIP issues
     {% for host in groups['control_nodes'] %}
-    # server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_https_nodeport | default('30443') }} check
+    server {{ host }} {{ hostvars[host].provision_ip }}:31794 check
     {% endfor %}
 
 # --- INGRESS TRAFFIC (HTTP - 80) ---
@@ -53,11 +51,9 @@ frontend k8s-ingress-http
 backend k8s-ingress-backend-http
     mode tcp
     balance roundrobin
-    # Primary: Point to the MetalLB VIP (Part 1 Logic)
-    server metallb-vip {{ metallb_vip }}:80 check
-    # Secondary/Alternative: Point to NodePorts (Part 2 Logic) if preferred
+    # Directly targeting Master NodePorts to bypass MetalLB VIP issues
     {% for host in groups['control_nodes'] %}
-    # server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_https_nodeport | default('30080') }} check
+    server {{ host }} {{ hostvars[host].provision_ip }}:31826 check
     {% endfor %}
 
 # --- MAINTENANCE TRAFFIC ROUTING ---
@@ -72,21 +68,16 @@ backend k8s_maint_back
     # Routes only to your maintenance backend IP
     server master_maint {{ backend_maint_ip }}:6443 check
 
-# --- INGRESS TRAFFIC (HTTP - 80) ---
+# --- MAINTENANCE HTTP TRAFFIC ---
 frontend k8s-maint-http
     bind {{ k8s_maint_vip }}:80
     mode tcp
-    default_backend k8s-ingress-backend-http
+    default_backend k8s-maint-backend-http
 
 backend k8s-maint-backend-http
     mode tcp
     balance roundrobin
-    # Primary: Point to the MetalLB VIP (Part 1 Logic)
-    server metallb-vip {{ backend_maint_ip }}:80 check
-    # Secondary/Alternative: Point to NodePorts (Part 2 Logic) if preferred
-    {% for host in groups['control_nodes'] %}
-    # server {{ host }} {{ hostvars[host].provision_ip }}:{{ ingress_https_nodeport | default('30080') }} check
-    {% endfor %}
+    # Maintenance routes directly to the maintenance backend
+    server master_maint {{ backend_maint_ip }}:31826 check
 
 # MANDATORY EMPTY LINE BELOW
-

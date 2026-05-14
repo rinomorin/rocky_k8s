@@ -41,6 +41,16 @@
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
 
+
+- name: 7.3 - Wait for MetalLB CRDs to be established
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  shell: |
+    kubectl wait --for condition=established --timeout=60s crd/ipaddresspools.metallb.io || \
+    kubectl wait --for condition=established --timeout=60s crd/ipaddresspools.metallb.universe.tf
+  register: crd_check
+  ignore_errors: yes
+
 - name: 7.2c - Give the API a moment to breathe again
   pause:
     seconds: 20
