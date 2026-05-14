@@ -19,8 +19,8 @@ makestep 1.0 3
       {# Pull the 192.x address from the IPA host #}
 server {{ hostvars[host]['ansible_host'] }} iburst
     {% endfor %}
-
-  {% elif has_helper_access %}
+  {% endif %}
+  {% if has_helper_access %}
     {# Node is in 10.x zone - Pointing to Helper #}
     {% for host in groups['helpers'] %}
       {# Pull the 10.x (provision_ip) from the Helper host #}
