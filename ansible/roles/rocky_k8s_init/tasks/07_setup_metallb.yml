@@ -193,22 +193,28 @@
   ansible.builtin.debug:
     msg: "The Serial Number is: {{ serno.stdout }}"
 
+- name: Extract Request ID or Serial Number
+  set_fact:
+    cert_request_id: "{{ serno.stdout }}"
+  when: not tls_cert.stat.exists
+  run_once: true
+
 # - name: Extract Request ID
 #   set_fact:
 #     cert_request_id: "{{ cert_request.stdout | regex_search('Request ID: ([0-9]+)', '\\1') }}"
 #   when: not tls_cert.stat.exists
 #   run_once: true
 
-- name: Extract Request ID or Serial Number
-  set_fact:
-    cert_request_id: >-
-      {{ 
-        (cert_request.stdout | regex_findall('Request ID: ([0-9]+)') | first)
-        | default(cert_request.stdout | regex_findall('Serial number: ([0-9]+)') | first, true)
-        | default('NOT_FOUND')
-      }}
-  when: not tls_cert.stat.exists
-  run_once: true
+# - name: Extract Request ID or Serial Number
+#   set_fact:
+#     cert_request_id: >-
+#       {{ 
+#         (cert_request.stdout | regex_findall('Request ID: ([0-9]+)') | first)
+#         | default(cert_request.stdout | regex_findall('Serial number: ([0-9]+)') | first, true)
+#         | default('NOT_FOUND')
+#       }}
+#   when: not tls_cert.stat.exists
+#   run_once: true
 
 - name: Retrieve signed certificate
   delegate_to: localhost
