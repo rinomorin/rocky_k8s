@@ -9,11 +9,14 @@
       - "ipa_zone_cidr: {{ ipa_master_host.split('.')[:3] | join('.') }}.0/24"
       - "helper_zone_cidr: {{ helper_prov_ip.split('.')[:3] | join('.') }}.0/24"
 
-- name: Set system timezone to America/Toronto
+- name: Set system timezone to America/Toronto via symlink
   become: yes
-  community.general.timezone:
-    name: "{{ mytime_zone }}"
-
+  ansible.builtin.file:
+    src: /usr/share/zoneinfo/America/Toronto
+    dest: /etc/localtime
+    state: link
+    force: yes  # Overwrites the existing /etc/localtime
+    
 - name: Configure Primary IPA Master
   become: yes
   ansible.builtin.template:
