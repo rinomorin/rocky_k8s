@@ -6,4 +6,3 @@
   roles:
     - role: rocky_k8s_chrony
   
-  
