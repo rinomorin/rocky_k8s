@@ -2,7 +2,7 @@
   delegate_to: localhost
   run_once: true
   environment:
-    KUBECONFIG: "/home/{{ hostvars[groups['helper'][0]]['ansible_user'] }}/.kube/config"
+    KUBECONFIG: "/home/{{ hostvars[groups['helpers'][0]]['ansible_user'] }}/.kube/config"
   ansible.builtin.shell: |
     kubectl get namespace ingress-nginx --no-headers
   register: ingress_ns_check
@@ -54,7 +54,6 @@
     # Wildcard: *.api.cloud.home.morinsoft.ca
     ipa dnsrecord-del cloud.home.morinsoft.ca *.api --del-all || true
     ipa dnsrecord-add cloud.home.morinsoft.ca *.api --a-rec=192.168.100.30
-
 
     # --- MAINTENANCE TRAFFIC (192.168.100.29) ---
     # Base: maint.cloud.home.morinsoft.ca
