@@ -164,7 +164,7 @@
   delegate_to: localhost
   command: ipa service-add HTTP/api.{{ cloud_zone }}
   ignore_errors: yes
-    register: host_rc2
+  register: host_rc2
   failed_when:
     - "'already exists' not in host_rc2.stderr"  
   when: not tls_cert.stat.exists
