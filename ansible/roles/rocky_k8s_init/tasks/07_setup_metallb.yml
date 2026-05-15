@@ -299,20 +299,22 @@
     kind: Ingress
     metadata:
       name: nginx-smoke-test-ingress
+      namespace: default
       annotations:
-        kubernetes.io/ingress.class: nginx
-        # Force SSL redirect if we want to ensure HTTPS
+        # Legacy support + new class field for maximum compatibility
+        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/ssl-redirect: "true"
     spec:
       ingressClassName: nginx
       tls:
       - hosts:
         - api.{{ cloud_zone }}
+        - nginx.api.{{ cloud_zone }}
         secretName: nginx-tls-secret
       rules:
       - host: api.{{ cloud_zone }}
         http:
-          paths:
+          paths: &nginx_paths
           - path: /
             pathType: Prefix
             backend:
@@ -320,4 +322,7 @@
                 name: nginx-lb
                 port:
                   number: 80
+      - host: nginx.api.{{ cloud_zone }}
+        http:
+          paths: *nginx_paths
     EOF
