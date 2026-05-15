@@ -1,4 +1,5 @@
 - name: Install all critical and security updates
+  Serial: 1
   ansible.windows.win_updates:
     category_names:
       - SecurityUpdates
