@@ -107,6 +107,94 @@
   delegate_to: localhost
   when: not skip_win_build
 
+- name: Give the OS a moment to breathe
+  pause:
+    seconds: 30
+
+# needs a reboot before able to log in
+- name: "Power On {{ inventory_hostname.split('.')[0] }}"
+  become: yes
+  delegate_to: "{{ kvm_ip }}"
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  shell: |
+    virsh destroy "{{ inventory_hostname.split('.')[0] }}"
+  register: stop_res
+  failed_when: 
+    - stop_res.rc != 0 
+    - "'domain is not running' not in start_res.stderr"
+  changed_when: 
+    - stop_res.rc == 0
+
+- name: Give the OS a moment to breathe
+  pause:
+    seconds: 10
+
+- name: "Power On {{ inventory_hostname.split('.')[0] }}"
+  become: yes
+  delegate_to: "{{ kvm_ip }}"
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  shell: |
+    virsh start "{{ inventory_hostname.split('.')[0] }}"
+  register: start_res
+  failed_when: 
+    - start_res.rc != 0 
+    - "'already active' not in start_res.stderr"
+  changed_when: 
+    - start_res.rc == 0
+
+- name: Fail if immutable commit command is missing
+  assert:
+    that:
+      - windows_commit_cmd | length > 0
+    fail_msg: >
+      windows_commit_cmd is not defined.
+      This system uses an immutable disk and WILL lose changes on reboot.
+
+# ------------------------------------------------------------
+# Discover maintenance NIC (br-nat) IP via KVM
+# ------------------------------------------------------------
+
+- name: Discover br-nat IP from KVM
+  delegate_to: "{{ kvm_ip }}"
+  become: yes
+  vars:
+    ansible_user: "{{ hostvars[groups['kvm'][0]]['ansible_user'] }}"
+  shell: |
+    # Get MAC for the specific bridge
+    M_MAC=$(virsh domiflist {{ inventory_hostname.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    
+    # Loop until the lease appears
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do 
+      sleep 5
+    done
+    
+    # Return just the IP
+    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+  register: br_nat_ip
+  changed_when: false
+
+- name: Fail if br-nat IP not found
+  assert:
+    that:
+      - br_nat_ip.stdout | length > 0
+    fail_msg: >
+      Unable to discover br-nat IP for {{ inventory_hostname }} from KVM.
+
+- debug:
+    msg: "br-nat IP: {{ br_nat_ip.stdout }}"
+
+- name: Wait for Windows SSH to be ready
+  wait_for:
+    host: "{{ br_nat_ip.stdout }}"
+    port: 22
+    delay: 10
+    timeout: 300
+    state: started
+  delegate_to: localhost
+  when: not skip_win_build
+
 # ------------------------------------------------------------
 # Connect via br-nat
 # ------------------------------------------------------------
