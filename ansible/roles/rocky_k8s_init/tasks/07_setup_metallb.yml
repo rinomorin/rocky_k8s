@@ -304,6 +304,7 @@
         # Force SSL redirect if we want to ensure HTTPS
         nginx.ingress.kubernetes.io/ssl-redirect: "true"
     spec:
+      ingressClassName: nginx
       tls:
       - hosts:
         - api.{{ cloud_zone }}
