@@ -50,15 +50,20 @@ if ($ExistingIP -and $ExistingGW) {
 # ==============================
 # 3. CLEANUP & PREP
 # ==============================
-Write-Host "Cleaning persistent routes and clearing existing IPs..."
-route -f  # Wipe persistent route table to remove ghost 10.0.0.1 gateways
+Write-Host "Forcing removal of persistent 10.0.0.1 route..."
 
-Enable-NetAdapter -Name $IfName -Confirm:$false
-Set-NetIPInterface -InterfaceIndex $IfIndex -AddressFamily IPv4 -Dhcp Disabled
+# 1. Kill the 'bad' persistent route
+route delete 0.0.0.0 mask 0.0.0.0 10.0.0.1 -p
 
-# Clear existing IPs on THIS specific NIC to prevent conflicts
-Get-NetIPAddress -InterfaceIndex $IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:$false
+# 2. Add the 'good' persistent route with a high priority (Low Metric)
+# Metric 10 is very aggressive, ensuring it beats almost any auto-assigned route
+route add 0.0.0.0 mask 0.0.0.0 172.16.0.1 metric 10 -p
 
+# Reset the interfaces to clear any DHCP-injected gateways
+netsh interface ip set address name="$IfName" source=static address=$ProvisionIP mask=255.255.255.0 gateway=none
+
+# Now flush to be safe
+route -f
 # ==============================
 # 4. ASSIGN STATIC IP + GATEWAY
 # ==============================
@@ -81,3 +86,4 @@ if ($NatNic) {
 Set-NetIPInterface -InterfaceIndex $IfIndex -InterfaceMetric 100
 
 Write-Host "NIC Configuration Complete."
+
