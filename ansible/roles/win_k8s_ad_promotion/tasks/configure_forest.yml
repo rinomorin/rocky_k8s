@@ -145,45 +145,6 @@
   delegate_to: localhost
   when: not skip_win_build
 
-# - name: 1.4 - Post-AD Promotion Route Cleanup
-#   vars:
-#     # Cluster/Provisioning
-#     p_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
-#     p_gw: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | join('.') }}.1"
-    
-#     # NAT (from KVM)
-#     n_ip: "{{ br_nat_ip.stdout | trim }}"
-#     n_gw: "{{ br_nat_ip.stdout.split('.')[:3] | join('.') }}.1"
-#   ansible.windows.win_shell: |
-#     # 1. Forcefully remove the NAT gateway again
-#     # AD promotion often re-adds this via the DHCP client cache
-#     route delete 0.0.0.0 mask 0.0.0.0 {{ n_gw }} 2>$null
-
-#     # 2. Ensure the Cluster Interface is the primary DNS listener
-#     $clusterIdx = (Get-NetIPAddress -IPAddress "{{ p_ip }}").InterfaceIndex
-#     Set-NetIPInterface -InterfaceIndex $clusterIdx -InterfaceMetric 10
-
-#     # 3. Register this DC in DNS on the correct interface
-#     ipconfig /registerdns
-#   when: not forest_done.stat.exists
-
-# - name: 1.5 - Permanently Block NAT Gateway via Interface Policy
-#   vars:
-#     n_ip: "{{ br_nat_ip.stdout | trim }}"
-#     p_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
-#   ansible.windows.win_shell: |
-#     $n_addr = "{{ n_ip }}"
-#     $p_addr = "{{ p_ip }}"
-    
-#     $natIdx = (Get-NetIPAddress -IPAddress $n_addr).InterfaceIndex
-#     $clusterIdx = (Get-NetIPAddress -IPAddress $p_addr).InterfaceIndex
-
-#     Set-NetIPInterface -InterfaceIndex $natIdx -IgnoreDefaultRoutes $true
-#     Set-NetIPInterface -InterfaceIndex $clusterIdx -IgnoreDefaultRoutes $false -InterfaceMetric 10
-
-#     Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Where-Object { $_.NextHop -match "172\.16\." } | Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-
-
 - name: Verify whoami Database Existence
   raw: |
     whoami
@@ -222,44 +183,6 @@
     timeout: 900
     state: started
   delegate_to: localhost
-
-# - name: 1.4 - Post-AD Promotion Route Cleanup
-#   vars:
-#     # Cluster/Provisioning
-#     p_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
-#     p_gw: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | join('.') }}.1"
-    
-#     # NAT (from KVM)
-#     n_ip: "{{ br_nat_ip.stdout | trim }}"
-#     n_gw: "{{ br_nat_ip.stdout.split('.')[:3] | join('.') }}.1"
-#   ansible.windows.win_shell: |
-#     # 1. Forcefully remove the NAT gateway again
-#     # AD promotion often re-adds this via the DHCP client cache
-#     route delete 0.0.0.0 mask 0.0.0.0 {{ n_gw }} 2>$null
-
-#     # 2. Ensure the Cluster Interface is the primary DNS listener
-#     $clusterIdx = (Get-NetIPAddress -IPAddress "{{ p_ip }}").InterfaceIndex
-#     Set-NetIPInterface -InterfaceIndex $clusterIdx -InterfaceMetric 10
-
-#     # 3. Register this DC in DNS on the correct interface
-#     ipconfig /registerdns
-#   when: not forest_done.stat.exists
-
-# - name: 1.5 - Permanently Block NAT Gateway via Interface Policy
-#   vars:
-#     n_ip: "{{ br_nat_ip.stdout | trim }}"
-#     p_ip: "{{ hostvars[inventory_hostname]['provision_ip'] }}"
-#   ansible.windows.win_shell: |
-#     $n_addr = "{{ n_ip }}"
-#     $p_addr = "{{ p_ip }}"
-    
-#     $natIdx = (Get-NetIPAddress -IPAddress $n_addr).InterfaceIndex
-#     $clusterIdx = (Get-NetIPAddress -IPAddress $p_addr).InterfaceIndex
-
-#     Set-NetIPInterface -InterfaceIndex $natIdx -IgnoreDefaultRoutes $true
-#     Set-NetIPInterface -InterfaceIndex $clusterIdx -IgnoreDefaultRoutes $false -InterfaceMetric 10
-
-#     Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Where-Object { $_.NextHop -match "172\.16\." } | Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
 
 - name: Ensure AD services are running and verify
   ansible.windows.win_shell: |
@@ -371,7 +294,8 @@
 
 - name: Add A record for Windows node in IPA (.local zone)
   delegate_to: localhost
-  when: "{{ 'win_worker_nodes' in group_names }}"
+  # FIX: Removed the outer curly braces from the conditional
+  when: "'win_worker_nodes' in group_names"
   ansible.builtin.shell: |
     # 1. Get Kerberos ticket
     echo "{{ lookup('env', 'ipa_admin_password') }}" | kinit admin
@@ -381,11 +305,11 @@
     ipa dnsrecord-mod {{ b_zone }} {{ cname_short }} \
         --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }}
   vars:
-    # cloud.home.morinsoft.local
+    # cloud.home.example.local
     b_zone: "{{ hostvars[inventory_hostname.split('.')[0]]['domain'] | replace('lcl', 'local') }}"
-    # worker03
-    cname_short: "{{ hostvars[inventory_hostname.split('.')[0]] }}"
-
+    # mswin2k22-02
+    # FIX: Explicitly target the inventory_hostname string value
+    cname_short: "{{ hostvars[inventory_hostname.split('.')[0]]['inventory_hostname'] }}"
 
 # - name: Create CNAME in IPA for Windows Node (Shell)
 #   delegate_to: localhost
