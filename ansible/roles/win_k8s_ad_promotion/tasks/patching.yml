@@ -1,29 +1,28 @@
-- name: Execute patching sequentially to protect disk I/O
-  throttle: 1  # <--- Forces only ONE host to execute this block at a time
+- name: Execute asynchronous patching sequentially
   block:
-    - name: Install all critical and security updates
+    - name: Kick off Windows Updates asynchronously (No Auto-Reboot)
       ansible.windows.win_updates:
         category_names:
           - SecurityUpdates
-        log_path: C:\win_updates.log
-      vars:
-        ansible_winrm_operation_timeout_sec: 120
-        ansible_winrm_read_timeout_sec: 150
-      register: update_result
-      delay: 20
-      retries: 5
-
-    - name: Install all critical and security updates
-      ansible.windows.win_updates:
-        category_names:
           - CriticalUpdates
-        log_path: C:\win_updates.log
-      vars:
-        ansible_winrm_operation_timeout_sec: 120
-        ansible_winrm_read_timeout_sec: 150
-      register: update_result
-      delay: 20
-      retries: 5
+        log_path: 'C:\win_updates.log'
+        reboot: no             # <--- Required to make async work
+      async: 3600              # Allow up to 1 hour
+      poll: 0                  # Fire and forget immediately
+      register: async_update_job
+
+    - name: Periodically check SSH until patching completes
+      ansible.builtin.async_status:
+        jid: "{{ async_update_job.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 120             # 120 retries * 30s = up to 1 hour of tracking
+      delay: 30                # Poll status every 30 seconds over a fresh SSH pipe
+
+    - name: Reboot cleanly if the updates require it
+      ansible.windows.win_reboot:
+        reboot_timeout: 900    # Give the host 15 minutes to configure updates on boot
+      when: job_result.reboot_required | default(false) or job_result.changed
 
     - name: Ensure Windows Update service is started
       ansible.windows.win_service:
