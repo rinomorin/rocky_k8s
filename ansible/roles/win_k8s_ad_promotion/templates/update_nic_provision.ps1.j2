@@ -9,18 +9,12 @@ $PrefixLength     = {{ provision_prefix | default(24) }}
 $ProvisionGateway = '{{ provision_gw }}'
 
 # ==============================
-# 1. Find target NIC
-#    - Up
-#    - Not virtual
-#    - Not loopback
-#    - Does NOT have 172.x IPv4
+# 1. Find target NIC (The "Provisioning" NIC, non-172)
 # ==============================
 $Nic = $null
 
 foreach ($n in Get-NetAdapter) {
-    if ($n.Status -ne 'Up') { continue }
-    if ($n.Virtual) { continue }
-    if ($n.Name -match 'Loopback') { continue }
+    if ($n.Status -ne 'Up' -or $n.Virtual -or $n.Name -match 'Loopback') { continue }
 
     $ips = Get-NetIPAddress `
             -InterfaceIndex $n.IfIndex `
@@ -43,9 +37,8 @@ $IfIndex = $Nic.IfIndex
 $IfName  = $Nic.Name
 
 # ==============================
-# IDPOTENCY CHECK
+# 2. IDPOTENCY CHECK
 # ==============================
-
 $ExistingIP = Get-NetIPAddress `
     -InterfaceIndex $IfIndex `
     -AddressFamily IPv4 `
@@ -55,112 +48,55 @@ $ExistingIP = Get-NetIPAddress `
         $_.PrefixLength -eq $PrefixLength
     }
 
-$ExistingGW = Get-NetRoute `
-    -InterfaceIndex $IfIndex `
-    -DestinationPrefix '0.0.0.0/0' `
-    -ErrorAction SilentlyContinue |
-    Where-Object {
-        $_.NextHop -eq $ProvisionGateway
-    }
+if ($ExistingIP) {
+    Write-Host "IP $ProvisionIP already set on $IfName. Ensuring routes are correct..."
+} else {
+    # ==============================
+    # 3. CONFIGURE NIC
+    # ==============================
+    Enable-NetAdapter -Name $IfName -Confirm:$false
+    Set-NetIPInterface -InterfaceIndex $IfIndex -AddressFamily IPv4 -Dhcp Disabled
 
-if ($ExistingIP -and $ExistingGW) {
-    # Already configured correctly
-    Get-NetIPConfiguration |
-        Where-Object { $_.InterfaceIndex -eq $IfIndex } |
-        Select-Object `
-            @{Name='IfIndex'; Expression={$_.InterfaceIndex}},
-            @{Name='Interface'; Expression={$_.InterfaceAlias}},
-            @{Name='IP'; Expression={$_.IPv4Address.IPAddress}},
-            @{Name='Gateway'; Expression={$_.IPv4DefaultGateway.NextHop}} |
-        ConvertTo-Json -Compress
+    # Remove existing IPs to ensure a clean assignment
+    Get-NetIPAddress -InterfaceIndex $IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | 
+        Remove-NetIPAddress -Confirm:$false
 
-    exit 0
+    # Assign static IP WITHOUT setting it as a Default Gateway
+    New-NetIPAddress `
+        -InterfaceIndex $IfIndex `
+        -IPAddress $ProvisionIP `
+        -PrefixLength $PrefixLength
 }
 
+# ==============================
+# 4. ROUTE MANIPULATION (The Persistence Fix)
+# ==============================
 
-# ==============================
-# 2. Ensure NIC is enabled
-# ==============================
-Enable-NetAdapter -Name $IfName -Confirm:$false
+# Kill the persistent ghost route to 10.0.0.1
+Write-Host "Removing persistent 10.0.0.1 gateway..."
+route delete 0.0.0.0 mask 0.0.0.0 10.0.0.1 -p 2>$null
 
-# ==============================
-# 3. Disable DHCP
-# ==============================
-Set-NetIPInterface `
-    -InterfaceIndex $IfIndex `
-    -AddressFamily IPv4 `
-    -Dhcp Disabled
-
-# ==============================
-# 4. Remove existing IPv4 addresses
-# ==============================
-Get-NetIPAddress `
-    -InterfaceIndex $IfIndex `
-    -AddressFamily IPv4 `
-    -ErrorAction SilentlyContinue |
-    Remove-NetIPAddress -Confirm:$false
-
-# ==============================
-# 5. Assign static IP + gateway
-#    (NO route manipulation = NO deadlock)
-# ==============================
-New-NetIPAddress `
-    -InterfaceIndex $IfIndex `
-    -IPAddress $ProvisionIP `
-    -PrefixLength $PrefixLength `
-    -DefaultGateway $ProvisionGateway
-
-# ==============================
-# 6. Restart NIC to apply cleanly
-# ==============================
-# 1. Find target NIC
-# ==============================
-# [Keep your current logic to find $Nic here]
-# 1. Kill the 'bad' persistent route
-route delete 0.0.0.0 mask 0.0.0.0 10.0.0.1 -p
-
-# 2. Add the 'good' persistent route with a high priority (Low Metric)
-# Metric 10 is very aggressive, ensuring it beats almost any auto-assigned route
+# Force 172.16.0.1 as the ONLY persistent default gateway
+Write-Host "Setting 172.16.0.1 as the persistent default gateway..."
 route add 0.0.0.0 mask 0.0.0.0 172.16.0.1 metric 10 -p
 
 # ==============================
-# 1.5 CLEAN PERSISTENT ROUTES
-# This is what's causing the ghost 10.0.0.1 gateway
+# 5. INTERFACE METRICS
 # ==============================
-Write-Host "Cleaning persistent routes..."
-route -f  # This flushes all non-interface specific persistent routes
 
-# ==============================
-# 2. Configure the NIC
-# ==============================
-$IfIndex = $Nic.IfIndex
-$IfName  = $Nic.Name
-
-Set-NetIPInterface -InterfaceIndex $IfIndex -Dhcp Disabled
-
-# Clear existing IPs to avoid multi-homing issues on this NIC
-Get-NetIPAddress -InterfaceIndex $IfIndex -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false
-
-# ==============================
-# 3. Assign static IP + gateway
-# ==============================
-New-NetIPAddress `
-    -InterfaceIndex $IfIndex `
-    -IPAddress $ProvisionIP `
-    -PrefixLength $PrefixLength `
-    -DefaultGateway $ProvisionGateway
-
-# ==============================
-# 4. FORCE METRICS (The Persistence Fix)
-# We ensure the 172.x network has a LOWER metric (Higher Priority)
-# ==============================
+# Find the 172.16.x.x (Management) NIC
 $NatNic = Get-NetIPAddress -IPAddress "172.16.*" | Select-Object -First 1
+
 if ($NatNic) {
-    # Set maintenance NIC to high priority
+    # Set Management NIC to high priority (Low Metric)
     Set-NetIPInterface -InterfaceIndex $NatNic.InterfaceIndex -InterfaceMetric 10
 }
 
-# Set the Cluster NIC (the one we just configured) to lower priority
+# Set Provisioning NIC to lower priority (High Metric)
 Set-NetIPInterface -InterfaceIndex $IfIndex -InterfaceMetric 100
 
-Write-Host "NIC Configuration Complete."
+# Final summary for Ansible logs
+Get-NetIPConfiguration | 
+    Where-Object { $_.InterfaceIndex -eq $IfIndex -or ($NatNic -and $_.InterfaceIndex -eq $NatNic.InterfaceIndex) } |
+    Select-Object InterfaceAlias, IPv4Address, IPv4DefaultGateway | 
+    ConvertTo-Json -Compress
