@@ -94,6 +94,9 @@
     fail_msg: >
       Unable to discover br-nat IP for {{ inventory_hostname }} from KVM.
 
+- debug:
+    msg: "br-nat IP: {{ br_nat_ip.stdout }}"
+
 - name: Wait for Windows SSH to be ready
   wait_for:
     host: "{{ br_nat_ip.stdout }}"
