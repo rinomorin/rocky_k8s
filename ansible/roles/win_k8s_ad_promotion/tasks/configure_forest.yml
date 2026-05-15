@@ -294,6 +294,7 @@
 
 - name: Add A record for Windows node in IPA (.local zone)
   delegate_to: localhost
+  become: yes
   # FIX: Removed the outer curly braces from the conditional
   when: "'win_worker_nodes' in group_names"
   ansible.builtin.shell: |
