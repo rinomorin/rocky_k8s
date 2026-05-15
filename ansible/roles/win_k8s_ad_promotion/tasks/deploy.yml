@@ -245,6 +245,17 @@
     mode: '0644'
     force: true
 
+- name: Fix Routing Priority (Force br-nat as Primary)
+  raw: |
+    powershell.exe -NoProfile -Command "
+    $nat_idx = (Get-NetIPAddress -IPAddress '172.16.*').InterfaceIndex[0];
+    $cluster_idx = (Get-NetIPAddress -IPAddress '10.0.*').InterfaceIndex[0];
+    if ($nat_idx) { Set-NetIPInterface -InterfaceIndex $nat_idx -InterfaceMetric 10 };
+    if ($cluster_idx) { Set-NetIPInterface -InterfaceIndex $cluster_idx -InterfaceMetric 100 };
+    route delete 0.0.0.0 mask 0.0.0.0 10.0.0.1 -p
+    "
+  ignore_errors: yes
+
 - name: Ensure Windows is responsive before copy
   wait_for_connection:
     timeout: 60
