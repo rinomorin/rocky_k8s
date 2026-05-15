@@ -111,10 +111,11 @@
   delegate_to: localhost
   become: false
   vars:
-    # Use single quotes inside the PS command to wrap the password string
-    cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i .ssh/id_rsa -T core@{{ br_nat_ip.stdout }}"
+    # Use absolute path to the RSA key to avoid 'not accessible' errors
+    key_path: "/home/{{ lookup('env', 'USER') }}/.ssh/id_rsa"
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i {{ key_path }} -T core@{{ br_nat_ip.stdout }}"
   shell: |
-    {{ cmd }} "powershell -Command \"[adsi]'WinNT://./Administrator,user' | %{ \$_.SetPassword('{{ ad_safe_mode_password }}'); \$_.SetInfo() }\""
+    {{ ssh_cmd }} "powershell -Command \"Enable-LocalUser -Name 'Administrator'; \$user = [adsi]'WinNT://./Administrator,user'; \$user.SetPassword('{{ ad_safe_mode_password }}'); \$user.SetInfo()\""
   when: not skip_win_build
 
 - name: Use br-nat IP for SSH
