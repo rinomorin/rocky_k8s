@@ -1,34 +1,36 @@
-- name: Install all critical and security updates
-  Serial: 1
-  ansible.windows.win_updates:
-    category_names:
-      - SecurityUpdates
-      - CriticalUpdates
-    log_path: C:\win_updates.log
-  vars:
-    ansible_winrm_operation_timeout_sec: 120
-    ansible_winrm_read_timeout_sec: 150
-  register: update_result
-  delay: 20
-  retries: 5
+- name: Execute patching sequentially to protect disk I/O
+  throttle: 1  # <--- Forces only ONE host to execute this block at a time
+  block:
+    - name: Install all critical and security updates
+      ansible.windows.win_updates:
+        category_names:
+          - SecurityUpdates
+          - CriticalUpdates
+        log_path: C:\win_updates.log
+      vars:
+        ansible_winrm_operation_timeout_sec: 120
+        ansible_winrm_read_timeout_sec: 150
+      register: update_result
+      delay: 20
+      retries: 5
 
-- name: Ensure Windows Update service is started
-  ansible.windows.win_service:
-    name: wuauserv
-    state: started
-    start_mode: manual
+    - name: Ensure Windows Update service is started
+      ansible.windows.win_service:
+        name: wuauserv
+        state: started
+        start_mode: manual
 
-- name: Install all critical and security updates
-  ansible.windows.win_updates:
-    category_names: "*"
-    state: installed
-    log_path: C:\win_updates.log
-  vars:
-    ansible_winrm_operation_timeout_sec: 120
-    ansible_winrm_read_timeout_sec: 150
-  register: update_result
-  delay: 20
-  retries: 5
+    - name: Install all critical and security updates
+      ansible.windows.win_updates:
+        category_names: "*"
+        state: installed
+        log_path: C:\win_updates.log
+      vars:
+        ansible_winrm_operation_timeout_sec: 120
+        ansible_winrm_read_timeout_sec: 150
+      register: update_result
+      delay: 20
+      retries: 5
 
 - name: Debug update results
   debug:
