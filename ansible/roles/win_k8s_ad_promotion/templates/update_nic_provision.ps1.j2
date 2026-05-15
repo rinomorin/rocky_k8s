@@ -9,25 +9,13 @@ $PrefixLength     = {{ provision_prefix | default(24) }}
 $ProvisionGateway = '{{ provision_gw }}'
 
 # ==============================
-# 1. Find target NIC
-#    - Up
-#    - Not virtual
-#    - Not loopback
-#    - Does NOT have 172.x IPv4
+# 1. Find target NIC (non-172)
 # ==============================
 $Nic = $null
-
 foreach ($n in Get-NetAdapter) {
-    if ($n.Status -ne 'Up') { continue }
-    if ($n.Virtual) { continue }
-    if ($n.Name -match 'Loopback') { continue }
+    if ($n.Status -ne 'Up' -or $n.Virtual -or $n.Name -match 'Loopback') { continue }
 
-    $ips = Get-NetIPAddress `
-            -InterfaceIndex $n.IfIndex `
-            -AddressFamily IPv4 `
-            -ErrorAction SilentlyContinue |
-           Select-Object -ExpandProperty IPAddress
-
+    $ips = Get-NetIPAddress -InterfaceIndex $n.IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty IPAddress
     if (-not ($ips | Where-Object { $_ -like '172.*' })) {
         $Nic = $n
         break
@@ -43,66 +31,36 @@ $IfIndex = $Nic.IfIndex
 $IfName  = $Nic.Name
 
 # ==============================
-# IDPOTENCY CHECK
+# 2. IDPOTENCY CHECK
 # ==============================
+$ExistingIP = Get-NetIPAddress -InterfaceIndex $IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object { $_.IPAddress -eq $ProvisionIP -and $_.PrefixLength -eq $PrefixLength }
 
-$ExistingIP = Get-NetIPAddress `
-    -InterfaceIndex $IfIndex `
-    -AddressFamily IPv4 `
-    -ErrorAction SilentlyContinue |
-    Where-Object {
-        $_.IPAddress -eq $ProvisionIP -and
-        $_.PrefixLength -eq $PrefixLength
-    }
-
-$ExistingGW = Get-NetRoute `
-    -InterfaceIndex $IfIndex `
-    -DestinationPrefix '0.0.0.0/0' `
-    -ErrorAction SilentlyContinue |
-    Where-Object {
-        $_.NextHop -eq $ProvisionGateway
-    }
+$ExistingGW = Get-NetRoute -InterfaceIndex $IfIndex -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+    Where-Object { $_.NextHop -eq $ProvisionGateway }
 
 if ($ExistingIP -and $ExistingGW) {
-    # Already configured correctly
-    Get-NetIPConfiguration |
-        Where-Object { $_.InterfaceIndex -eq $IfIndex } |
-        Select-Object `
-            @{Name='IfIndex'; Expression={$_.InterfaceIndex}},
-            @{Name='Interface'; Expression={$_.InterfaceAlias}},
-            @{Name='IP'; Expression={$_.IPv4Address.IPAddress}},
-            @{Name='Gateway'; Expression={$_.IPv4DefaultGateway.NextHop}} |
-        ConvertTo-Json -Compress
-
+    # Already configured, just ensure metrics are correct before exiting
+    $NatNic = Get-NetIPAddress -IPAddress "172.16.*" | Select-Object -First 1
+    if ($NatNic) { Set-NetIPInterface -InterfaceIndex $NatNic.InterfaceIndex -InterfaceMetric 10 }
+    Set-NetIPInterface -InterfaceIndex $IfIndex -InterfaceMetric 100
     exit 0
 }
 
+# ==============================
+# 3. CLEANUP & PREP
+# ==============================
+Write-Host "Cleaning persistent routes and clearing existing IPs..."
+route -f  # Wipe persistent route table to remove ghost 10.0.0.1 gateways
 
-# ==============================
-# 2. Ensure NIC is enabled
-# ==============================
 Enable-NetAdapter -Name $IfName -Confirm:$false
+Set-NetIPInterface -InterfaceIndex $IfIndex -AddressFamily IPv4 -Dhcp Disabled
+
+# Clear existing IPs on THIS specific NIC to prevent conflicts
+Get-NetIPAddress -InterfaceIndex $IfIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:$false
 
 # ==============================
-# 3. Disable DHCP
-# ==============================
-Set-NetIPInterface `
-    -InterfaceIndex $IfIndex `
-    -AddressFamily IPv4 `
-    -Dhcp Disabled
-
-# ==============================
-# 4. Remove existing IPv4 addresses
-# ==============================
-Get-NetIPAddress `
-    -InterfaceIndex $IfIndex `
-    -AddressFamily IPv4 `
-    -ErrorAction SilentlyContinue |
-    Remove-NetIPAddress -Confirm:$false
-
-# ==============================
-# 5. Assign static IP + gateway
-#    (NO route manipulation = NO deadlock)
+# 4. ASSIGN STATIC IP + GATEWAY
 # ==============================
 New-NetIPAddress `
     -InterfaceIndex $IfIndex `
@@ -111,4 +69,15 @@ New-NetIPAddress `
     -DefaultGateway $ProvisionGateway
 
 # ==============================
-# 6. Restart NIC to apply cleanly
+# 5. FORCE INTERFACE METRICS
+# ==============================
+# Maintenance (br-nat) gets Priority (Low Metric)
+$NatNic = Get-NetIPAddress -IPAddress "172.16.*" | Select-Object -First 1
+if ($NatNic) {
+    Set-NetIPInterface -InterfaceIndex $NatNic.InterfaceIndex -InterfaceMetric 10
+}
+
+# Cluster Network gets Lower Priority (High Metric)
+Set-NetIPInterface -InterfaceIndex $IfIndex -InterfaceMetric 100
+
+Write-Host "NIC Configuration Complete."
