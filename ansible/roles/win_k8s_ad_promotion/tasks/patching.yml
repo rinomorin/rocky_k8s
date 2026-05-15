@@ -1,18 +1,24 @@
-- name: Execute patching sequentially to protect disk I/O
-  throttle: 1  # <--- Forces only ONE host to execute this block at a time
+- name: Execute asynchronous patching sequentially
   block:
-    - name: Install all critical and security updates
+    - name: Kick off Windows Updates asynchronously
       ansible.windows.win_updates:
         category_names:
           - SecurityUpdates
           - CriticalUpdates
-        log_path: C:\win_updates.log
-      vars:
-        ansible_winrm_operation_timeout_sec: 120
-        ansible_winrm_read_timeout_sec: 150
-      register: update_result
-      delay: 20
-      retries: 5
+        log_path: 'C:\win_updates.log'
+        reboot: yes
+        reboot_timeout: 1200
+      async: 3600               # Max time allowed for the entire update process (1 hour)
+      poll: 0                   # 0 means: Fire and forget immediately, don't wait
+      register: async_update_job
+
+    - name: Periodically check if patching and reboot are complete
+      ansible.builtin.async_status:
+        jid: "{{ async_update_job.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 60               # Try 60 times...
+      delay: 30                 # ...waiting 30 seconds between checks (Checks every 30s for up to 30 mins)
 
     - name: Ensure Windows Update service is started
       ansible.windows.win_service:
@@ -32,20 +38,20 @@
       delay: 20
       retries: 5
 
-- name: Debug update results
-  debug:
-    var: update_result
+    - name: Debug update results
+      debug:
+        var: update_result
 
-- name: Flush disk buffers (Windows Sync)
-  throttle: 1
-  ansible.windows.win_shell: |
-    # Flush all volume buffers to hardware
-    $volumes = Get-Volume | Where-Object { $_.DriveLetter }
-    foreach ($vol in $volumes) {
-        Write-Output "Syncing volume $($vol.DriveLetter)..."
-        # Using native kernel call to flush
-        $drive = "\\.\$($vol.DriveLetter):"
-        & fsutil volume flush $vol.DriveLetter:
-    }
-    # Final safety sleep
-    Start-Sleep -Seconds 10
+    - name: Flush disk buffers (Windows Sync)
+      throttle: 1
+      ansible.windows.win_shell: |
+        # Flush all volume buffers to hardware
+        $volumes = Get-Volume | Where-Object { $_.DriveLetter }
+        foreach ($vol in $volumes) {
+            Write-Output "Syncing volume $($vol.DriveLetter)..."
+            # Using native kernel call to flush
+            $drive = "\\.\$($vol.DriveLetter):"
+            & fsutil volume flush $vol.DriveLetter:
+        }
+        # Final safety sleep
+        Start-Sleep -Seconds 10
