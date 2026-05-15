@@ -68,3 +68,7 @@
       until: vip_ping.rc == 0
       retries: 5
       delay: 5
+
+    - name: Save disk
+      become: yes
+      command: sync

@@ -30,6 +30,20 @@
         - { src: 'haproxy.cfg.j2', dest: '/etc/haproxy/haproxy.cfg' }
         - { src: 'keepalived.conf.j2', dest: '/etc/keepalived/keepalived.conf' }
 
+    - name: Allow HAProxy to bind to custom ports in SELinux
+      community.general.seport:
+        ports: 5443,30443,30080,30180
+        proto: tcp
+        setype: http_port_t
+        state: present
+
+    - name: Allow non-local IP binding for VIPs
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_nonlocal_bind
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
     - name: Validate HAProxy Configuration
       command: haproxy -c -f /etc/haproxy/haproxy.cfg
       register: haproxy_check
@@ -55,6 +69,21 @@
         if ! semodule -l | grep -q "permissive_keepalived_t"; then
           semanage permissive -a keepalived_t
         fi
+
+    - name: Allow HAProxy to bind to custom ports in SELinux
+      community.general.seport:
+        ports: 5443,30443,30080,30180
+        proto: tcp
+        setype: http_port_t
+        state: present
+
+    - name: Allow non-local IP binding for VIPs
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_nonlocal_bind
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
 
     - name: Force disk sync inside VMs
       become: yes

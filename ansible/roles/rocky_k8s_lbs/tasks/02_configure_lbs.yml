@@ -3,6 +3,8 @@
 - name: "DNS Prep - clean resolve"
   delegate_to: localhost
   become: false
+  vars:
+    lb_host: "{{ hostvars[groups['hahost'][0]]['ansible_host'] }}"
   ansible.builtin.shell: |     
     ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null core@{{ hostvars[item]['provider_ip'] }} "
       sudo sed -i '/nameserver 172.16/d' /etc/resolv.conf && \
@@ -10,6 +12,7 @@
       echo 'nameserver {{ hostvars[groups['helpers'][0]]['provider_ip'] }}' | sudo tee -a /etc/resolv.conf > /dev/null && \
       echo 'nameserver {{ hostvars[groups['ipa'][0]]['ansible_host'] }}' | sudo tee -a /etc/resolv.conf > /dev/null && \
       echo 'nameserver {{ hostvars[groups['ipa'][1]]['ansible_host'] }}' | sudo tee -a /etc/resolv.conf > /dev/null"
+      hostnamectl set-hostname {{ lb_host }}
   loop: "{{ groups['hahost'] }}"
 
 - name: Install HA Software Stack
