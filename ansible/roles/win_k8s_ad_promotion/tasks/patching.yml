@@ -17,12 +17,11 @@
     state: started
     start_mode: manual
 
-- name: Search and install all updates (with automatic reboots)
-  Serial: 1
+- name: Install all critical and security updates
   ansible.windows.win_updates:
-    category_names: '*'
+    category_names: "*"
     state: installed
-  log_path: C:\win_updates.log
+    log_path: C:\win_updates.log
   vars:
     ansible_winrm_operation_timeout_sec: 120
     ansible_winrm_read_timeout_sec: 150
