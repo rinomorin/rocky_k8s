@@ -26,6 +26,14 @@
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
 
+- name: whoami on localhost
+  delegate_to: localhost
+  shell: |
+    whoami
+  register: whoami_check
+- debug:
+    msg: "{{ whoami_check }}"
+
 - name: 7.2b - Give the API a moment to breathe
   pause:
     seconds: 10
@@ -114,14 +122,12 @@
   delegate_to: localhost
   ansible.builtin.shell: echo "{{ ipa_admin_password }}" | kinit admin
   run_once: true
-  become: true
   changed_when: false
 
 - name: 7.4.2 - Ensure HTTP Service Principal exists on FreeIPA Master
   delegate_to: localhost
   ansible.builtin.shell: "ipa service-add HTTP/api.{{ cloud_zone }} || true"
   run_once: true
-  become: true
   changed_when: false
 
 - name: 7.4.2.1 - Cleanup old TLS artifacts on localhost
@@ -147,12 +153,11 @@
   ansible.builtin.copy:
     src: /tmp/tls.csr
     dest: /tmp/tls.csr
-    owner: core
-    group: core
+    owner: root
+    group: root
     mode: '0644'
     force: true
   delegate_to: "{{ ipa_master_fqdn }}"
-  become: trusted
   run_once: true
 
 - name: Check if certificate already exists on IPA master
@@ -162,33 +167,31 @@
   register: tls_cert
   run_once: true
 
-- name: Ensure host exists for api.{{ cloud_zone }}
+- name: Ensure host exists for api.<cloud_zone>
   delegate_to: localhost
-  ansible.builtin.shell: |
-    echo "{{ ipa_admin_password }}" | kinit admin
-    ipa host-add api.{{ cloud_zone }} --force
-  register: host_add_result
+  command: ipa host-add api.{{ cloud_zone }}
+  ignore_errors: yes
+  register: host_rc
   failed_when:
-    - host_add_result.rc != 0
-    - "'already exists' not in host_add_result.stderr"
+    - "'already exists' not in host_rc.stderr"  
   when: not tls_cert.stat.exists
   run_once: true
 
-- name: Ensure service principal exists for api.{{ cloud_zone }}
+- name: Ensure service principal exists for api.<cloud_zone>
   delegate_to: localhost
-  ansible.builtin.shell: |
-    echo "{{ ipa_admin_password }}" | kinit admin
-    ipa service-add HTTP/api.{{ cloud_zone }}
-  register: service_add_result
+  command: ipa service-add HTTP/api.{{ cloud_zone }}
+  ignore_errors: yes
+  register: host_rc2
   failed_when:
-    - service_add_result.rc != 0
-    - "'already exists' not in service_add_result.stderr"
+    - "'already exists' not in host_rc2.stderr"  
   when: not tls_cert.stat.exists
   run_once: true
 
 - name: Submit CSR to FreeIPA
   delegate_to: localhost
-  ansible.builtin.command: "ipa cert-request /tmp/tls.csr --principal=HTTP/api.{{ cloud_zone }}"
+  command: >
+    ipa cert-request /tmp/tls.csr --principal=HTTP/api.{{ cloud_zone }}
+  register: cert_request
   when: not tls_cert.stat.exists
   run_once: true
 
