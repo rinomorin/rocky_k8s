@@ -166,7 +166,7 @@
   delegate_to: localhost
   ansible.builtin.shell: |
     echo "{{ ipa_admin_password }}" | kinit admin
-    ipa host-add api.{{ cloud_zone }} --force"
+    ipa host-add api.{{ cloud_zone }} --force
   register: host_add_result
   failed_when:
     - host_add_result.rc != 0
