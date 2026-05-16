@@ -253,6 +253,7 @@
     if ($nat_idx) { Set-NetIPInterface -InterfaceIndex $nat_idx -InterfaceMetric 10 };
     if ($cluster_idx) { Set-NetIPInterface -InterfaceIndex $cluster_idx -InterfaceMetric 100 };
     route delete 0.0.0.0 mask 0.0.0.0 10.0.0.1 -p
+    route add 10.0.0.0 mask 255.255.255.0 gw 10.0.0.1
     "
   ignore_errors: yes
 
