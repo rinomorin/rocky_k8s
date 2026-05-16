@@ -294,8 +294,6 @@
 
 - name: Add A record for Windows node in IPA (.local zone)
   delegate_to: localhost
-  become: yes
-  # FIX: Removed the outer curly braces from the conditional
   when: "'win_worker_nodes' in group_names"
   ansible.builtin.shell: |
     # 1. Get Kerberos ticket
@@ -306,11 +304,19 @@
     ipa dnsrecord-mod {{ b_zone }} {{ cname_short }} \
         --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }}
   vars:
-    # cloud.home.example.local
     b_zone: "{{ hostvars[inventory_hostname.split('.')[0]]['domain'] | replace('lcl', 'local') }}"
-    # mswin2k22-02
-    # FIX: Explicitly target the inventory_hostname string value
     cname_short: "{{ hostvars[inventory_hostname.split('.')[0]]['inventory_hostname'] }}"
+  register: a_rec_result
+  # ==============================
+  # ERROR HANDLING & IDEMPOTENCY
+  # ==============================
+  failed_when:
+    - a_rec_result.rc != 0
+    - "'no modifications to be performed' not in a_rec_result.stderr"
+    - "'already exists' not in a_rec_result.stderr"
+  changed_when:
+    - a_rec_result.rc == 0
+    - "'Added record' in a_rec_result.stdout"
 
 # - name: Create CNAME in IPA for Windows Node (Shell)
 #   delegate_to: localhost
