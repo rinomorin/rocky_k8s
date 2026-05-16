@@ -114,12 +114,14 @@
   delegate_to: localhost
   ansible.builtin.shell: echo "{{ ipa_admin_password }}" | kinit admin
   run_once: true
+  become: true
   changed_when: false
 
 - name: 7.4.2 - Ensure HTTP Service Principal exists on FreeIPA Master
   delegate_to: localhost
   ansible.builtin.shell: "ipa service-add HTTP/api.{{ cloud_zone }} || true"
   run_once: true
+  become: true
   changed_when: false
 
 - name: 7.4.2.1 - Cleanup old TLS artifacts on localhost
@@ -145,11 +147,12 @@
   ansible.builtin.copy:
     src: /tmp/tls.csr
     dest: /tmp/tls.csr
-    owner: root
-    group: root
+    owner: core
+    group: core
     mode: '0644'
     force: true
   delegate_to: "{{ ipa_master_fqdn }}"
+  become: trusted
   run_once: true
 
 - name: Check if certificate already exists on IPA master
@@ -161,7 +164,9 @@
 
 - name: Ensure host exists for api.{{ cloud_zone }}
   delegate_to: localhost
-  ansible.builtin.command: "ipa host-add api.{{ cloud_zone }} --force"
+  ansible.builtin.shell: |
+    echo "{{ ipa_admin_password }}" | kinit admin
+    ipa host-add api.{{ cloud_zone }} --force"
   register: host_add_result
   failed_when:
     - host_add_result.rc != 0
@@ -171,7 +176,9 @@
 
 - name: Ensure service principal exists for api.{{ cloud_zone }}
   delegate_to: localhost
-  ansible.builtin.command: "ipa service-add HTTP/api.{{ cloud_zone }}"
+  ansible.builtin.shell: |
+    echo "{{ ipa_admin_password }}" | kinit admin
+    ipa service-add HTTP/api.{{ cloud_zone }}
   register: service_add_result
   failed_when:
     - service_add_result.rc != 0
