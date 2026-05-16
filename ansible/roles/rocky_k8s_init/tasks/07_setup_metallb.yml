@@ -159,31 +159,29 @@
   register: tls_cert
   run_once: true
 
-- name: Ensure host exists for api.<cloud_zone>
+- name: Ensure host exists for api.{{ cloud_zone }}
   delegate_to: localhost
-  command: ipa host-add api.{{ cloud_zone }}
-  ignore_errors: yes
-  register: host_rc
+  ansible.builtin.command: "ipa host-add api.{{ cloud_zone }} --force"
+  register: host_add_result
   failed_when:
-    - "'already exists' not in host_rc.stderr"  
+    - host_add_result.rc != 0
+    - "'already exists' not in host_add_result.stderr"
   when: not tls_cert.stat.exists
   run_once: true
 
-- name: Ensure service principal exists for api.<cloud_zone>
+- name: Ensure service principal exists for api.{{ cloud_zone }}
   delegate_to: localhost
-  command: ipa service-add HTTP/api.{{ cloud_zone }}
-  ignore_errors: yes
-  register: host_rc2
+  ansible.builtin.command: "ipa service-add HTTP/api.{{ cloud_zone }}"
+  register: service_add_result
   failed_when:
-    - "'already exists' not in host_rc2.stderr"  
+    - service_add_result.rc != 0
+    - "'already exists' not in service_add_result.stderr"
   when: not tls_cert.stat.exists
   run_once: true
 
 - name: Submit CSR to FreeIPA
   delegate_to: localhost
-  command: >
-    ipa cert-request /tmp/tls.csr --principal=HTTP/api.{{ cloud_zone }}
-  register: cert_request
+  ansible.builtin.command: "ipa cert-request /tmp/tls.csr --principal=HTTP/api.{{ cloud_zone }}"
   when: not tls_cert.stat.exists
   run_once: true
 
