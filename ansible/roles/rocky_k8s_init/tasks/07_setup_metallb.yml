@@ -171,7 +171,7 @@
   delegate_to: localhost
   ansible.builtin.command: >
     ipa dnsrecord-add {{ cloud_zone }} api
-    --a-rec={{ metallb_api_vip }}
+    --a-rec={{ k8s_api_vip }}
   register: dns_add_result
   failed_when:
     - dns_add_result.rc != 0
