@@ -195,19 +195,58 @@
   delegate_to: localhost
   when: not skip_win_build
 
+
+# new stuuf
+- name: Create .ssh directory for core user
+  ansible.windows.win_file:
+    path: C:\Users\core\.ssh
+    state: directory
+
+- name: Deploy dynamic cluster public key to authorized_keys
+  ansible.windows.win_copy:
+    content: "{{ lookup('file', '/home/core/.ssh/id_rsa.pub') }}"
+    dest: C:\Users\core\.ssh\authorized_keys
+
+- name: Enforce strict Windows permissions on authorized_keys (No Inheritance)
+  ansible.windows.win_acl:
+    path: C:\Users\core\.ssh\authorized_keys
+    user: "{{ item.user }}"
+    rights: "{{ item.rights }}"
+    type: allow
+    inheritance: none
+    state: present
+  loop:
+    - { user: 'NT AUTHORITY\SYSTEM', rights: 'FullControl' }
+    - { user: 'BUILTIN\Administrators', rights: 'FullControl' }
+
+- name: Disable password authentication in sshd_config for security
+  ansible.windows.win_lineinfile:
+    path: C:\ProgramData\ssh\sshd_config
+    regex: '(?i)^#?PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+  register: sshd_config_updated
+
+- name: Restart SSH Daemon if configuration changed
+  ansible.windows.win_service:
+    name: sshd
+    state: restarted
+  when: sshd_config_updated.changed
+
+# end new stuff
+
 # ------------------------------------------------------------
 # Connect via br-nat
 # ------------------------------------------------------------
-- name: Set Administrator password for first login
-  delegate_to: localhost
-  become: false
-  vars:
-    # Use absolute path to the RSA key to avoid 'not accessible' errors
-    key_path: "/home/{{ lookup('env', 'USER') }}/.ssh/id_rsa"
-    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i {{ key_path }} -T core@{{ br_nat_ip.stdout }}"
-  shell: |
-    {{ ssh_cmd }} "powershell -Command \"Enable-LocalUser -Name 'Administrator'; \$user = [adsi]'WinNT://./Administrator,user'; \$user.SetPassword('{{ ad_safe_mode_password }}'); \$user.SetInfo()\""
-  when: not skip_win_build
+# - name: Set Administrator password for first login
+#   delegate_to: localhost
+#   become: false
+#   vars:
+#     # Use absolute path to the RSA key to avoid 'not accessible' errors
+#     key_path: "/home/{{ lookup('env', 'USER') }}/.ssh/id_rsa"
+#     ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i {{ key_path }} -T core@{{ br_nat_ip.stdout }}"
+#   shell: |
+#     {{ ssh_cmd }} "powershell -Command \"Enable-LocalUser -Name 'Administrator'; \$user = [adsi]'WinNT://./Administrator,user'; \$user.SetPassword('{{ ad_safe_mode_password }}'); \$user.SetInfo()\""
+#   when: not skip_win_build
 
 - name: Use br-nat IP for SSH
   set_fact:
