@@ -201,6 +201,7 @@
   ansible.builtin.shell: |
     powershell.exe -Command "New-Item -ItemType Directory -Path C:\Users\core\.ssh -Force"
   vars:
+    ansible_host: "{{ br_nat_ip.stdout }}"
     ansible_connection: ssh
     ansible_shell_type: cmd
     ansible_user: core
@@ -212,6 +213,7 @@
   ansible.builtin.shell: |
     powershell.exe -Command "Set-Content -Path C:\Users\core\.ssh\authorized_keys -Value '{{ lookup('file', '/home/core/.ssh/id_rsa.pub') }}' -Force"
   vars:
+    ansible_host: "{{ br_nat_ip.stdout }}"
     ansible_connection: ssh
     ansible_shell_type: cmd
     ansible_user: core
@@ -224,6 +226,7 @@
     powershell.exe -Command "icacls 'C:\Users\core\.ssh' /inheritance:r /grant:r 'NT AUTHORITY\SYSTEM:(OI)(CI)(F)' 'BUILTIN\Administrators:(OI)(CI)(F)'"
     powershell.exe -Command "icacls 'C:\Users\core\.ssh\authorized_keys' /inheritance:r /grant:r 'NT AUTHORITY\SYSTEM:(F)' 'BUILTIN\Administrators:(F)'"
   vars:
+    ansible_host: "{{ br_nat_ip.stdout }}"
     ansible_connection: ssh
     ansible_shell_type: cmd
     ansible_user: core
@@ -235,6 +238,7 @@
   ansible.builtin.shell: |
     powershell.exe -Command "(Get-Content C:\ProgramData\ssh\sshd_config) -replace '(?i)^#?PasswordAuthentication.*', 'PasswordAuthentication no' | Set-Content C:\ProgramData\ssh\sshd_config"
   vars:
+    ansible_host: "{{ br_nat_ip.stdout }}"
     ansible_connection: ssh
     ansible_shell_type: cmd
     ansible_user: core
@@ -246,6 +250,7 @@
   ansible.builtin.shell: |
     powershell.exe -Command "Restart-Service sshd -Force"
   vars:
+    ansible_host: "{{ br_nat_ip.stdout }}"
     ansible_connection: ssh
     ansible_shell_type: cmd
     ansible_user: core
