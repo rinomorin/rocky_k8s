@@ -198,40 +198,30 @@
 
 # new stuuf
 - name: Create .ssh directory for core user
-  ansible.windows.win_file:
-    path: C:\Users\core\.ssh
-    state: directory
+  ansible.builtin.shell: |
+    powershell.exe -Command "New-Item -ItemType Directory -Path C:\Users\core\.ssh -Force"
+  changed_when: true
 
 - name: Deploy dynamic cluster public key to authorized_keys
-  ansible.windows.win_copy:
-    content: "{{ lookup('file', '/home/core/.ssh/id_rsa.pub') }}"
-    dest: C:\Users\core\.ssh\authorized_keys
+  ansible.builtin.shell: |
+    powershell.exe -Command "Set-Content -Path C:\Users\core\.ssh\authorized_keys -Value '{{ lookup('file', '/home/core/.ssh/id_rsa.pub') }}' -Force"
+  changed_when: true
 
 - name: Enforce strict Windows permissions on authorized_keys (No Inheritance)
-  ansible.windows.win_acl:
-    path: C:\Users\core\.ssh\authorized_keys
-    user: "{{ item.user }}"
-    rights: "{{ item.rights }}"
-    type: allow
-    inheritance: none
-    state: present
-  loop:
-    - { user: 'NT AUTHORITY\SYSTEM', rights: 'FullControl' }
-    - { user: 'BUILTIN\Administrators', rights: 'FullControl' }
+  ansible.builtin.shell: |
+    powershell.exe -Command "icacls 'C:\Users\core\.ssh' /inheritance:r /grant:r 'NT AUTHORITY\SYSTEM:(OI)(CI)(F)' 'BUILTIN\Administrators:(OI)(CI)(F)'"
+    powershell.exe -Command "icacls 'C:\Users\core\.ssh\authorized_keys' /inheritance:r /grant:r 'NT AUTHORITY\SYSTEM:(F)' 'BUILTIN\Administrators:(F)'"
+  changed_when: true
 
 - name: Disable password authentication in sshd_config for security
-  ansible.windows.win_lineinfile:
-    path: C:\ProgramData\ssh\sshd_config
-    regex: '(?i)^#?PasswordAuthentication'
-    line: 'PasswordAuthentication no'
+  ansible.builtin.shell: |
+    powershell.exe -Command "(Get-Content C:\ProgramData\ssh\sshd_config) -replace '(?i)^#?PasswordAuthentication.*', 'PasswordAuthentication no' | Set-Content C:\ProgramData\ssh\sshd_config"
   register: sshd_config_updated
 
 - name: Restart SSH Daemon if configuration changed
-  ansible.windows.win_service:
-    name: sshd
-    state: restarted
+  ansible.builtin.shell: |
+    powershell.exe -Command "Restart-Service sshd -Force"
   when: sshd_config_updated.changed
-
 # end new stuff
 
 # ------------------------------------------------------------
