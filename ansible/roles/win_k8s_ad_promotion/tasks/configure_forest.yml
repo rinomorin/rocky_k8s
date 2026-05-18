@@ -265,36 +265,36 @@
 #         Set-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
 #     }
 
+- name: Add A record for Windows node in IPA (Dynamic Zone)
+  delegate_to: localhost
+  when: "'win_worker_nodes' in group_names"
+  ansible.builtin.shell: |
+    # 1. Acquire Kerberos Ticket
+    echo "{{ lookup('env', 'ipa_admin_password') }}" | kinit admin > /dev/null
 
-- name: 1.6 - Configure DNS Forwarding Chain (Shell - Verified)
+    # 2. Automatically ensure the target zone exists inside FreeIPA first
+    if ! ipa dnszone-show "{{ target_zone }}" > /dev/null 2>&1; then
+      Write-Host "Creating missing forward zone in FreeIPA: {{ target_zone }}"
+      ipa dnszone-add "{{ target_zone }}"
+    fi
+
+    # 3. Inject or update the dynamic zone A record
+    ipa dnsrecord-add "{{ target_zone }}" "{{ cname_short }}" \
+        --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }} || \
+    ipa dnsrecord-mod "{{ target_zone }}" "{{ cname_short }}" \
+        --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }}
   vars:
-    rev_zone: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
-    helper_ip: "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
-  ansible.windows.win_shell: |
-    # 1. Force the registry to stop syncing interface-based DHCP DNS options into AD Forwarders
-    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\DNS\Parameters"
-    Set-ItemProperty -Path $regPath -Name "SyncAsndWithNetworkAdapters" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path $regPath -Name "SyncAsndWithUsingDeviceArp" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue
-
-    # 2. Force-clear all existing forwarders and pin the FreeIPA helper exclusively
-    $targetForwarder = "{{ helper_ip }}"
-    Write-Host "Forcing Global DNS Forwarder to $targetForwarder (FreeIPA)"
-    Set-DnsServerForwarder -IPAddress $targetForwarder -Timeout 3 -UseRootHint $false -Force
-
-    # 3. Enable Recursion
-    if ((Get-DnsServerSetting).IsRecursionEnabled -eq $false) {
-        Set-DnsServerSetting -IsRecursionEnabled $true
-    }
-
-    # 4. Configure Conditional Forwarder to FreeIPA for the Reverse Lookup Zone
-    $zoneName = "{{ rev_zone }}"
-    $exists = Get-DnsServerZone -Name $zoneName -ErrorAction SilentlyContinue
-    if (-not $exists) {
-        Write-Host "Creating Reverse Conditional Zone pointing to FreeIPA: $zoneName"
-        Add-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
-    } else {
-        Set-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
-    }
+    # Safely targets 'cloud.home.example.ca' or 'cloud.home.example.lcl' based on your node details
+    target_zone: "{{ hostvars[inventory_hostname]['domain'] | default('cloud.home.example.ca') }}"
+    cname_short: "{{ inventory_hostname.split('.')[0] }}"
+  register: a_rec_result
+  failed_when:
+    - a_rec_result.rc != 0
+    - "'no modifications to be performed' not in a_rec_result.stderr"
+    - "'already exists' not in a_rec_result.stderr"
+  changed_when:
+    - a_rec_result.rc == 0
+    - "'Added record' in a_rec_result.stdout"
 
 - name: Create PTR records in IPA for Windows nodes
   delegate_to: localhost
@@ -324,21 +324,27 @@
     - "'Added record' in ptr_result.stdout"
 
 
-- name: Add A record for Windows node in IPA (.local zone)
+- name: Add A record for Windows node in IPA (Dynamic Zone)
   delegate_to: localhost
   when: "'win_worker_nodes' in group_names"
   ansible.builtin.shell: |
-    # 1. Get Kerberos ticket
-    echo "{{ lookup('env', 'ipa_admin_password') }}" | kinit admin
+    # 1. Acquire Kerberos Ticket
+    echo "{{ lookup('env', 'ipa_admin_password') }}" | kinit admin > /dev/null
 
-    # 2. Inject or update the dynamic zone A record
-    ipa dnsrecord-add {{ b_zone }} {{ cname_short }} \
+    # 2. Automatically ensure the target zone exists inside FreeIPA first
+    if ! ipa dnszone-show "{{ target_zone }}" > /dev/null 2>&1; then
+      Write-Host "Creating missing forward zone in FreeIPA: {{ target_zone }}"
+      ipa dnszone-add "{{ target_zone }}"
+    fi
+
+    # 3. Inject or update the dynamic zone A record
+    ipa dnsrecord-add "{{ target_zone }}" "{{ cname_short }}" \
         --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }} || \
-    ipa dnsrecord-mod {{ b_zone }} {{ cname_short }} \
+    ipa dnsrecord-mod "{{ target_zone }}" "{{ cname_short }}" \
         --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }}
   vars:
-    # Explicitly matches whatever base domain hierarchy your infrastructure defines
-    b_zone: "cloud.example.local"
+    # Safely targets 'cloud.home.example.ca' or 'cloud.home.example.lcl' based on your node details
+    target_zone: "{{ hostvars[inventory_hostname]['domain'] | default('cloud.home.example.ca') }}"
     cname_short: "{{ inventory_hostname.split('.')[0] }}"
   register: a_rec_result
   failed_when:
