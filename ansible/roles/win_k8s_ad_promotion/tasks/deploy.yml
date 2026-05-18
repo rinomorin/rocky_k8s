@@ -200,27 +200,57 @@
 - name: Create .ssh directory for core user
   ansible.builtin.shell: |
     powershell.exe -Command "New-Item -ItemType Directory -Path C:\Users\core\.ssh -Force"
+  vars:
+    ansible_connection: ssh
+    ansible_shell_type: cmd
+    ansible_user: core
+    ansible_password: TemporaryAdminPassword123!
+    ansible_ssh_args: '-o PubkeyAuthentication=no -o PreferredAuthentications=password'
   changed_when: true
 
 - name: Deploy dynamic cluster public key to authorized_keys
   ansible.builtin.shell: |
     powershell.exe -Command "Set-Content -Path C:\Users\core\.ssh\authorized_keys -Value '{{ lookup('file', '/home/core/.ssh/id_rsa.pub') }}' -Force"
+  vars:
+    ansible_connection: ssh
+    ansible_shell_type: cmd
+    ansible_user: core
+    ansible_password: TemporaryAdminPassword123!
+    ansible_ssh_args: '-o PubkeyAuthentication=no -o PreferredAuthentications=password'
   changed_when: true
 
 - name: Enforce strict Windows permissions on authorized_keys (No Inheritance)
   ansible.builtin.shell: |
     powershell.exe -Command "icacls 'C:\Users\core\.ssh' /inheritance:r /grant:r 'NT AUTHORITY\SYSTEM:(OI)(CI)(F)' 'BUILTIN\Administrators:(OI)(CI)(F)'"
     powershell.exe -Command "icacls 'C:\Users\core\.ssh\authorized_keys' /inheritance:r /grant:r 'NT AUTHORITY\SYSTEM:(F)' 'BUILTIN\Administrators:(F)'"
+  vars:
+    ansible_connection: ssh
+    ansible_shell_type: cmd
+    ansible_user: core
+    ansible_password: TemporaryAdminPassword123!
+    ansible_ssh_args: '-o PubkeyAuthentication=no -o PreferredAuthentications=password'
   changed_when: true
 
 - name: Disable password authentication in sshd_config for security
   ansible.builtin.shell: |
     powershell.exe -Command "(Get-Content C:\ProgramData\ssh\sshd_config) -replace '(?i)^#?PasswordAuthentication.*', 'PasswordAuthentication no' | Set-Content C:\ProgramData\ssh\sshd_config"
+  vars:
+    ansible_connection: ssh
+    ansible_shell_type: cmd
+    ansible_user: core
+    ansible_password: TemporaryAdminPassword123!
+    ansible_ssh_args: '-o PubkeyAuthentication=no -o PreferredAuthentications=password'
   register: sshd_config_updated
 
 - name: Restart SSH Daemon if configuration changed
   ansible.builtin.shell: |
     powershell.exe -Command "Restart-Service sshd -Force"
+  vars:
+    ansible_connection: ssh
+    ansible_shell_type: cmd
+    ansible_user: core
+    ansible_password: TemporaryAdminPassword123!
+    ansible_ssh_args: '-o PubkeyAuthentication=no -o PreferredAuthentications=password'
   when: sshd_config_updated.changed
 # end new stuff
 
