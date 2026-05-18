@@ -232,20 +232,51 @@
   # become: yes
   # become_method: runas
 
+# - name: 1.6 - Configure DNS Forwarding Chain (Shell - Verified)
+#   vars:
+#     # Dynamically creates '0.0.10.in-addr.arpa' from '10.0.0.x'
+#     rev_zone: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
+#     helper_ip: "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
+#   ansible.windows.win_shell: |
+#     # 1. Check and Set Global Forwarder
+#     $currentForwarders = (Get-DnsServerForwarder).IPAddress
+#     $targetForwarder = "{{ helper_ip }}"
+
+#     if ($currentForwarders -notcontains $targetForwarder -or $currentForwarders.Count -ne 1) {
+#         Write-Host "Updating Global Forwarders to $targetForwarder"
+#         Set-DnsServerForwarder -IPAddress $targetForwarder -Timeout 3 -Force
+#     }
+
+#     # 2. Enable Recursion
+#     if ((Get-DnsServerSetting).IsRecursionEnabled -eq $false) {
+#         Set-DnsServerSetting -IsRecursionEnabled $true
+#     }
+
+#     # 3. Check and Set Conditional Reverse Forwarder
+#     $zoneName = "{{ rev_zone }}"
+#     $exists = Get-DnsServerZone -Name $zoneName -ErrorAction SilentlyContinue
+
+#     if (-not $exists) {
+#         Write-Host "Creating Reverse Conditional Zone: $zoneName"
+#         # Reference the PowerShell variable $targetForwarder directly
+#         Add-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder -ReplicationScope "Forest"
+#     } else {
+#         # Ensure the master server is correct even if the zone exists
+#         Set-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
+#     }
+
+
 - name: 1.6 - Configure DNS Forwarding Chain (Shell - Verified)
   vars:
-    # Dynamically creates '0.0.10.in-addr.arpa' from '10.0.0.x'
     rev_zone: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
     helper_ip: "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
   ansible.windows.win_shell: |
-    # 1. Check and Set Global Forwarder
-    $currentForwarders = (Get-DnsServerForwarder).IPAddress
+    # 1. Block the DHCP client engine from populating forwarders automatically
     $targetForwarder = "{{ helper_ip }}"
-
-    if ($currentForwarders -notcontains $targetForwarder -or $currentForwarders.Count -ne 1) {
-        Write-Host "Updating Global Forwarders to $targetForwarder"
-        Set-DnsServerForwarder -IPAddress $targetForwarder -Timeout 3 -Force
-    }
+    
+    # Force-clear all existing forwarders, bind the helper, and disable Root Hint overrides
+    Write-Host "Forcing DNS Forwarder to $targetForwarder and disabling interface inheritance."
+    Set-DnsServerForwarder -IPAddress $targetForwarder -Timeout 3 -UseRootHint $false -Force
 
     # 2. Enable Recursion
     if ((Get-DnsServerSetting).IsRecursionEnabled -eq $false) {
@@ -258,10 +289,8 @@
 
     if (-not $exists) {
         Write-Host "Creating Reverse Conditional Zone: $zoneName"
-        # Reference the PowerShell variable $targetForwarder directly
         Add-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder -ReplicationScope "Forest"
     } else {
-        # Ensure the master server is correct even if the zone exists
         Set-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
     }
 
@@ -299,7 +328,7 @@
     # 1. Get Kerberos ticket
     echo "{{ lookup('env', 'ipa_admin_password') }}" | kinit admin
 
-    ipa dnsrecord-add {{ b_zone }} {{ cname_short }} \
+    ipa dnsrecord-add {{ b_zone }} {{ cname_short }} 
         --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }} || \
     ipa dnsrecord-mod {{ b_zone }} {{ cname_short }} \
         --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }}
