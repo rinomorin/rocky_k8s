@@ -268,31 +268,31 @@
 
 - name: 1.6 - Configure DNS Forwarding Chain (Shell - Verified)
   vars:
-    # Dynamically creates '0.0.10.in-addr.arpa' from '10.0.0.x'
     rev_zone: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
     helper_ip: "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
   ansible.windows.win_shell: |
-    # 1. Block the DHCP client engine from populating forwarders automatically
+    # 1. Force the registry to stop syncing interface-based DHCP DNS options into AD Forwarders
+    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\DNS\Parameters"
+    Set-ItemProperty -Path $regPath -Name "SyncAsndWithNetworkAdapters" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $regPath -Name "SyncAsndWithUsingDeviceArp" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue
+
+    # 2. Force-clear all existing forwarders and pin the FreeIPA helper exclusively
     $targetForwarder = "{{ helper_ip }}"
-    
     Write-Host "Forcing Global DNS Forwarder to $targetForwarder (FreeIPA)"
     Set-DnsServerForwarder -IPAddress $targetForwarder -Timeout 3 -UseRootHint $false -Force
 
-    # 2. Enable Recursion
+    # 3. Enable Recursion
     if ((Get-DnsServerSetting).IsRecursionEnabled -eq $false) {
         Set-DnsServerSetting -IsRecursionEnabled $true
     }
 
-    # 3. Configure Conditional Forwarder to FreeIPA for the Reverse Lookup Zone
+    # 4. Configure Conditional Forwarder to FreeIPA for the Reverse Lookup Zone
     $zoneName = "{{ rev_zone }}"
     $exists = Get-DnsServerZone -Name $zoneName -ErrorAction SilentlyContinue
-
     if (-not $exists) {
         Write-Host "Creating Reverse Conditional Zone pointing to FreeIPA: $zoneName"
-        # We drop -ReplicationScope and use standard conditional routing
         Add-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
     } else {
-        Write-Host "Updating existing Reverse Conditional Zone: $zoneName"
         Set-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
     }
 
@@ -323,6 +323,7 @@
     - ptr_result.rc == 0
     - "'Added record' in ptr_result.stdout"
 
+
 - name: Add A record for Windows node in IPA (.local zone)
   delegate_to: localhost
   when: "'win_worker_nodes' in group_names"
@@ -330,17 +331,16 @@
     # 1. Get Kerberos ticket
     echo "{{ lookup('env', 'ipa_admin_password') }}" | kinit admin
 
-    ipa dnsrecord-add {{ b_zone }} {{ cname_short }} 
+    # 2. Inject or update the dynamic zone A record
+    ipa dnsrecord-add {{ b_zone }} {{ cname_short }} \
         --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }} || \
     ipa dnsrecord-mod {{ b_zone }} {{ cname_short }} \
         --a-rec={{ hostvars[inventory_hostname]['provision_ip'] }}
   vars:
-    b_zone: "{{ hostvars[inventory_hostname.split('.')[0]]['domain'] | replace('lcl', 'local') }}"
-    cname_short: "{{ hostvars[inventory_hostname.split('.')[0]]['inventory_hostname'] }}"
+    # Explicitly matches whatever base domain hierarchy your infrastructure defines
+    b_zone: "cloud.example.local"
+    cname_short: "{{ inventory_hostname.split('.')[0] }}"
   register: a_rec_result
-  # ==============================
-  # ERROR HANDLING & IDEMPOTENCY
-  # ==============================
   failed_when:
     - a_rec_result.rc != 0
     - "'no modifications to be performed' not in a_rec_result.stderr"
