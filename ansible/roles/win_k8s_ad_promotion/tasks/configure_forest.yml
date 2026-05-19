@@ -302,7 +302,19 @@
         Write-Host "Updating existing Reverse Conditional Zone: $zoneName"
         Set-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
     }
-  #  Set-DnsServerForwarder -IPAddress '10.0.0.20','172.16.0.1' -PassThru"
+
+- name: 1.6b - Configure DNS Forwarding Chain (Shell - Verified Fix)
+  vars:
+    helper_ip: "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
+    local_gateway: "{{ br_nat_ip.stdout }}"
+  ansible.windows.win_shell: |
+    Set-DnsServerForwarder -IPAddress '{{ helper_ip }}','local_gateway.split(".")[:3]| join('.') }}.1' -PassThru"
+  register: dns_fix_out
+  failed_when: false
+
+- debug:
+    var: dns_fix_out
+
 
 - name: Add A record for Windows node in IPA (Dynamic Zone)
   delegate_to: localhost
