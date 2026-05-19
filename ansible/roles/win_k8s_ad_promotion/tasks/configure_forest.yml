@@ -265,30 +265,28 @@
 #         Set-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
 #     }
 
-
-- name: 1.6 - Configure DNS Forwarding Chain (Shell - Hardened against DHCP/IPv6 Sync)
+- name: 1.6 - Configure DNS Forwarding Chain (Shell - Verified Fix)
   vars:
+    # Dynamically creates '0.0.10.in-addr.arpa' from your provision IP
     rev_zone: "{{ hostvars[inventory_hostname]['provision_ip'].split('.')[:3] | reverse | join('.') }}.in-addr.arpa"
     helper_ip: "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
   ansible.windows.win_shell: |
-    # 1. Sever the tie between DHCP network adapters and the AD DNS Server Engine
+    # 1. Block Windows from automatically updating forwarders via DHCP network adapters
     $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\DNS\Parameters"
     Set-ItemProperty -Path $regPath -Name "SyncAsndWithNetworkAdapters" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "SyncAsndWithUsingDeviceArp" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $regPath -Name "EnableIPv6" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue
 
-    # 2. Force Windows DNS to only bind to IPv4 addresses (Clears loopback ::1 hijacking)
-    Set-DnsServerSetting -ListenAddresses (Get-NetIPAddress -AddressFamily IPv4 | Select-Object -ExpandProperty IPAddress)
+    # 2. Force Windows DNS to only bind to IPv4 addresses (Stops loopback ::1 hijacking)
+    $ipv4Addresses = Get-NetIPAddress -AddressFamily IPv4 | Select-Object -ExpandProperty IPAddress
+    Set-DnsServerSetting -ListenAddresses $ipv4Addresses
 
-    # 3. Aggressively wipe the forwarders list entirely and inject ONLY our helper IP
+    # 3. Apply your working forwarder fix to clear the junk array and pin our FreeIPA helper
     $targetForwarder = "{{ helper_ip }}"
-    Write-Host "Blasting away old forwarders array ({172.16.0.1, fec0::}) and setting exclusive helper target..."
-    
-    # Using Invoke-CimMethod completely resets the array instead of appending/merging data
-    Get-CimInstance -Namespace "root\Microsoft\Windows\DNS" -ClassName "DnsServerForwarder" | 
-        Invoke-CimMethod -MethodName "SetForwarders" -Arguments @{ IPAddress = @($targetForwarder); Timeout = 3; UseRootHints = $false }
+    Write-Host "Pinning Global DNS Forwarder to $targetForwarder..."
+    Set-DnsServerForwarder -IPAddress $targetForwarder -Timeout 3 -UseRootHint $false -Force
 
-    # 4. Enforce Recursion properties
+    # 4. Ensure Recursion properties are enabled
     if ((Get-DnsServerSetting).IsRecursionEnabled -eq $false) {
         Set-DnsServerSetting -IsRecursionEnabled $true
     }
@@ -301,8 +299,10 @@
         Write-Host "Creating Reverse Conditional Zone pointing to FreeIPA: $zoneName"
         Add-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
     } else {
+        Write-Host "Updating existing Reverse Conditional Zone: $zoneName"
         Set-DnsServerConditionalForwarderZone -Name $zoneName -MasterServers $targetForwarder
     }
+  #  Set-DnsServerForwarder -IPAddress '10.0.0.20','172.16.0.1' -PassThru"
 
 - name: Add A record for Windows node in IPA (Dynamic Zone)
   delegate_to: localhost
