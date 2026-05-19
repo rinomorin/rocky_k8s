@@ -307,8 +307,8 @@
   vars:
     helper_ip: "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
     local_gateway: "{{ br_nat_ip.stdout }}"
-  ansible.windows.win_shell: |
-    Set-DnsServerForwarder -IPAddress '{{ helper_ip }}','local_gateway.split(".")[:3]| join('.') }}.1' -PassThru"
+  ansible.windows.win_shell: >
+    Set-DnsServerForwarder -IPAddress '{{ helper_ip }}','{{ local_gateway.split(".")[:3] | join(".") }}.1' -PassThru
   register: dns_fix_out
   failed_when: false
 
