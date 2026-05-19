@@ -1,3 +1,4 @@
+---
 # 1.1 - Resolve latest K8s version
 - name: 1.1 - Resolve latest K8s version
   ansible.builtin.uri:
@@ -14,12 +15,13 @@
   delegate_to: localhost
   register: docker_index_page
 
+# 1.3 - Extract and Filter Latest Docker Version
 - name: 1.3 - Extract and Filter Latest Docker Version
   ansible.builtin.set_fact:
     k8s_actual_version: "{{ k8s_version_lookup.content | trim }}"
-    # Regex finds 'docker-X.Y.Z.zip', maps to 'X.Y.Z', sorts, and takes the last (highest)
     docker_actual_version: "{{ docker_index_page.content | regex_findall('docker-([0-9]+\\.[0-9]+\\.[0-9]+)\\.zip') | sort(attribute=none) | last }}"
 
+# 1.4 - Ensure Chocolatey is installed
 - name: 1.4 - Ensure Chocolatey is installed
   chocolatey.chocolatey.win_chocolatey:
     name: chocolatey
@@ -30,6 +32,7 @@
   vars:
     ansible_become_password: "{{ ad_safe_mode_password }}"
 
+# 1.5 - Download and Extract Docker Engine
 - name: 1.5 - Download and Extract Docker Engine ({{ docker_actual_version }})
   ansible.windows.win_shell: |
     $version = "{{ docker_actual_version }}"
@@ -49,6 +52,7 @@
     ansible_become_password: "{{ ad_safe_mode_password }}"
   register: docker_install
 
+# 1.6 - Enable Windows Features (Containers and Hyper-V)
 - name: 1.6 - Enable Windows Features (Containers and Hyper-V)
   ansible.windows.win_feature:
     name:
@@ -63,6 +67,14 @@
     ansible_become_password: "{{ ad_safe_mode_password }}"
   register: feature_install
 
+# FIX: Reboot immediately here so vmcompute.dll is loaded before Docker initializes
+- name: 1.6.1 - Reboot to finalize Features
+  ansible.windows.win_reboot:
+    msg: "Rebooting for Hyper-V and Containers features to load vmcompute.dll"
+    reboot_timeout: 900
+  when: feature_install.reboot_required
+
+# 1.7 - Download Kubernetes Binaries
 - name: 1.7 - Download Kubernetes Binaries ({{ k8s_actual_version }})
   ansible.windows.win_shell: |
     $binaries = @("kubelet", "kubeadm", "kubectl")
@@ -78,12 +90,13 @@
   vars:
     ansible_become_password: "{{ ad_safe_mode_password }}"
 
+# 1.8 - Create Kubernetes Config Directory
 - name: 1.8 - Create Kubernetes Config Directory
   ansible.windows.win_file:
     path: C:\etc\kubernetes
     state: directory
 
-
+# 1.9.0 - Register Docker as a Windows Service
 - name: 1.9.0 - Register Docker as a Windows Service
   ansible.windows.win_shell: |
     if (-not (Get-Service -Name docker -ErrorAction SilentlyContinue)) {
@@ -96,6 +109,26 @@
   vars:
     ansible_become_password: "{{ ad_safe_mode_password }}"
 
+# 1.9.1 - Ensure Docker Service state is explicitly forced running and automatic
+- name: 1.9.1 - Ensure Docker Service is running
+  ansible.windows.win_service:
+    name: docker
+    state: started
+    start_mode: auto
+
+# 1.9.2 - Flush File System Buffers (Disk Sync)
+- name: 1.9.2 - Flush File System Buffers (Disk Sync)
+  ansible.windows.win_shell: |
+    $volumes = Get-Volume | Where-Object { $_.DriveLetter -ne $null }
+    foreach ($vol in $volumes) {
+        Write-Output "Syncing $($vol.DriveLetter):"
+        [System.IO.File]::Create("$($vol.DriveLetter):\sync.tmp").Dispose()
+        Remove-Item "$($vol.DriveLetter):\sync.tmp"
+    }
+  when: docker_install.changed
+  ignore_errors: yes
+
+# 1.10 - Get latest cri-dockerd release URL via shell
 - name: 1.10 - Get latest cri-dockerd release URL via shell
   ansible.builtin.shell: >
     curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
@@ -105,19 +138,18 @@
   register: cri_url_raw
   changed_when: false
 
-- name: set cri url
-  set_fact:
+# 1.10.1 - Map variable data string cleanly
+- name: 1.10.1 - Set cri download URL fact
+  ansible.builtin.set_fact:
     download_url: "{{ cri_url_raw.stdout | trim }}"
-- debug:
-    msg: "{{ cri_url_raw.stdout }} to download_url {{ download_url }}"
 
+# 1.11 - Download and Install latest cri-dockerd
 - name: 1.11 - Download and Install latest cri-dockerd
   ansible.windows.win_shell: |
     $installDir = "C:\Program Files\cri-dockerd"
     $exePath = "$installDir\cri-dockerd.exe"
     $serviceName = "cri-dockerd"
     
-    # 1. Final Registry and Service Cleanup
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
     if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
 
@@ -127,58 +159,14 @@
         Start-Sleep -Seconds 2
     }
 
-    # 2. Create the service using sc.exe with explicit spacing
-    # Note: 'binpath= ' and 'start= ' MUST have the space after the '='
     $binArgs = "`"$exePath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd"
     sc.exe create $serviceName binpath= $binArgs start= auto DisplayName= "CRI-Docker Service"
     
-    # 3. Increase the service timeout (gives the binary more time to initialize)
-    # This adds a 60-second window for the service to report 'Running'
     New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "ServicesPipeTimeout" -Value 60000 -PropertyType DWord -Force | Out-Null
 
-    # 4. Start the service
     Start-Service $serviceName
-    
-    # 5. Final check
     Start-Sleep -Seconds 2
     Get-Service $serviceName
   become: yes
   become_method: runas
   become_user: '.\Administrator'
-
-- name: Install Windows Containers feature
-  ansible.windows.win_feature:
-    name: Containers
-    state: present
-  register: container_feature
-
-- name: Reboot if Containers feature requires it
-  ansible.windows.win_reboot:
-  when: container_feature.reboot_required
-
-- name: 1.0.1 - Ensure Docker Service is running
-  ansible.windows.win_service:
-    name: docker
-    state: started
-    start_mode: auto
-
-
-- name: 1.9.2 - Flush File System Buffers (Disk Sync)
-  ansible.windows.win_shell: |
-    # Explicitly flush all volumes to prevent corruption on immutable nodes
-    $volumes = Get-Volume | Where-Object { $_.DriveLetter -ne $null }
-    foreach ($vol in $volumes) {
-        Write-Output "Syncing $($vol.DriveLetter):"
-        # Using the shell to trigger a flush of all metadata and data
-        [System.IO.File]::Create("$($vol.DriveLetter):\sync.tmp").Dispose()
-        Remove-Item "$($vol.DriveLetter):\sync.tmp"
-    }
-  when: feature_install.reboot_required or docker_install.changed
-  ignore_errors: yes
-
-- name: 1.10 - Reboot to finalize Features
-  ansible.windows.win_reboot:
-    msg: "Rebooting for Hyper-V and Containers features"
-    reboot_timeout: 900
-  become: no
-  when: feature_install.reboot_required or docker_install.changed
