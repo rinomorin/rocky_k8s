@@ -190,51 +190,37 @@
     data: 60000
     type: dword
 
-- name: 1.11.2a - Force Purge Stale cri-dockerd Service Registration
+- name: 1.11.2a - Force Purge and Re-initialize Service State Database
   ansible.windows.win_shell: |
     $serviceName = "cri-dockerd"
-    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
-        Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-    }
+    
+    # Forcefully terminate any orphaned container adapter processes hanging onto handles
+    Get-Process -Name "cri-dockerd" -ErrorAction SilentlyContinue | Stop-Process -Force
+    
+    # Wipe the registry entry if any piece remains
     if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName") {
         Remove-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName" -Recurse -Force
     }
+    
+    # Force a brief system sleep cycle to let the Win32 SCM handle cache expire
+    [GC]::Collect()
+    Start-Sleep -Seconds 3
   failed_when: false
 
-- name: 1.11.2a - Force Purge Stale cri-dockerd Service cleanly
-  ansible.windows.win_service:
-    name: cri-dockerd
-    state: absent
+- name: 1.11.2b - Freshly Register cri-dockerd Under Local System Context
+  ansible.windows.win_shell: |
+    $serviceName = "cri-dockerd"
+    $exePath = '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
 
-- name: 1.11.2b - Freshly Configure and Start cri-dockerd Service
-  ansible.windows.win_service:
-    name: cri-dockerd
-    display_name: "CRI-Docker Service"
-    description: "CRI adapter wrapper tool for Kubernetes Docker interactions"
-    path: '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
-    dependencies:
-      - docker
-    username: 'NT AUTHORITY\SYSTEM'
-    start_mode: auto
-    state: started
-
-# - name: 1.11.2b - Freshly Register cri-dockerd via Native PowerShell Engine
-#   ansible.windows.win_shell: |
-#     $serviceName = "cri-dockerd"
-#     $exePath = '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
-
-#     # Pass DependsOn directly during creation to avoid Set-Service limitations
-#     New-Service -Name $serviceName `
-#                 -BinaryPathName $exePath `
-#                 -DisplayName "CRI-Docker Service" `
-#                 -Description "CRI adapter wrapper tool for Kubernetes Docker interactions" `
-#                 -DependsOn "docker" `
-#                 -StartupType Automatic | Out-Null
-#   register: ps_service_creation
+    # Register using sc.exe but targeting LocalSystem natively (bypasses password mandates)
+    sc.exe create $serviceName binPath= $exePath start= auto depend= docker obj= "LocalSystem"
+  register: sc_creation_result
 
 - name: 1.11.2c - Ensure cri-dockerd Service is Started Natively
   ansible.windows.win_service:
     name: cri-dockerd
     state: started
     start_mode: auto
+    username: 'NT AUTHORITY\SYSTEM'
+    # start_mode: auto
+    # state: started
