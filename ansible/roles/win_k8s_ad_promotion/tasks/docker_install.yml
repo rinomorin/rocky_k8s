@@ -161,14 +161,28 @@
     path: 'C:\Program Files\cri-dockerd'
     state: directory
 
-# NEW STEP - Push and unzip archive directly to Windows host
-- name: 1.11 - Push and extract cri-dockerd archive to VM
-  community.windows.win_unzip:
+# 1.11 - Copy the ZIP from the Ansible helper node directly to the Windows VM
+- name: 1.11 - Securely copy cri-dockerd archive to Windows VM
+  ansible.windows.win_copy:
     src: "/tmp/cri-dockerd-windows.zip"
-    dest: 'C:\Program Files\cri-dockerd'
-    creates: 'C:\Program Files\cri-dockerd\cri-dockerd.exe'
+    dest: "C:\\Windows\\Temp\\cri-dockerd-windows.zip"
 
-# NEW STEP - Configure registry item for pipe timeout natively
+# 1.11.a - Extract the file now that it safely lives on the C: drive
+- name: 1.11a - Extract cri-dockerd archive on the host
+  community.windows.win_unzip:
+    src: "C:\\Windows\\Temp\\cri-dockerd-windows.zip"
+    dest: "C:\\Program Files\\cri-dockerd"
+    creates: "C:\\Program Files\\cri-dockerd\\cri-dockerd\\cri-dockerd.exe"
+
+# 1.11.b - Move the binary up if the zip nested it inside a subfolder
+- name: 1.11b - Ensure binary sits cleanly in the root install path
+  ansible.windows.win_shell: |
+    if (Test-Path "C:\Program Files\cri-dockerd\cri-dockerd\cri-dockerd.exe") {
+        Move-Item -Path "C:\Program Files\cri-dockerd\cri-dockerd\cri-dockerd.exe" -Destination "C:\Program Files\cri-dockerd\cri-dockerd.exe" -Force
+    }
+  failed_when: false
+
+# 1.11.1 - Configure registry item for pipe timeout natively
 - name: 1.11.1 - Configure ServicesPipeTimeout parameter
   ansible.windows.win_regedit:
     path: HKLM:\SYSTEM\CurrentControlSet\Control
@@ -176,7 +190,7 @@
     data: 60000
     type: dword
 
-# NEW STEP - Setup and ensure cri-dockerd service is running
+# 1.11.2 - Setup and ensure cri-dockerd service is running
 - name: 1.11.2 - Manage cri-dockerd service state
   ansible.windows.win_service:
     name: cri-dockerd
