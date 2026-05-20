@@ -190,6 +190,18 @@
     data: 60000
     type: dword
 
+- name: 1.11.2a - Force Purge Stale cri-dockerd Service Registration
+  ansible.windows.win_shell: |
+    $serviceName = "cri-dockerd"
+    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+        Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+    if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName") {
+        Remove-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName" -Recurse -Force
+    }
+  failed_when: false
+
 - name: 1.11.2a - Force Purge Stale cri-dockerd Service cleanly
   ansible.windows.win_service:
     name: cri-dockerd
@@ -221,8 +233,8 @@
 #                 -StartupType Automatic | Out-Null
 #   register: ps_service_creation
 
-# - name: 1.11.2c - Ensure cri-dockerd Service is Started Natively
-#   ansible.windows.win_service:
-#     name: cri-dockerd
-#     state: started
-#     start_mode: auto
+- name: 1.11.2c - Ensure cri-dockerd Service is Started Natively
+  ansible.windows.win_service:
+    name: cri-dockerd
+    state: started
+    start_mode: auto
