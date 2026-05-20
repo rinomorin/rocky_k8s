@@ -142,6 +142,9 @@
   register: cri_url_raw
   changed_when: false
 
+- debug:
+    msg: "cri_url_raw: {{ cri_url_raw.stdout }}"
+
 # 1.10.1 - Map variable data string cleanly
 - name: 1.10.1 - Set cri download URL fact
   ansible.builtin.set_fact:
