@@ -150,7 +150,6 @@
     download_url: "{{ cri_url_raw.stdout | trim }}"
 
 # 1.11 - Download and Install latest cri-dockerd
-# 1.11 - Download and Install latest cri-dockerd
 - name: 1.11 - Download and Install latest cri-dockerd
   ansible.windows.win_shell: |
     $installDir = "C:\Program Files\cri-dockerd"
