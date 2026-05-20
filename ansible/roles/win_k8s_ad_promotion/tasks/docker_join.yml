@@ -37,7 +37,7 @@
 - name: 2.1 - Register and Ensure CRI-Docker Adapter Service is active
   ansible.windows.win_service:
     name: cri-dockerd
-    path: '"C:\k\cri-dockerd.exe" --container-runtime-endpoint npipe:////./pipe/cri-dockerd'
+    path: '"C:\Program Files\cri-dockerd\cri-dockerd.exe" --container-runtime-endpoint npipe:////./pipe/cri-dockerd'
     display_name: "CRI-Docker Service"
     description: "CRI adapter wrapper tool for Kubernetes Docker interactions"
     start_mode: auto
