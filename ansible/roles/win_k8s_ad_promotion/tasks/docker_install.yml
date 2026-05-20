@@ -53,7 +53,7 @@
   register: docker_install
 
 # 1.6 - Enable Windows Features (Containers and Hyper-V)
-- name: 1.6 - Enable Windows Features (Containers and Hyper-V)
+- name: 1.6 - Enable Windows Features (Containers)
   ansible.windows.win_feature:
     name:
       - Containers
@@ -207,15 +207,13 @@
     $serviceName = "cri-dockerd"
     $exePath = '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
 
-    # Register using native PowerShell cmdlets to avoid sc.exe string parsing bugs
+    # Pass DependsOn directly during creation to avoid Set-Service limitations
     New-Service -Name $serviceName `
                 -BinaryPathName $exePath `
                 -DisplayName "CRI-Docker Service" `
                 -Description "CRI adapter wrapper tool for Kubernetes Docker interactions" `
+                -DependsOn "docker" `
                 -StartupType Automatic | Out-Null
-
-    # Bind the runtime dependency cleanly to the running docker engine daemon
-    Set-Service -Name $serviceName -Dependency docker
   register: ps_service_creation
 
 - name: 1.11.2c - Ensure cri-dockerd Service is Started Natively
