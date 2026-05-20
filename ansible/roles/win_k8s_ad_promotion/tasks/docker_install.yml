@@ -109,7 +109,7 @@
 
 
 # 1.9.0 - Pause to allow Active Directory and network changes to settle
-- name: 1.9.0.1 - Wait for docyer to settle post-AD changes
+- name: 1.9.0.1 - Wait for docker to settle post-AD changes
   pause:
     seconds: 30
 
@@ -190,12 +190,24 @@
     data: 60000
     type: dword
 
-- name: 1.11.2 - Manage cri-dockerd service state
+- name: 1.11.2a - Force Purge Stale cri-dockerd Service Registration
+  ansible.windows.win_shell: |
+    $serviceName = "cri-dockerd"
+    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+        Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
+        sc.exe delete $serviceName
+        Start-Sleep -Seconds 2
+    }
+  failed_when: false
+
+- name: 1.11.2b - Freshly Register cri-dockerd Using Domain Administrator Context
+  ansible.windows.win_shell: |
+    # Register using sc.exe with explicit trailing spaces after properties
+    sc.exe create cri-dockerd binPath= "\"C:\Program Files\cri-dockerd\cri-dockerd.exe\"" start= auto depend= docker obj= ".\Administrator"
+  register: service_creation
+
+- name: 1.11.2c - Ensure cri-dockerd Service is Started Natively
   ansible.windows.win_service:
     name: cri-dockerd
-    display_name: "CRI-Docker Service"
-    path: '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
+    state: started
     start_mode: auto
-    state: restarted
-    # Force the service control manager to run with full system token permissions
-    username: 'NT AUTHORITY\SYSTEM'
