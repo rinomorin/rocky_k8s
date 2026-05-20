@@ -207,10 +207,10 @@
     Start-Sleep -Seconds 3
   failed_when: false
 
-- name: 1.11.2a - Force Purge Stale cri-dockerd Service cleanly
-  ansible.windows.win_service:
-    name: cri-dockerd
-    state: absent
+# - name: 1.11.2a - Force Purge Stale cri-dockerd Service cleanly
+#   ansible.windows.win_service:
+#     name: cri-dockerd
+#     state: absent
 
 - name: 1.11.2b - Freshly Register cri-dockerd Under Local System Context
   ansible.windows.win_shell: |
