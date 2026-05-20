@@ -221,20 +221,33 @@
     sc.exe create $serviceName binPath= $exePath start= auto depend= docker obj= "LocalSystem"
   register: sc_creation_result
 
-- name: 1.11.2d - Fix Registry Permissions for cri-dockerd
+- name: 1.11.2d - Force Registry Permissions for CredentialSpecs
   ansible.windows.win_shell: |
-    # Grant SYSTEM account full control over the CredentialSpecs registry hive
-    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
-    $acl = Get-Acl $regPath
-    $permission = "NT AUTHORITY\SYSTEM","FullControl","Allow"
-    $accessRule = New-Object System.Security.AccessControl.RegistryAccessRule($permission)
-    $acl.SetAccessRule($accessRule)
-    Set-Acl $regPath $acl
+    # Use native icacls to grant full control to the SYSTEM account
+    # This bypasses the object model issues we encountered with Set-Acl
+    $regPath = "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
+    icacls $regPath /grant "SYSTEM:(OI)(CI)F" /T /C
+  failed_when: false
 
 - name: 1.11.2e - Now Start the Service
   ansible.windows.win_service:
     name: cri-dockerd
     state: started
+
+# - name: 1.11.2d - Fix Registry Permissions for cri-dockerd
+#   ansible.windows.win_shell: |
+#     # Grant SYSTEM account full control over the CredentialSpecs registry hive
+#     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
+#     $acl = Get-Acl $regPath
+#     $permission = "NT AUTHORITY\SYSTEM","FullControl","Allow"
+#     $accessRule = New-Object System.Security.AccessControl.RegistryAccessRule($permission)
+#     $acl.SetAccessRule($accessRule)
+#     Set-Acl $regPath $acl
+
+# - name: 1.11.2e - Now Start the Service
+#   ansible.windows.win_service:
+#     name: cri-dockerd
+#     state: started
 
 # - name: 1.11.2c - Ensure cri-dockerd Service is Started Natively
 #   ansible.windows.win_service:
