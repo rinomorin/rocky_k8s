@@ -7,20 +7,40 @@
     state: started
     start_mode: auto
 
-- name: 2.0b - Verify or Create Default Docker Network
+- name: 2.0a - Force Add Docker and Kubernetes paths to System Environment
+  ansible.windows.win_path:
+    elements:
+      - 'C:\Program Files\Docker'
+      - 'C:\k' # Traditional landing zone for kubeadm/kubelet/cri-dockerd binaries
+    state: present
+    scope: machine
+
+- name: 2.0b - Verify or Create Default Docker Network (Using absolute path)
   ansible.windows.win_shell: |
-    $network = docker network ls --filter name=nat -q
+    # Reload path for this active session context
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+    
+    # Locate docker executable safely
+    $dockerPath = Get-Command docker -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+    if (-not $dockerPath) {
+        if (Test-Path "C:\Program Files\Docker\docker.exe") {
+            $dockerPath = "C:\Program Files\Docker\docker.exe"
+        } else {
+            throw "Docker.exe could not be located on the filesystem. Please check installation folder path."
+        }
+    }
+
+    # Execute network verification
+    $network = & $dockerPath network ls --filter name=nat -q
     if (-not $network) {
-        docker network create -d nat nat
+        & $dockerPath network create -d nat nat
     }
   register: docker_net_init
 
 - name: 2.0c - Correct cri-dockerd Service Registration
   ansible.windows.win_shell: |
-    # Stop and delete the current broken definition
     sc.exe stop cri-dockerd
     sc.exe delete cri-dockerd
-    # Re-register with explicit string isolation
     sc.exe create cri-dockerd binPath= "\"C:\k\cri-dockerd.exe\" --container-runtime-endpoint npipe:////./pipe/cri-dockerd" start= auto depend= docker obj= "NT AUTHORITY\SYSTEM"
   register: sc_recreate
   failed_when: false
@@ -38,14 +58,14 @@
 
 - name: 2.3 - Pre-join Safe Cleanup
   ansible.windows.win_shell: |
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
     kubeadm reset --force
   ignore_errors: yes
 
 - name: 2.4 - Join Windows Node to Cluster via Docker CRI
-  ansible.windows.win_shell: >
-    {{ k8s_join_command_raw.stdout }}
-    --cri-socket=npipe:////./pipe/cri-dockerd
-    --v=5
+  ansible.windows.win_shell: |
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+    {{ k8s_join_command_raw.stdout }} --cri-socket=npipe:////./pipe/cri-dockerd --v=5
   register: join_result
 
 - name: 2.5 - Verify Node Status on Master
