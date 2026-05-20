@@ -190,11 +190,12 @@
     data: 60000
     type: dword
 
-# 1.11.2 - Setup and ensure cri-dockerd service is running
 - name: 1.11.2 - Manage cri-dockerd service state
   ansible.windows.win_service:
     name: cri-dockerd
     display_name: "CRI-Docker Service"
-    path: '"C:\Program Files\cri-dockerd\cri-dockerd.exe" --container-runtime-endpoint npipe:////./pipe/cri-dockerd'
+    path: '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
     start_mode: auto
     state: restarted
+    # Force the service control manager to run with full system token permissions
+    username: 'NT AUTHORITY\SYSTEM'
