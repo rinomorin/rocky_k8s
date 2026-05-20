@@ -7,6 +7,24 @@
     state: started
     start_mode: auto
 
+- name: 2.0b - Verify or Create Default Docker Network
+  ansible.windows.win_shell: |
+    $network = docker network ls --filter name=nat -q
+    if (-not $network) {
+        docker network create -d nat nat
+    }
+  register: docker_net_init
+
+- name: 2.0c - Correct cri-dockerd Service Registration
+  ansible.windows.win_shell: |
+    # Stop and delete the current broken definition
+    sc.exe stop cri-dockerd
+    sc.exe delete cri-dockerd
+    # Re-register with explicit string isolation
+    sc.exe create cri-dockerd binPath= "\"C:\k\cri-dockerd.exe\" --container-runtime-endpoint npipe:////./pipe/cri-dockerd" start= auto depend= docker obj= "NT AUTHORITY\SYSTEM"
+  register: sc_recreate
+  failed_when: false
+
 - name: 2.1 - Ensure CRI-Docker adapter service is active
   ansible.windows.win_service:
     name: cri-dockerd
@@ -29,10 +47,6 @@
     --cri-socket=npipe:////./pipe/cri-dockerd
     --v=5
   register: join_result
-
-- name: Debug Join Output
-  ansible.builtin.debug:
-    var: join_result.stdout_lines
 
 - name: 2.5 - Verify Node Status on Master
   ansible.builtin.shell: kubectl get nodes
