@@ -142,48 +142,45 @@
   register: cri_url_raw
   changed_when: false
 
-- debug:
-    msg: "cri_url_raw: {{ cri_url_raw.stdout }}"
-
 # 1.10.1 - Map variable data string cleanly
 - name: 1.10.1 - Set cri download URL fact
   ansible.builtin.set_fact:
     download_url: "{{ cri_url_raw.stdout | trim }}"
 
-# 1.11 - Download and Install latest cri-dockerd
-- name: 1.11 - Download and Install latest cri-dockerd
-  ansible.windows.win_shell: |
-    $installDir = "C:\Program Files\cri-dockerd"
-    $exePath = "`"$installDir\cri-dockerd.exe`""
-    $serviceName = "cri-dockerd"
-    
-    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
-    if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+# NEW STEP - Download zip file to the local Ansible control node
+- name: 1.10.2 - Download cri-dockerd zip to controller locally
+  ansible.builtin.get_url:
+    url: "{{ download_url }}"
+    dest: "/tmp/cri-dockerd-windows.zip"
+  delegate_to: localhost
+  run_once: true
 
-    # Clean up existing service if it exists
-    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
-        Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
-        # Using native PowerShell to remove rather than sc.exe
-        Remove-Service -Name $serviceName -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-    }
+# NEW STEP - Ensure target directory exists on Windows host
+- name: 1.10.3 - Create install directory on Windows
+  ansible.windows.win_file:
+    path: 'C:\Program Files\cri-dockerd'
+    state: directory
 
-    # Arguments passed to the executable
-    $binArgs = "--container-runtime-endpoint npipe:////./pipe/cri-dockerd"
-    
-    # Create the service using native PowerShell
-    New-Service -Name $serviceName `
-                -BinaryPathName "$exePath $binArgs" `
-                -DisplayName "CRI-Docker Service" `
-                -StartupType Automatic | Out-Null
-    
-    # Configure pipe timeout parameter
-    New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "ServicesPipeTimeout" -Value 60000 -PropertyType DWord -Force | Out-Null
+# NEW STEP - Push and unzip archive directly to Windows host
+- name: 1.11 - Push and extract cri-dockerd archive to VM
+  community.windows.win_unzip:
+    src: "/tmp/cri-dockerd-windows.zip"
+    dest: 'C:\Program Files\cri-dockerd'
+    creates: 'C:\Program Files\cri-dockerd\cri-dockerd.exe'
 
-    # Start and verify
-    Start-Service $serviceName
-    Start-Sleep -Seconds 2
-    Get-Service $serviceName
-  become: yes
-  become_method: runas
-  become_user: '.\Administrator'
+# NEW STEP - Configure registry item for pipe timeout natively
+- name: 1.11.1 - Configure ServicesPipeTimeout parameter
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Control
+    name: ServicesPipeTimeout
+    data: 60000
+    type: dword
+
+# NEW STEP - Setup and ensure cri-dockerd service is running
+- name: 1.11.2 - Manage cri-dockerd service state
+  ansible.windows.win_service:
+    name: cri-dockerd
+    display_name: "CRI-Docker Service"
+    path: '"C:\Program Files\cri-dockerd\cri-dockerd.exe" --container-runtime-endpoint npipe:////./pipe/cri-dockerd'
+    start_mode: auto
+    state: restarted
