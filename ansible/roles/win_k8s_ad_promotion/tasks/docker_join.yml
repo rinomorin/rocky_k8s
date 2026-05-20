@@ -7,32 +7,41 @@
     state: started
     start_mode: auto
 
-- name: 2.0a - Force Add Docker and Kubernetes paths to System Environment
-  ansible.windows.win_path:
-    elements:
-      - 'C:\Program Files\Docker'
-      - 'C:\k'
-    state: present
-    scope: machine
-
-- name: 2.0b - Verify or Create Default Docker Network (Using absolute path)
+- name: 1.11.2a - Force Purge Stale cri-dockerd Service Registration
   ansible.windows.win_shell: |
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-    
-    $dockerPath = Get-Command docker -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-    if (-not $dockerPath) {
-        if (Test-Path "C:\Program Files\Docker\docker.exe") {
-            $dockerPath = "C:\Program Files\Docker\docker.exe"
-        } else {
-            throw "Docker.exe could not be located on the filesystem. Please check installation folder path."
-        }
+    $serviceName = "cri-dockerd"
+    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+        Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
+        # Use a secondary safety timeout delay to ensure the handle drops
+        Start-Sleep -Seconds 2
     }
+    # Force delete the service path keys from the registry database natively
+    if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName") {
+        Remove-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName" -Recurse -Force
+    }
+  failed_when: false
 
-    $network = & $dockerPath network ls --filter name=nat -q
-    if (-not $network) {
-        & $dockerPath network create -d nat nat
-    }
-  register: docker_net_init
+- name: 1.11.2b - Freshly Register cri-dockerd via Native PowerShell Engine
+  ansible.windows.win_shell: |
+    $serviceName = "cri-dockerd"
+    $exePath = '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
+
+    # Register the service cleanly using native parameters
+    New-Service -Name $serviceName `
+                -BinaryPathName $exePath `
+                -DisplayName "CRI-Docker Service" `
+                -Description "CRI adapter wrapper tool for Kubernetes Docker interactions" `
+                -StartupType Automatic | Out-Null
+
+    # Ensure the service dependencies point cleanly to the active Docker daemon
+    Set-Service -Name $serviceName -Dependency docker
+  register: ps_service_creation
+
+- name: 1.11.2c - Ensure cri-dockerd Service is Started Natively
+  ansible.windows.win_service:
+    name: cri-dockerd
+    state: started
+    start_mode: auto
 
 - name: 2.1 - Register and Ensure CRI-Docker Adapter Service is active
   ansible.windows.win_service:
