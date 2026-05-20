@@ -150,26 +150,37 @@
     download_url: "{{ cri_url_raw.stdout | trim }}"
 
 # 1.11 - Download and Install latest cri-dockerd
+# 1.11 - Download and Install latest cri-dockerd
 - name: 1.11 - Download and Install latest cri-dockerd
   ansible.windows.win_shell: |
     $installDir = "C:\Program Files\cri-dockerd"
-    $exePath = "$installDir\cri-dockerd.exe"
+    $exePath = "`"$installDir\cri-dockerd.exe`""
     $serviceName = "cri-dockerd"
     
     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
     if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
 
+    # Clean up existing service if it exists
     if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
         Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
-        sc.exe delete $serviceName
+        # Using native PowerShell to remove rather than sc.exe
+        Remove-Service -Name $serviceName -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
     }
 
-    $binArgs = "`"$exePath`" --container-runtime-endpoint npipe:////./pipe/cri-dockerd"
-    sc.exe create $serviceName binpath= $binArgs start= auto DisplayName= "CRI-Docker Service"
+    # Arguments passed to the executable
+    $binArgs = "--container-runtime-endpoint npipe:////./pipe/cri-dockerd"
     
+    # Create the service using native PowerShell
+    New-Service -Name $serviceName `
+                -BinaryPathName "$exePath $binArgs" `
+                -DisplayName "CRI-Docker Service" `
+                -StartupType Automatic | Out-Null
+    
+    # Configure pipe timeout parameter
     New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "ServicesPipeTimeout" -Value 60000 -PropertyType DWord -Force | Out-Null
 
+    # Start and verify
     Start-Service $serviceName
     Start-Sleep -Seconds 2
     Get-Service $serviceName
