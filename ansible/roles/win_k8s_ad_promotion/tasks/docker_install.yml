@@ -178,7 +178,7 @@
 - name: 1.11b - Ensure binary sits cleanly in the root install path
   ansible.windows.win_shell: |
     if (Test-Path "C:\Program Files\cri-dockerd\cri-dockerd\cri-dockerd.exe") {
-        Move-Item -Path "C:\Program Files\cri-dockerd\cri-dockerd\cri-dockerd.exe" -Destination "C:\Program Files\cri-dockerd\cri-dockerd.exe" -Force
+        Move-Item -Path "C:\Program Files\cri-dockerd\cri-dockerd\cri-dockerd.exe"
     }
   failed_when: false
 
@@ -190,51 +190,34 @@
     data: 60000
     type: dword
 
-- name: 1.11.2 - Deploy cri-dockerd as a Persistent Background Task
+# 1.11.2 - Register and secure cri-dockerd Service
+- name: 1.11.2 - Register and secure cri-dockerd Service
   ansible.windows.win_shell: |
-    $taskName = "cri-dockerd-adapter"
-    $exePath = "C:\Program Files\cri-dockerd\cri-dockerd.exe"
-    
-    # 1. Clean up any existing service or task
-    Stop-Service -Name "cri-dockerd" -Force -ErrorAction SilentlyContinue
-    & sc.exe delete "cri-dockerd" -ErrorAction SilentlyContinue
-    & schtasks.exe /delete /tn $taskName /f -ErrorAction SilentlyContinue
-    
-    # 2. Create the persistent task
-    # /RU SYSTEM runs it with the highest privileges
-    # /IT allows it to run in the background
-    # /SC ONSTART ensures it boots with the server
-    & schtasks.exe /create /tn $taskName /tr "'$exePath'" /sc onstart /ru SYSTEM /it /f
-    
-    # 3. Start it immediately
-    & schtasks.exe /run /tn $taskName
-  register: task_deployment
+    $serviceName = "cri-dockerd"
+    $exePath = '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
 
-# - name: 1.11.2e - Now Start the Service
-#   ansible.windows.win_service:
-#     name: cri-dockerd
-#     state: started
+    # 1. Cleanup old instances
+    Stop-Service -Name $serviceName -ErrorAction SilentlyContinue
+    sc.exe delete $serviceName -ErrorAction SilentlyContinue
 
-# - name: 1.11.2d - Fix Registry Permissions for cri-dockerd
-#   ansible.windows.win_shell: |
-#     # Grant SYSTEM account full control over the CredentialSpecs registry hive
-#     $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
-#     $acl = Get-Acl $regPath
-#     $permission = "NT AUTHORITY\SYSTEM","FullControl","Allow"
-#     $accessRule = New-Object System.Security.AccessControl.RegistryAccessRule($permission)
-#     $acl.SetAccessRule($accessRule)
-#     Set-Acl $regPath $acl
+    # 2. Register with LocalSystem
+    sc.exe create $serviceName binPath= $exePath start= auto obj= "LocalSystem"
 
-# - name: 1.11.2e - Now Start the Service
-#   ansible.windows.win_service:
-#     name: cri-dockerd
-#     state: started
+    # 3. Apply permissive Security Descriptor to allow SCM to handle the service
+    sc.exe sdset $serviceName "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)S:(AU;FA;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"
 
-# - name: 1.11.2c - Ensure cri-dockerd Service is Started Natively
-#   ansible.windows.win_service:
-#     name: cri-dockerd
-#     state: started
-#     start_mode: auto
-#     username: 'NT AUTHORITY\SYSTEM'
-#     # start_mode: auto
-#     # state: started
+- name: 1.11.3 - Grant SYSTEM registry access for CredentialSpecs
+  ansible.windows.win_shell: |
+    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
+    if (Test-Path $regPath) {
+        $acl = Get-Acl $regPath
+        $rule = New-Object System.Security.AccessControl.RegistryAccessRule("NT AUTHORITY\SYSTEM","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+        $acl.SetAccessRule($rule)
+        Set-Acl $regPath $acl
+    }
+
+- name: 1.11.4 - Start cri-dockerd Service
+  ansible.windows.win_service:
+    name: cri-dockerd
+    state: started
+    start_mode: auto
