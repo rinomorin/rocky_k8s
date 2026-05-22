@@ -190,21 +190,45 @@
     data: 60000
     type: dword
 
-# 1.11.2 - Register and secure cri-dockerd Service
-- name: 1.11.2 - Register and secure cri-dockerd Service
+- name: 1.11.2 - Register, Privilege, and Start cri-dockerd
   ansible.windows.win_shell: |
     $serviceName = "cri-dockerd"
     $exePath = '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
 
-    # 1. Cleanup old instances
+    # 1. Register Service
     Stop-Service -Name $serviceName -ErrorAction SilentlyContinue
     sc.exe delete $serviceName -ErrorAction SilentlyContinue
-
-    # 2. Register with LocalSystem
     sc.exe create $serviceName binPath= $exePath start= auto obj= "LocalSystem"
+    
+    # 2. Grant SYSTEM Registry Access
+    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
+    if (Test-Path $regPath) {
+        $acl = Get-Acl $regPath
+        $rule = New-Object System.Security.AccessControl.RegistryAccessRule("NT AUTHORITY\SYSTEM","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+        $acl.SetAccessRule($rule)
+        Set-Acl $regPath $acl
+    }
 
-    # 3. Apply permissive Security Descriptor to allow SCM to handle the service
+    # 3. Grant SeCreateGlobalPrivilege to SYSTEM (Required for NPIPE)
+    # This creates a temp config, modifies it to include SYSTEM (*S-1-5-18), and re-imports it
+    $tempFile = "C:\temp\secpol.cfg"
+    New-Item -Path "C:\temp" -ItemType Directory -Force
+    secedit /export /cfg $tempFile /areas USER_RIGHTS
+    (Get-Content $tempFile) -replace 'SeCreateGlobalPrivilege =', 'SeCreateGlobalPrivilege = *S-1-5-18,' | Set-Content $tempFile
+    secedit /configure /db C:\windows\security\database\edb.db /cfg $tempFile /areas USER_RIGHTS
+
+    # Grant SYSTEM control over the global pipe namespace
+    $pipeName = "cri-dockerd"
     sc.exe sdset $serviceName "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)S:(AU;FA;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"
+
+    # 5. Start and verify
+    Start-Service -Name $serviceName -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 5
+    if ((Get-Service -Name $serviceName).Status -ne 'Running') {
+        Write-Error "Service failed to stabilize."
+        exit 1
+    }
+  register: service_final_result
 
 - name: 1.11.3 - Grant SYSTEM registry access for CredentialSpecs
   ansible.windows.win_shell: |
