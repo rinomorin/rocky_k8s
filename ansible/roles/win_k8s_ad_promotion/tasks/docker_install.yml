@@ -168,9 +168,8 @@
     dest: "C:\\Windows\\Temp\\cri-dockerd-windows.zip"
 
 - name: Create isolated staging and production directories
-  ansible.windows.win_file:
-    path: "{{ item }}"
-    state: directory
+  ansible.windows.win_shell:
+    "cmd /c \"if not exist c:\\{{ item}} mkdir c:\\{{ item}}\""
   loop:
     - C:\staging
     - C:\Program Files\cri-dockerd
