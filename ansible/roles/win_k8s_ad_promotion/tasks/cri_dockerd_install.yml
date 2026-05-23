@@ -8,10 +8,16 @@
   register: cri_url_raw
   changed_when: false
 
+- debug:
+    var: cri_url_raw
+
 # 1.10.1 - Set download URL
 - name: 1.10.1 - Set download URL
   ansible.builtin.set_fact:
     download_url: "{{ cri_url_raw.stdout | trim }}"
+
+- debug:
+    var: download_url
 
 # 1.10.2 - Native Windows Download and Extract
 - name: 1.10.2 - Download and unzip on Windows host
