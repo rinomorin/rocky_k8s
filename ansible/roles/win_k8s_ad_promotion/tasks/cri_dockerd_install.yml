@@ -1,20 +1,31 @@
-# 1.10 - Get latest release URL - Runs once, on localhost
-- name: 1.10 - Get latest cri-dockerd release URL
-  ansible.builtin.shell: >
-    curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
-    jq -r '.assets[] | select(.name | contains("win.amd64.zip")) | .browser_download_url'
-  delegate_to: localhost
-  # run_once: true
-  register: cri_url_raw
 
-- debug:
-    msg: "cri_url_raw: {{ cri_url_raw.stdout }}"
+# 1.10 - Get URL and set fact for all hosts
+- name: 1.10 - Fetch URL and set facts
+  block:
+    - name: Fetch URL from GitHub
+      ansible.builtin.shell: >
+        curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
+        jq -r '.assets[] | select(.name | contains("win.amd64.zip")) | .browser_download_url'
+      delegate_to: localhost
+      register: cri_url_raw
+      changed_when: false
 
-# 1.10.1 - Set the fact for EVERYONE 
-# We use 'default' to prevent the crash if the variable is missing
-- name: 1.10.1 - Set cri download URL fact
-  ansible.builtin.set_fact:
-    download_url: "{{ hostvars['localhost']['cri_url_raw'].stdout | default('') | trim }}"
+    - debug:
+        msg: "cri_url_raw: {{ cri_url_raw.stdout }}"
+
+    - name: Set download_url for all hosts
+      ansible.builtin.set_fact:
+        download_url: "{{ cri_url_raw.stdout | trim }}"
+      # This ensures every host in the play gets this variable
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ ansible_play_hosts }}"
+
+# # 1.10.1 - Set the fact for EVERYONE 
+# # We use 'default' to prevent the crash if the variable is missing
+# - name: 1.10.1 - Set cri download URL fact
+#   ansible.builtin.set_fact:
+#     download_url: "{{ hostvars['localhost']['cri_url_raw'].stdout | default('') | trim }}"
 
 - debug:
     msg: "download_url: {{ download_url }}"
