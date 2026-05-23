@@ -1,16 +1,8 @@
-- name: Debug Role Path
-  ansible.builtin.debug:
-    var: role_path
-
-- name: Debug Files Path
-  ansible.builtin.debug:
-    msg: "Ansible will look for files in {{ role_path }}/files/"
-
 - name: 1.11 - Copy and run installation script
   block:
     - name: Copy script to remote
       ansible.windows.win_copy:
-        src: install_cri.ps1
+        src: ../files/install_cri.ps1
         dest: C:\Windows\Temp\install_cri.ps1
 
     - name: Execute installation script
