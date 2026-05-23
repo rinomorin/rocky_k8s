@@ -41,7 +41,7 @@
     - name: Extract zip to destination
       community.windows.win_unzip:
         src: "C:\\Windows\\Temp\\cri-dockerd.zip"
-        dest: "C:\\Program Files\\cri-dockerd"
+        dest: "C:\\Program Files\\"
         delete_archive: yes
   when: download_url != ''
   become: yes
@@ -49,21 +49,21 @@
   become_user: Administrator
 
 # 1.10.4 - Deploy to Windows
-- name: 1.10.4 - Create install directory
-  ansible.windows.win_file:
-    path: "C:\\Program Files\\cri-dockerd"
-    state: directory
-  become: yes
-  become_method: runas
-  become_user: Administrator
+# - name: 1.10.4 - Create install directory
+#   ansible.windows.win_file:
+#     path: "C:\\Program Files\\cri-dockerd"
+#     state: directory
+#   become: yes
+#   become_method: runas
+#   become_user: Administrator
 
-- name: 1.10.5 - Copy binary to Windows
-  ansible.windows.win_copy:
-    src: "/tmp/cri-dockerd-extract/cri-dockerd.exe"
-    dest: "C:\\Program Files\\cri-dockerd\\cri-dockerd.exe"
-  become: yes
-  become_method: runas
-  become_user: Administrator
+# - name: 1.10.5 - Copy binary to Windows
+#   ansible.windows.win_copy:
+#     src: "/tmp/cri-dockerd-extract/cri-dockerd.exe"
+#     dest: "C:\\Program Files\\cri-dockerd\\cri-dockerd.exe"
+#   become: yes
+#   become_method: runas
+#   become_user: Administrator
 
 - name: 1.11 - Copy and run installation script
   block:
