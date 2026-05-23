@@ -8,26 +8,24 @@
   register: cri_url_raw
   changed_when: false
 
+# 1.10.1 - Set download URL
 - name: 1.10.1 - Set download URL
   ansible.builtin.set_fact:
     download_url: "{{ cri_url_raw.stdout | trim }}"
 
-# 1.10.2 - Download and Extract Natively on Windows
-- name: 1.10.2 - Deploy cri-dockerd natively on Windows
-  ansible.windows.win_shell: |
-    $url = "{{ download_url }}"
-    $zipDest = "C:\Windows\Temp\cri.zip"
-    $extractPath = "C:\Program Files\cri-dockerd"
-    
-    # Download
-    Invoke-WebRequest -Uri $url -OutFile $zipDest
-    
-    # Create directory and extract
-    if (!(Test-Path $extractPath)) { New-Item -ItemType Directory -Path $extractPath -Force }
-    Expand-Archive -Path $zipDest -DestinationPath $extractPath -Force
-    
-    # Clean up
-    Remove-Item $zipDest -Force
+# 1.10.2 - Native Windows Download and Extract
+- name: 1.10.2 - Download and unzip on Windows host
+  block:
+    - name: Download zip via BITS
+      ansible.windows.win_get_url:
+        url: "{{ download_url }}"
+        dest: "C:\\Windows\\Temp\\cri-dockerd.zip"
+
+    - name: Extract zip to destination
+      community.windows.win_unzip:
+        src: "C:\\Windows\\Temp\\cri-dockerd.zip"
+        dest: "C:\\Program Files\\cri-dockerd"
+        delete_archive: yes
   become: yes
   become_method: runas
   become_user: Administrator
