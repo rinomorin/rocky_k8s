@@ -1,5 +1,31 @@
 ---
-# 1.1 - Resolve latest K8s version
+
+# 1.10 - Get latest cri-dockerd release URL via shell
+- name: 1.10 - Get latest cri-dockerd release URL via shell
+  ansible.builtin.shell: >
+    curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
+    jq -r '.assets[] | select(.name | contains("win.amd64.zip")) | .browser_download_url'
+  delegate_to: localhost
+  run_once: true
+  register: cri_url_raw
+  changed_when: false
+
+# 1.10.1 - Map variable data string cleanly
+- name: 1.10.1 - Set cri download URL fact
+  ansible.builtin.set_fact:
+    download_url: "{{ cri_url_raw.stdout | trim }}"
+
+# NEW STEP - Download zip file to the local Ansible control node
+- name: 1.10.2 - Download cri-dockerd zip to controller locally
+  ansible.builtin.get_url:
+    url: "{{ download_url }}"
+    dest: "/tmp/cri-dockerd-windows.zip"
+  delegate_to: localhost
+  run_once: true
+
+# NEW STEP - Ensure target directory exists on Windows host
+- name: 1.10.3 - Create install directory on Windows
+  ansible.windows.win_file:# 1.1 - Resolve latest K8s version
 - name: 1.1 - Resolve latest K8s version
   ansible.builtin.uri:
     url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt"
@@ -7,7 +33,7 @@
   delegate_to: localhost
   register: k8s_version_lookup
 
-# 1.2 - Scrape Docker HTML Index
+# 1.2 - Scrape Docker HTML Index for latest version
 - name: 1.2 - Scrape Docker HTML Index
   ansible.builtin.uri:
     url: "https://download.docker.com/win/static/stable/x86_64/"
@@ -15,53 +41,253 @@
   delegate_to: localhost
   register: docker_index_page
 
-- name: 1.3 - Extract Versions
+# 1.3 - Extract and Filter Latest Docker Version
+- name: 1.3 - Extract and Filter Latest Docker Version
   ansible.builtin.set_fact:
     k8s_actual_version: "{{ k8s_version_lookup.content | trim }}"
     docker_actual_version: "{{ docker_index_page.content | regex_findall('docker-([0-9]+\\.[0-9]+\\.[0-9]+)\\.zip') | sort(attribute=none) | last }}"
 
-- name: 1.4 - Ensure Chocolatey
-  ansible.windows.win_chocolatey:
+# 1.4 - Ensure Chocolatey is installed
+- name: 1.4 - Ensure Chocolatey is installed
+  chocolatey.chocolatey.win_chocolatey:
     name: chocolatey
     state: present
+  become: yes
+  become_method: runas
+  become_user: Administrator
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
 
-- name: 1.5 - Download and Extract Docker
+# 1.5 - Download and Extract Docker Engine
+- name: 1.5 - Download and Extract Docker Engine ({{ docker_actual_version }})
   ansible.windows.win_shell: |
-    $url = "https://download.docker.com/win/static/stable/x86_64/docker-{{ docker_actual_version }}.zip"
+    $version = "{{ docker_actual_version }}"
+    $url = "https://download.docker.com/win/static/stable/x86_64/docker-$version.zip"
     $dest = "$env:TEMP\docker.zip"
+    
+    Write-Output "Fetching Docker version: $version"
     curl.exe -L $url -o $dest
     Expand-Archive -Path $dest -DestinationPath "C:\Program Files" -Force
     Remove-Item $dest
   args:
-    creates: C:\Program Files\Docker\dockerd.exe
+    creates: C:\Program Files\Docker\docker.exe
+  become: yes
+  become_method: runas
+  become_user: Administrator
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
+  register: docker_install
 
-- name: 1.6 - Enable Containers Feature
+# 1.6 - Enable Windows Features (Containers and Hyper-V)
+- name: 1.6 - Enable Windows Features (Containers)
   ansible.windows.win_feature:
-    name: Containers
+    name:
+      - Containers
     state: present
+  become: yes
+  become_method: runas
+  become_user: Administrator
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
   register: feature_install
 
-- name: 1.6.1 - Reboot for Features
+# FIX: Reboot immediately here so vmcompute.dll is loaded before Docker initializes
+- name: 1.6.1 - Reboot to finalize Features
   ansible.windows.win_reboot:
-    msg: "Rebooting for Containers feature"
+    msg: "Rebooting for Hyper-V and Containers features to load vmcompute.dll"
+    reboot_timeout: 900
   when: feature_install.reboot_required
 
-- name: 1.7 - Download Kubernetes Binaries
+# 1.7 - Download Kubernetes Binaries
+- name: 1.7 - Download Kubernetes Binaries ({{ k8s_actual_version }})
   ansible.windows.win_shell: |
-    foreach ($bin in @("kubelet", "kubeadm", "kubectl")) {
-        curl.exe -L "https://dl.k8s.io/release/{{ k8s_actual_version }}/bin/windows/amd64/$bin.exe" -o "C:\Windows\System32\$bin.exe"
+    $binaries = @("kubelet", "kubeadm", "kubectl")
+    foreach ($bin in $binaries) {
+        $url = "https://dl.k8s.io/release/{{ k8s_actual_version }}/bin/windows/amd64/$bin.exe"
+        curl.exe -L $url -o "C:\Windows\System32\$bin.exe"
     }
   args:
     creates: C:\Windows\System32\kubeadm.exe
+  become: yes
+  become_method: runas
+  become_user: Administrator
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
 
-- name: 1.8 - Create K8s Dir
+# 1.8 - Create Kubernetes Config Directory
+- name: 1.8 - Create Kubernetes Config Directory
   ansible.windows.win_file:
     path: C:\etc\kubernetes
     state: directory
 
-- name: 1.9 - Register Docker Service
+# 1.9.0 - Register Docker as a Windows Service
+- name: 1.9.0 - Register Docker as a Windows Service
   ansible.windows.win_shell: |
     if (-not (Get-Service -Name docker -ErrorAction SilentlyContinue)) {
         & "C:\Program Files\Docker\dockerd.exe" --register-service
-        Start-Service docker
+        Start-Service -Name docker
     }
+  become: yes
+  become_method: runas
+  become_user: Administrator
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
+
+
+# 1.9.0 - Pause to allow Active Directory and network changes to settle
+- name: 1.9.0.1 - Wait for docker to settle post-AD changes
+  pause:
+    seconds: 30
+
+# 1.9.1 - Ensure Docker Service state is explicitly forced running and automatic
+- name: 1.9.1 - Ensure Docker Service is running
+  ansible.windows.win_service:
+    name: docker
+    state: started
+    start_mode: auto
+
+# 1.9.2 - Flush File System Buffers (Disk Sync)
+- name: 1.9.2 - Flush File System Buffers (Disk Sync)
+  ansible.windows.win_shell: |
+    $volumes = Get-Volume | Where-Object { $_.DriveLetter -ne $null }
+    foreach ($vol in $volumes) {
+        Write-Output "Syncing $($vol.DriveLetter):"
+        [System.IO.File]::Create("$($vol.DriveLetter):\sync.tmp").Dispose()
+        Remove-Item "$($vol.DriveLetter):\sync.tmp"
+    }
+  when: docker_install.changed
+  ignore_errors: yes
+
+    path: 'C:\Program Files\cri-dockerd'
+    state: directory
+
+# 1.11 - Copy the ZIP from the Ansible helper node directly to the Windows VM
+- name: 1.11 - Securely copy cri-dockerd archive to Windows VM
+  ansible.windows.win_copy:
+    src: "/tmp/cri-dockerd-windows.zip"
+    dest: "C:\\Windows\\Temp\\cri-dockerd-windows.zip"
+
+- name: Create isolated staging and production directories
+  ansible.windows.win_shell:
+    "cmd /c \"if not exist c:\\staging mkdir c:\\{{ item}}\""
+  loop:
+    - C:\staging
+    - C:\Program Files\cri-dockerd
+
+
+# 1.11.a - Extract the file now that it safely lives on the C: drive
+- name: 1.11a - Extract cri-dockerd archive on the host
+  community.windows.win_unzip:
+    src: "C:\\Windows\\Temp\\cri-dockerd-windows.zip"
+    dest: "C:\\staging\\"
+    rm: false
+
+- name: Relocate binary, update system PATH, and verify service execution
+  ansible.windows.win_shell: |
+    # 1. Dynamically hunt down the executable inside the staging area
+    $foundFile = Get-ChildItem -Path "C:\staging\" -Filter "cri-dockerd.exe" -Recurse | Select-Object -First 1
+
+    if (-not $foundFile) {
+        Write-Error "CRITICAL ERROR: Could not find cri-dockerd.exe anywhere inside the zip file!"
+        exit 1
+    }
+
+    # 2. Stop the service if it is stuck in a zombie state
+    Stop-Service -Name "cri-dockerd" -Force -ErrorAction SilentlyContinue
+
+    # 3. Deliver the binary to the exact target path
+    $targetDir = "C:\Program Files\cri-dockerd"
+    $destination = "$targetDir\cri-dockerd.exe"
+    Write-Host "Moving binary from $($foundFile.FullName) to $destination"
+    Copy-Item -Path $foundFile.FullName -Destination $destination -Force
+
+    # 4. Enforce system PATH environment variable inclusion
+    $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    if ($currentPath -notlike "*$targetDir*") {
+        Write-Host "Adding $targetDir to Machine PATH environment variable..."
+        $updatedPath = $currentPath + ";" + $targetDir
+        [Environment]::SetEnvironmentVariable("Path", $updatedPath, "Machine")
+        
+        # Update the current session's env context immediately for subsequent commands
+        $env:Path += ";$targetDir"
+    }
+
+    # 5. Clean up the staging area
+    Remove-Item -Path "C:\staging\" -Recurse -Force -ErrorAction SilentlyContinue
+
+    # 6. Fire up the service and verify execution
+    Write-Host "Starting cri-dockerd service..."
+    Start-Service -Name "cri-dockerd"
+    
+    Start-Sleep -Seconds 3
+    $status = (Get-Service -Name "cri-dockerd").Status
+    if ($status -ne "Running") {
+        Write-Error "CRITICAL FAILURE: Service state is $status instead of Running."
+        exit 1
+    }
+    
+    Write-Host "SUCCESS: cri-dockerd is installed, added to PATH, and running perfectly!"
+
+# 1.11.1 - Configure registry item for pipe timeout natively
+- name: 1.11.1 - Configure ServicesPipeTimeout parameter
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Control
+    name: ServicesPipeTimeout
+    data: 60000
+    type: dword
+
+- name: 1.11.2 - Register, Privilege, and Start cri-dockerd
+  ansible.windows.win_shell: |
+    $serviceName = "cri-dockerd"
+    $exePath = '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
+
+    # 1. Register Service
+    Stop-Service -Name $serviceName -ErrorAction SilentlyContinue
+    sc.exe delete $serviceName -ErrorAction SilentlyContinue
+    sc.exe create $serviceName binPath= $exePath start= auto obj= "LocalSystem"
+    
+    # 2. Grant SYSTEM Registry Access
+    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
+    if (Test-Path $regPath) {
+        $acl = Get-Acl $regPath
+        $rule = New-Object System.Security.AccessControl.RegistryAccessRule("NT AUTHORITY\SYSTEM","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+        $acl.SetAccessRule($rule)
+        Set-Acl $regPath $acl
+    }
+
+    # 3. Grant SeCreateGlobalPrivilege to SYSTEM (Required for NPIPE)
+    # This creates a temp config, modifies it to include SYSTEM (*S-1-5-18), and re-imports it
+    $tempFile = "C:\temp\secpol.cfg"
+    New-Item -Path "C:\temp" -ItemType Directory -Force
+    secedit /export /cfg $tempFile /areas USER_RIGHTS
+    (Get-Content $tempFile) -replace 'SeCreateGlobalPrivilege =', 'SeCreateGlobalPrivilege = *S-1-5-18,' | Set-Content $tempFile
+    secedit /configure /db C:\windows\security\database\edb.db /cfg $tempFile /areas USER_RIGHTS
+
+    # Grant SYSTEM control over the global pipe namespace
+    $pipeName = "cri-dockerd"
+    sc.exe sdset $serviceName "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)S:(AU;FA;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"
+
+    # 5. Start and verify
+    Start-Service -Name $serviceName -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 5
+    if ((Get-Service -Name $serviceName).Status -ne 'Running') {
+        Write-Error "Service failed to stabilize."
+        exit 1
+    }
+  register: service_final_result
+
+- name: 1.11.3 - Grant SYSTEM registry access for CredentialSpecs
+  ansible.windows.win_shell: |
+    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\Containers\CredentialSpecs"
+    if (Test-Path $regPath) {
+        $acl = Get-Acl $regPath
+        $rule = New-Object System.Security.AccessControl.RegistryAccessRule("NT AUTHORITY\SYSTEM","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+        $acl.SetAccessRule($rule)
+        Set-Acl $regPath $acl
+    }
+
+- name: 1.11.4 - Start cri-dockerd Service
+  ansible.windows.win_service:
+    name: cri-dockerd
+    state: started
+    start_mode: auto
