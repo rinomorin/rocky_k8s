@@ -53,11 +53,17 @@
   ansible.windows.win_file:
     path: "C:\\Program Files\\cri-dockerd"
     state: directory
+  become: yes
+  become_method: runas
+  become_user: Administrator
 
 - name: 1.10.5 - Copy binary to Windows
   ansible.windows.win_copy:
     src: "/tmp/cri-dockerd-extract/cri-dockerd.exe"
     dest: "C:\\Program Files\\cri-dockerd\\cri-dockerd.exe"
+  become: yes
+  become_method: runas
+  become_user: Administrator
 
 - name: 1.11 - Copy and run installation script
   block:
