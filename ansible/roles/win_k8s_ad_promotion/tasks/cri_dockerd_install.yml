@@ -5,11 +5,13 @@
         # We go up one level from 'tasks' to the role root, then into 'files'
         src: ../files/install_cri.ps1
         dest: C:\Windows\Temp\install_cri.ps1
+      become: yes
+      become_method: runas
+      become_user: Administrator
 
     - name: Execute installation script
       ansible.windows.win_shell: C:\Windows\Temp\install_cri.ps1
       become: yes
       become_method: runas
       become_user: Administrator
-      vars:
-        ansible_become_password: "{{ ad_safe_mode_password }}"
+      
