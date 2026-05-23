@@ -2,7 +2,8 @@
 # 1.1 - Resolve latest K8s version
 - name: 1.1 - Resolve latest K8s version
   ansible.builtin.uri:
-    url: "https://dl.k8s.io/release/stable-kubernetes_version.txt" # Ensure kubernetes_version is defined
+    # Use default '1.30' if the variable is not set
+    url: "https://dl.k8s.io/release/stable-{{ kubernetes_version | default('1.34') }}.txt"
     return_content: yes
   delegate_to: localhost
   register: k8s_version_lookup
