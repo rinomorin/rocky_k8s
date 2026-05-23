@@ -4,7 +4,7 @@
     curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
     jq -r '.assets[] | select(.name | contains("win.amd64.zip")) | .browser_download_url'
   delegate_to: localhost
-  run_once: true
+  # run_once: true
   register: cri_url_raw
 
 - debug:
