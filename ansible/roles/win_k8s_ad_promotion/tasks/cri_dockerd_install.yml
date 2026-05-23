@@ -1,4 +1,4 @@
-# 1.10 - Get URL: Executed once on controller
+# 1.10 - Get latest release URL - Runs once, on localhost
 - name: 1.10 - Get latest cri-dockerd release URL
   ansible.builtin.shell: >
     curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
@@ -7,18 +7,13 @@
   run_once: true
   register: cri_url_raw
 
-- debug:
-    var: cri_url_raw
-
-# 1.10.1 - Set the fact for EVERYONE based on the one successful run
+# 1.10.1 - Set the fact for EVERYONE 
+# We use 'default' to prevent the crash if the variable is missing
 - name: 1.10.1 - Set cri download URL fact
   ansible.builtin.set_fact:
-    download_url: "{{ hostvars['localhost']['cri_url_raw']['stdout'] | trim }}"
+    download_url: "{{ hostvars['localhost']['cri_url_raw'].stdout | default('') | trim }}"
 
-- debug:
-    var: download_url
-
-# 1.10.2 - Now download/unzip on Windows (This will now run on all targeted hosts)
+# 1.10.2 - Download and unzip (This will only run if download_url is set)
 - name: 1.10.2 - Download and unzip on Windows host
   block:
     - name: Download zip via BITS
@@ -31,6 +26,7 @@
         src: "C:\\Windows\\Temp\\cri-dockerd.zip"
         dest: "C:\\Program Files\\cri-dockerd"
         delete_archive: yes
+  when: download_url != ''
   become: yes
   become_method: runas
   become_user: Administrator
