@@ -14,5 +14,5 @@
     #   ansible.builtin.import_tasks: ../roles/win_k8s_ad_promotion/tasks/docker_install.yml
     #   when: inventory_hostname in groups['win_worker_nodes']
     - name: Run only the docker_install task file
-      ansible.builtin.import_tasks: ../roles/win_k8s_ad_promotion/tasks/cri_doker_install.yml
+      ansible.builtin.import_tasks: ../roles/win_k8s_ad_promotion/tasks/cri_dockerd_install.yml
       when: inventory_hostname in groups['win_worker_nodes']
