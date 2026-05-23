@@ -1,7 +1,5 @@
 ---
-# 1.10 - 1.11.4: CRI-Dockerd Installation and Service Registration
-
-- name: 1.10 - Get latest cri-dockerd release URL
+- name: 1.10 - Get latest cri-dockerd URL
   ansible.builtin.shell: >
     curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
     jq -r '.assets[] | select(.name | contains("win.amd64.zip")) | .browser_download_url'
@@ -10,7 +8,7 @@
   register: cri_url_raw
   changed_when: false
 
-- name: 1.10.1 - Download/Extract Flow
+- name: 1.10.1 - Prepare local environment
   block:
     - name: Download to controller
       ansible.builtin.get_url:
@@ -20,12 +18,8 @@
       run_once: true
 
     - name: Ensure directories exist
-      ansible.windows.win_file:
-        path: "{{ item }}"
-        state: directory
-      loop:
-        - C:\staging
-        - C:\Program Files\cri-dockerd
+      ansible.windows.win_shell: cmd /c "if not exist C:\staging mkdir C:\staging"
+      changed_when: false
 
     - name: Copy to Windows
       ansible.windows.win_copy:
@@ -38,38 +32,32 @@
         dest: "C:\\staging\\"
         delete_archive: yes
 
-- name: 1.11 - Relocate Binary and Setup PATH
+- name: 1.11 - Install and Register cri-dockerd
   ansible.windows.win_shell: |
+    # Move binary
     $source = Get-ChildItem -Path "C:\staging\" -Filter "cri-dockerd.exe" -Recurse | Select-Object -First 1
     $dest = "C:\Program Files\cri-dockerd\cri-dockerd.exe"
+    if (!(Test-Path "C:\Program Files\cri-dockerd")) { New-Item -ItemType Directory -Path "C:\Program Files\cri-dockerd" -Force }
     Copy-Item -Path $source.FullName -Destination $dest -Force
     
-    $path = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    if ($path -notlike "*cri-dockerd*") {
-        [Environment]::SetEnvironmentVariable("Path", "$path;C:\Program Files\cri-dockerd", "Machine")
-    }
-
-- name: 1.11.2 - Register cri-dockerd Service
-  ansible.windows.win_shell: |
-    # Stop/Delete existing
+    # Register Service
     Stop-Service -Name "cri-dockerd" -Force -ErrorAction SilentlyContinue
     sc.exe delete "cri-dockerd"
-    
-    # Precise sc.exe syntax: space after binPath= and start=
-    $binPath = "C:\Program Files\cri-dockerd\cri-dockerd.exe --container-runtime-endpoint npipe:////./pipe/cri-dockerd"
+    $binPath = "$dest --container-runtime-endpoint npipe:////./pipe/cri-dockerd"
     sc.exe create "cri-dockerd" binPath= "`"$binPath`"" start= auto obj= "LocalSystem"
     
-    # Set Security Right (SeCreateGlobalPrivilege)
+    # Apply Privileges
     $tmpCfg = "C:\Windows\Temp\privs.inf"
     secedit /export /cfg $tmpCfg /areas USER_RIGHTS
     (Get-Content $tmpCfg) -replace 'SeCreateGlobalPrivilege =', 'SeCreateGlobalPrivilege = *S-1-5-18,' | Set-Content $tmpCfg
     secedit /configure /db C:\windows\security\database\edb.db /cfg $tmpCfg /areas USER_RIGHTS
     
-    # Configure Timeout
+    # Configure Timeout and Start
     Set-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control -Name "ServicesPipeTimeout" -Value 60000
-
-- name: 1.11.4 - Start and Verify Service
-  ansible.windows.win_service:
-    name: cri-dockerd
-    state: started
-    start_mode: auto
+    Start-Service -Name "cri-dockerd"
+  become: yes
+  become_method: runas
+  become_user: Administrator
+  vars:
+    ansible_become_password: "{{ ad_safe_mode_password }}"
+  register: install_result
