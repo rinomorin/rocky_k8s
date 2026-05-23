@@ -7,52 +7,52 @@
     state: started
     start_mode: auto
 
-- name: 1.11.2a - Force Purge Stale cri-dockerd Service Registration
-  ansible.windows.win_shell: |
-    $serviceName = "cri-dockerd"
-    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
-        Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
-        # Use a secondary safety timeout delay to ensure the handle drops
-        Start-Sleep -Seconds 2
-    }
-    # Force delete the service path keys from the registry database natively
-    if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName") {
-        Remove-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName" -Recurse -Force
-    }
-  failed_when: false
+# - name: 1.11.2a - Force Purge Stale cri-dockerd Service Registration
+#   ansible.windows.win_shell: |
+#     $serviceName = "cri-dockerd"
+#     if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+#         Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
+#         # Use a secondary safety timeout delay to ensure the handle drops
+#         Start-Sleep -Seconds 2
+#     }
+#     # Force delete the service path keys from the registry database natively
+#     if (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName") {
+#         Remove-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName" -Recurse -Force
+#     }
+#   failed_when: false
 
-- name: 1.11.2b - Freshly Register cri-dockerd via Native PowerShell Engine
-  ansible.windows.win_shell: |
-    $serviceName = "cri-dockerd"
-    $exePath = '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
+# - name: 1.11.2b - Freshly Register cri-dockerd via Native PowerShell Engine
+#   ansible.windows.win_shell: |
+#     $serviceName = "cri-dockerd"
+#     $exePath = '"C:\Program Files\cri-dockerd\cri-dockerd.exe"'
 
-    # Register the service cleanly using native parameters
-    New-Service -Name $serviceName `
-                -BinaryPathName $exePath `
-                -DisplayName "CRI-Docker Service" `
-                -Description "CRI adapter wrapper tool for Kubernetes Docker interactions" `
-                -StartupType Automatic | Out-Null
+#     # Register the service cleanly using native parameters
+#     New-Service -Name $serviceName `
+#                 -BinaryPathName $exePath `
+#                 -DisplayName "CRI-Docker Service" `
+#                 -Description "CRI adapter wrapper tool for Kubernetes Docker interactions" `
+#                 -StartupType Automatic | Out-Null
 
-    # Ensure the service dependencies point cleanly to the active Docker daemon
-    Set-Service -Name $serviceName -Dependency docker
-  register: ps_service_creation
+#     # Ensure the service dependencies point cleanly to the active Docker daemon
+#     Set-Service -Name $serviceName -Dependency docker
+#   register: ps_service_creation
 
-- name: 1.11.2c - Ensure cri-dockerd Service is Started Natively
-  ansible.windows.win_service:
-    name: cri-dockerd
-    state: started
-    start_mode: auto
+# - name: 1.11.2c - Ensure cri-dockerd Service is Started Natively
+#   ansible.windows.win_service:
+#     name: cri-dockerd
+#     state: started
+#     start_mode: auto
 
-- name: 2.1 - Register and Ensure CRI-Docker Adapter Service is active
-  ansible.windows.win_service:
-    name: cri-dockerd
-    path: '"C:\Program Files\cri-dockerd\cri-dockerd.exe" --container-runtime-endpoint npipe:////./pipe/cri-dockerd'
-    display_name: "CRI-Docker Service"
-    description: "CRI adapter wrapper tool for Kubernetes Docker interactions"
-    start_mode: auto
-    state: started
-    dependencies:
-      - docker
+# - name: 2.1 - Register and Ensure CRI-Docker Adapter Service is active
+#   ansible.windows.win_service:
+#     name: cri-dockerd
+#     path: '"C:\Program Files\cri-dockerd\cri-dockerd.exe" --container-runtime-endpoint npipe:////./pipe/cri-dockerd'
+#     display_name: "CRI-Docker Service"
+#     description: "CRI adapter wrapper tool for Kubernetes Docker interactions"
+#     start_mode: auto
+#     state: started
+#     dependencies:
+#       - docker
 
 - name: 2.2 - Generate join command on Linux Master
   ansible.builtin.shell: kubeadm token create --print-join-command
