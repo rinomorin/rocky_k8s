@@ -1,5 +1,4 @@
-# 1.10 - Download and Extract Locally
-# 1.10 - Get latest release URL
+# 1.10 - Get latest URL (Keep local as it is fast)
 - name: 1.10 - Get latest cri-dockerd release URL
   ansible.builtin.shell: >
     curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
@@ -9,22 +8,29 @@
   register: cri_url_raw
   changed_when: false
 
-- name: 1.10.1 - Set cri download URL fact for all hosts
+- name: 1.10.1 - Set download URL
   ansible.builtin.set_fact:
     download_url: "{{ cri_url_raw.stdout | trim }}"
 
-# 1.10.2 - Download and Extract Locally
-- name: 1.10.2 - Download and Unzip locally
-  ansible.builtin.get_url:
-    url: "{{ download_url }}"
-    dest: "/tmp/cri-dockerd-windows.zip"
-  delegate_to: localhost
-  run_once: true
-
-- name: 1.10.3 - Extract zip on controller
-  ansible.builtin.shell: unzip -o /tmp/cri-dockerd-windows.zip -d /tmp/cri-dockerd-extract
-  delegate_to: localhost
-  run_once: true
+# 1.10.2 - Download and Extract Natively on Windows
+- name: 1.10.2 - Deploy cri-dockerd natively on Windows
+  ansible.windows.win_shell: |
+    $url = "{{ download_url }}"
+    $zipDest = "C:\Windows\Temp\cri.zip"
+    $extractPath = "C:\Program Files\cri-dockerd"
+    
+    # Download
+    Invoke-WebRequest -Uri $url -OutFile $zipDest
+    
+    # Create directory and extract
+    if (!(Test-Path $extractPath)) { New-Item -ItemType Directory -Path $extractPath -Force }
+    Expand-Archive -Path $zipDest -DestinationPath $extractPath -Force
+    
+    # Clean up
+    Remove-Item $zipDest -Force
+  become: yes
+  become_method: runas
+  become_user: Administrator
 
 # 1.10.4 - Deploy to Windows
 - name: 1.10.4 - Create install directory
