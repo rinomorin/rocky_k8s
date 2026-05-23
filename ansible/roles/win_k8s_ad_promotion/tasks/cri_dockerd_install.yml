@@ -2,6 +2,7 @@
   block:
     - name: Copy script to remote
       ansible.windows.win_copy:
+        # We go up one level from 'tasks' to the role root, then into 'files'
         src: ../files/install_cri.ps1
         dest: C:\Windows\Temp\install_cri.ps1
 
