@@ -1,3 +1,42 @@
+# 1.10 - Download and Extract Locally
+# 1.10 - Get latest release URL
+- name: 1.10 - Get latest cri-dockerd release URL
+  ansible.builtin.shell: >
+    curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
+    jq -r '.assets[] | select(.name | contains("win.amd64.zip")) | .browser_download_url'
+  delegate_to: localhost
+  run_once: true
+  register: cri_url_raw
+  changed_when: false
+
+- name: 1.10.1 - Set cri download URL fact for all hosts
+  ansible.builtin.set_fact:
+    download_url: "{{ cri_url_raw.stdout | trim }}"
+
+# 1.10.2 - Download and Extract Locally
+- name: 1.10.2 - Download and Unzip locally
+  ansible.builtin.get_url:
+    url: "{{ download_url }}"
+    dest: "/tmp/cri-dockerd-windows.zip"
+  delegate_to: localhost
+  run_once: true
+
+- name: 1.10.3 - Extract zip on controller
+  ansible.builtin.shell: unzip -o /tmp/cri-dockerd-windows.zip -d /tmp/cri-dockerd-extract
+  delegate_to: localhost
+  run_once: true
+
+# 1.10.4 - Deploy to Windows
+- name: 1.10.4 - Create install directory
+  ansible.windows.win_file:
+    path: "C:\\Program Files\\cri-dockerd"
+    state: directory
+
+- name: 1.10.5 - Copy binary to Windows
+  ansible.windows.win_copy:
+    src: "/tmp/cri-dockerd-extract/cri-dockerd.exe"
+    dest: "C:\\Program Files\\cri-dockerd\\cri-dockerd.exe"
+
 - name: 1.11 - Copy and run installation script
   block:
     - name: Copy script to remote
