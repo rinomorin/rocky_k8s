@@ -1,4 +1,4 @@
-# 1.10 - Get latest URL (Keep local as it is fast)
+# 1.10 - Get URL: Executed once on controller
 - name: 1.10 - Get latest cri-dockerd release URL
   ansible.builtin.shell: >
     curl -k -s https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest | 
@@ -6,20 +6,19 @@
   delegate_to: localhost
   run_once: true
   register: cri_url_raw
-  changed_when: false
 
 - debug:
     var: cri_url_raw
 
-# 1.10.1 - Set download URL
-- name: 1.10.1 - Set download URL
+# 1.10.1 - Set the fact for EVERYONE based on the one successful run
+- name: 1.10.1 - Set cri download URL fact
   ansible.builtin.set_fact:
-    download_url: "{{ cri_url_raw.stdout | trim }}"
+    download_url: "{{ hostvars['localhost']['cri_url_raw']['stdout'] | trim }}"
 
 - debug:
     var: download_url
 
-# 1.10.2 - Native Windows Download and Extract
+# 1.10.2 - Now download/unzip on Windows (This will now run on all targeted hosts)
 - name: 1.10.2 - Download and unzip on Windows host
   block:
     - name: Download zip via BITS
