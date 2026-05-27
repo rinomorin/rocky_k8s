@@ -24,6 +24,9 @@
 - debug:
     msg: 
       - "skip_build: {{ skip_build }}"
+      - "vm_check.results: {{ vm_check.results }}"
+      - "rebuild_nfs: {{ rebuild_nfs }}"
+
 
 - name: 0.3 - Cleanup for Rebuild (Only if forced)
   delegate_to: "{{ VM_HOST_IP }}"
