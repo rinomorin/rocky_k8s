@@ -1,5 +1,5 @@
-- include_tasks: clean_node.yml
-- include_tasks: deploy_node.yml
+- include_tasks: 01_clean_node.yml
+- include_tasks: 02_clone_node.yml
 - name: Kubernetes NFS Block
   block:
     - name: 0.1 - Configure Nodes (Repos, Packages, etc)

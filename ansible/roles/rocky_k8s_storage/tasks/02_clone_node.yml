@@ -1,0 +1,239 @@
+---
+- name: 1.0 - Clone Load Balancer nodes from Golden Image
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  ansible.builtin.command: >
+    virt-clone --original {{ golden_image_name }}
+    --name {{ item.split('.')[0] }} 
+    --file /var/lib/libvirt/images/{{ item.split('.')[0] }}.qcow2
+  delegate_to: "{{ kvm_host }}"
+  loop: "{{ groups['nfs_storage_nodes'] }}"
+  register: nfs_nodes
+  failed_when: 
+    - nfs_nodes.rc != 0 
+    - "'already exists' not in nfs_nodes.stderr"
+
+- name: 1.1 - Provision Second Raw Logical Volume for Ceph Pool
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
+  become: yes
+  ansible.builtin.shell: >
+    lvcreate -L {{ storage_disk_ceph_size }}G -n lv_dsk_ceph_{{ item }} {{ lookup('ansible.builtin.env', 'VG_NAME') | default('vg_kvm', true) }} || true
+  delegate_to: "{{ kvm_host }}"
+  loop: "{{ groups['nfs_storage_nodes'] }}"
+
+- name: 1.2 - Attach Raw Ceph Block Disks to Cloned Storage Instances
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
+  become: yes
+  ansible.builtin.command: >
+    virsh attach-disk {{ item }} /dev/{{ lookup('ansible.builtin.env', 'VG_NAME') | default('vg_kvm', true) }}/lv_dsk_ceph_{{ item }} vdb --targetbus virtio --config --live
+  delegate_to: "{{ kvm_host }}"
+  loop: "{{ groups['nfs_storage_nodes'] }}"
+  ignore_errors: true
+
+- name: 1.3 - Power on nodes images
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  ansible.builtin.shell: "virsh start {{ item.split('.')[0] }}"
+  delegate_to: "{{ kvm_host }}"
+  register: vm_start
+  failed_when: 
+    - vm_start.rc != 0 
+    - "'already active' not in vm_start.stderr"
+  changed_when: "vm_start.rc == 0"
+  loop: "{{ groups['nfs_storage_nodes'] }}"
+
+- name: 1.4 - Discover Maintenance IP from br-nat
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  ansible.builtin.shell: |
+    M_MAC=$(virsh domiflist {{ item.split('.')[0] }} | grep 'br-nat' | awk '{print $5}')
+    while ! virsh net-dhcp-leases br-nat | grep -q "$M_MAC"; do sleep 2; done
+    virsh net-dhcp-leases br-nat | grep "$M_MAC" | awk '{print $5}' | cut -d/ -f1
+  delegate_to: "{{ kvm_host }}"
+  register: maintenance_ip_raw
+  loop: "{{ groups['nfs_storage_nodes'] }}"
+
+- name: 1.5 - Verify Maintenance SSH (sshok)
+  become: false
+  vars:
+    m_ip: "{{ item.stdout }}"
+    ssh_opt: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
+  ansible.builtin.shell: |
+    ssh {{ ssh_opt }} -i ~/.ssh/id_rsa core@{{ m_ip }} "echo sshok"
+  register: ssh_test
+  until: ssh_test.rc == 0
+  retries: 15
+  delay: 5
+  loop: "{{ maintenance_ip_raw.results }}"
+
+- name: 1.6 - Store Maintenance IPs in Map
+  set_fact:
+    maintenance_map: "{{ maintenance_map | default({}) | combine({ item.item: item.stdout }) }}"
+  loop: "{{ maintenance_ip_raw.results }}"
+
+- name: 1.7 - Discover Provision MAC from br-cluster
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  ansible.builtin.shell: |
+    virsh domiflist {{ item.split('.')[0] }} | grep 'br-cluster' | awk '{print $5}'
+  delegate_to: "{{ kvm_host }}"
+  register: cluster_mac_discovery
+  loop: "{{ groups['nfs_storage_nodes'] }}"
+
+- name: 1.8 - Build Cluster MAC Map
+  set_fact:
+    c_mac_map: "{{ c_mac_map | default({}) | combine({ item.item: item.stdout }) }}"
+  loop: "{{ cluster_mac_discovery.results }}"
+
+- name: 1.9 - Configure Cluster IP (10.x) via Maintenance Tunnel
+  become: false
+  vars:
+    m_ip: "{{ maintenance_map[item] }}"
+    c_mac: "{{ c_mac_map[item] }}"
+    node_ip: "{{ hostvars[item].provision_ip }}"
+    ssh_cmd: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@{{ m_ip }}"
+  ansible.builtin.shell: |
+    DEV=$({{ ssh_cmd }} "nmcli -t -f GENERAL.DEVICE,GENERAL.HWADDR device show" | grep -B 1 -i "{{ c_mac }}" | head -n 1 | cut -d: -f2)
+    {{ ssh_cmd }} "sudo ip link set $DEV up"
+    {{ ssh_cmd }} "sudo nmcli con delete cluster || true"
+    {{ ssh_cmd }} "sudo nmcli con delete $DEV || true"
+    {{ ssh_cmd }} "sudo nmcli con add type ethernet con-name $DEV ifname $DEV ipv4.method manual ipv4.addresses {{ node_ip }}/24 ipv4.route-metric 200 ipv4.never-default yes connection.autoconnect yes"
+    {{ ssh_cmd }} "sudo nmcli con up $DEV"
+  loop: "{{ groups['nfs_storage_nodes'] | default([]) }}"
+
+- name: 2.0 - Force KVM Link State to UP (Host Side)
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  become: yes
+  ansible.builtin.shell: |
+    VM_NAME="{{ item.split('.')[0] }}"
+    for mac in $(virsh domiflist $VM_NAME | grep -v 'Interface' | grep -v '\---' | awk '{print $5}'); do
+      virsh domif-setlink $VM_NAME $mac up
+    done
+  delegate_to: "{{ kvm_host }}"
+  loop: "{{ groups['nfs_storage_nodes'] | default([]) }}"
+
+- name: 2.1 - Force Guest Link State and Autoconnect (Guest Side)
+  become: false
+  vars:
+    m_ip: "{{ maintenance_map[item] }}"
+    ssh_target: "core@{{ m_ip }}"
+    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
+  ansible.builtin.shell: |
+    ssh {{ ssh_opts }} {{ ssh_target }} '
+      for dev in enp2s0; do
+        sudo ip link set $dev up
+        sudo nmcli device set $dev autoconnect yes
+        sudo nmcli device set $dev managed yes
+      done
+      sudo nmcli connection up cluster || true
+    '
+  loop: "{{ groups['nfs_storage_nodes'] | default([]) }}"
+
+- name: 2.2 - Get local public key as a fact
+  delegate_to: localhost
+  become: false
+  set_fact:
+    my_public_key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+- name: 2.3 - Authorize local key on guests
+  become: false
+  vars:
+    m_ip: "{{ maintenance_map[item] }}"
+    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
+  ansible.builtin.shell: |
+    ssh {{ ssh_opts }} core@{{ m_ip }} "mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
+    if ! grep -q '{{ my_public_key }}' ~/.ssh/authorized_keys; then \
+      echo '{{ my_public_key }}' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys; \
+    fi"
+  loop: "{{ groups['nfs_storage_nodes'] | default([]) }}"
+
+- name: 2.4 - Force helper to learn new node identities
+  delegate_to: localhost
+  become: false
+  ansible.builtin.shell: |
+    ssh-keygen -R {{ hostvars[item]['provision_ip'] }} || true
+    ssh-keygen -R {{ item.split('.')[0] }} || true
+    ssh -o StrictHostKeyChecking=accept-new \
+        -i ~/.ssh/id_rsa core@{{ hostvars[item]['provision_ip'] }} "echo 'Key Learned'"
+  loop: "{{ groups['nfs_storage_nodes'] | default([]) }}"
+
+- name: 2.5 - Verify permanent connection
+  delegate_to: localhost
+  become: false
+  ansible.builtin.shell: "ssh -i ~/.ssh/id_rsa core@{{ hostvars[item]['provision_ip'] }} 'ip route'"
+  register: node_verify
+  loop: "{{ groups['nfs_storage_nodes'] | default([]) }}"
+
+- name: 2.6 - Verify SSH reachability on Static IPs
+  become: false
+  ansible.builtin.wait_for:
+    host: "{{ hostvars[item]['provision_ip'] }}"
+    port: 22
+    state: started
+    timeout: 60
+  loop: "{{ groups['nfs_storage_nodes'] | default([]) }}"
+
+- name: 2.7 - Force disk sync inside VMs
+  vars:
+    m_ip: "{{ maintenance_map[item] }}"
+    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
+  become: false
+  ansible.builtin.shell: 'ssh {{ ssh_opts }} core@{{ m_ip }} "sync"'
+  loop: "{{ groups['nfs_storage_nodes'] | default([]) }}"
+
+- name: 3.0 - DNS - Connectivity Based Setup
+  block:
+    - name: "3.1 - Check connectivity to IPA and Helper"
+      ansible.builtin.shell: "ping -c 1 -W 2 {{ item }}"
+      register: ping_results
+      ignore_errors: yes
+      changed_when: false
+      failed_when: "ping_results.rc not in [0, 1]"
+      loop:
+        - "{{ hostvars[groups['ipa'][0]]['ansible_host'] }}"
+        - "{{ hostvars[groups['helpers'][0]]['provision_ip'] }}"
+
+    - name: "3.2 - Initialize Nameserver List"
+      ansible.builtin.set_fact:
+        ns_list: []
+        pv_list: []
+
+    - name: "3.3 - Add Helper Gateway if reachable"
+      ansible.builtin.set_fact:
+        ns_list: "{{ ns_list + [ hostvars[groups['helpers'][0]]['provision_ip'] ] }}"
+        pv_list: "{{ pv_list + [ hostvars[groups['helpers'][0]]['provision_ip'], '8.8.8.8' ] }}"
+      when: ping_results.results[1].rc == 0
+
+    - name: "3.4 - Add IPA Gateways if reachable"
+      ansible.builtin.set_fact:
+        ns_list: "{{ ns_list + [ hostvars[groups['ipa'][0]]['ansible_host'], hostvars[groups['ipa'][1]]['ansible_host'] ] }}"
+      when: ping_results.results[0].rc == 0
+
+    - name: "3.5 - Add Google DNS if no gateways were reached"
+      ansible.builtin.set_fact:
+        ns_list: ["8.8.8.8"]
+      when: ns_list | length == 0
+
+    - name: "3.6 - Apply /etc/resolv.conf workers via Tunnel"
+      become: false
+      vars:
+        m_ip: "{{ maintenance_map[item] }}"
+        ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
+        resolv_content: |
+          search {{ c_zone }} {{ c_zone.replace(c_zone.split('.')[-1], 'local') }}
+          {% for ns in (pv_list if pv_list | length > 0 else ns_list) | unique %}
+          nameserver {{ ns }}
+          {% endfor %}
+      ansible.builtin.shell: |
+        ssh {{ ssh_opts }} core@{{ m_ip }} "cat << 'EOF' | sudo tee /etc/resolv.conf > /dev/null
+        {{ resolv_content }}
+        EOF
+        sudo chmod 0644 /etc/resolv.conf"
+      loop: "{{ groups['nfs_storage_nodes'] }}"
