@@ -15,28 +15,43 @@
       register: ceph_install_result
       changed_when: "'Installing' in ceph_install_result.stdout"
 
-    - name: "1.4.5 - Prepare Root SSH for Cephadm"
+    - name: "1.4.3 -open firewall for nfs"
+      shell: |
+        sudo firewall-cmd --zone=public --add-port=9283/tcp
+        sudo firewall-cmd --zone=public --add-port=8765/tcp
+        sudo firewall-cmd --zone=public --add-port=8443/tcp
+        sudo firewall-cmd --reload
+      when: nfs_node == ceph_primary_node
+
+    - name: "1.4.5 - Hard-Reset Root SSH for Cephadm"
       delegate_to: "{{ nfs_node }}"
+      become: yes
       ansible.builtin.shell: |
-        # Ensure root has an SSH directory
+        # 1. Fix SSH Config for Root
+        sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+        sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+        systemctl reload sshd
+        
+        # 2. Ensure Root's .ssh directory is ready
         mkdir -p /root/.ssh
         chmod 700 /root/.ssh
-        # Ensure SSH config allows root login (needed for cephadm mesh)
-        sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-        systemctl reload sshd
+        touch /root/.ssh/authorized_keys
+        chmod 600 /root/.ssh/authorized_keys
       when: nfs_node == ceph_primary_node
 
     - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
       delegate_to: "{{ nfs_node }}"
+      become: yes
       ansible.builtin.shell: >
-        sudo cephadm bootstrap 
+        cephadm bootstrap 
         --mon-ip {{ ceph_primary_ip }} 
         --cluster-network {{ ceph_cluster_network }} 
         --skip-dashboard 
-        --allow-fqdn-hostname
+        --allow-fqdn-hostname 
         --ssh-user root
       register: bootstrap_out
-      ignore_errors: yes  # We ignore because it often 'fails' even if the cluster is up
+      # We use ignore_errors because if it's already bootstrapped, it returns rc 1
+      ignore_errors: yes
       when: nfs_node == ceph_primary_node
 
     - name: "1.5.1 - Manual Key Injection (Fix for Auth Failed)"
