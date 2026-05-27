@@ -16,7 +16,9 @@
       changed_when: "'Installing' in ceph_install_result.stdout"
 
     - name: "1.4.3 -open firewall for nfs"
-      shell: |
+      delegate_to: "{{ nfs_node }}"
+      become: yes
+      ansible.builtin.shell: |
         sudo firewall-cmd --zone=public --add-port=9283/tcp
         sudo firewall-cmd --zone=public --add-port=8765/tcp
         sudo firewall-cmd --zone=public --add-port=8443/tcp
