@@ -16,6 +16,10 @@ VM_HOST_IP: "{{ lookup('env', 'VM_HOST_IP') }}"
 kvm_host: "{{ groups['kvm'][0]}}"
 storage_disk_ceph_size: 80
 storage_group_hosts: "{{ groups['nfs_storage_nodes'] | default([]) }}"
+# ------------------------------------------------------------
+c_zone: "{{ lookup('env', 'cloud_zone') | default('morinsoft.ca', true) }}"
+p_zone: "{{ lookup('env', 'provision_zone') | default('prov.morinsoft.ca', true) }}"
+ssh_key_path: "{{ lookup('env', 'ssh_key_path') | default('~/.ssh/id_rsa', true) | regex_replace('\\.pub$', '') }}"
 
 # --- NEW CEPH CLUSTER DYNAMIC CORE PARAMS ---
 ceph_primary_node: "{{ groups['nfs_storage_nodes'][0] }}"
