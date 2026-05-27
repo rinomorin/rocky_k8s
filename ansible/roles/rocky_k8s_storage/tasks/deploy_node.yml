@@ -7,8 +7,8 @@
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
   become: yes
-  ansible.builtin.command: >
-    virt-clone --original {{ golden_image_name }}
+  ansible.builtin.shell: |
+    /usr/bin/virt-clone --original {{ golden_image_name }}
     --name {{ item }}
     --file /var/lib/libvirt/images/{{ item }}.qcow2
   delegate_to: "{{ VM_HOST_IP }}"
