@@ -1,5 +1,7 @@
 ---
 - name: 1.1 - Deploy Stack via Native Kubectl Shell
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
   ansible.builtin.shell: |
     apply -f dex-and-portainer.yaml
   register: kubectl_output
