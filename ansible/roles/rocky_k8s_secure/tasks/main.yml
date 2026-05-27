@@ -1,22 +1,11 @@
 ---
-- name: Verify Kubeconfig access on helper node
-  ansible.builtin.stat:
-    path: "{{ kubeconfig_path }}"
-  register: k8s_config
+- name: 1.1 - Deploy Stack via Native Kubectl Shell
+  ansible.builtin.shell: |
+    kubectl --kubeconfig=/home/core/.kube/config apply -f dex-and-portainer.yaml
+  args:
+    executable: /bin/bash
+  register: kubectl_output
 
-- name: Abort if Kubeconfig file is missing
-  ansible.builtin.fail:
-    msg: "Kubeconfig file not found at {{ kubeconfig_path }}"
-  when: not k8s_config.stat.exists
-
-- name: Apply Configured Dex Active Directory Map
-  kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig_path }}"
-    state: present
-    definition: "{{ lookup('template', 'dex-config.yaml.j2') | from_yaml }}"
-
-- name: Deploy Complete Stack (Dex, Portainer, and Admin RBAC)
-  kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig_path }}"
-    state: present
-    definition: "{{ lookup('template', 'identity-stack.yaml.j2') | from_yaml_all }}"
+- name: 1.2 - Output Deployment Results
+  ansible.builtin.debug:
+    var: kubectl_output.stdout_lines

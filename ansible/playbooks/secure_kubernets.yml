@@ -1,0 +1,8 @@
+---
+- name: Environment Setup & Identity Control Deployment
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  roles:
+    - rocky_k8s_secure
