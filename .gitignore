@@ -1,1 +1,7 @@
 temp.txt
+# Ignore env_build.sh in any folder
+**/env_build.sh
+env_build.sh
+
+# Ignore everything inside the ansible/status directory
+ansible/status/
