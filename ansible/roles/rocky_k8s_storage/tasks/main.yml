@@ -1,0 +1,10 @@
+- include_tasks: clean_node.yml
+- include_tasks: deploy_node.yml
+- name: Kubernetes NFS Block
+  block:
+    - name: 0.1 - Configure Nodes (Repos, Packages, etc)
+      include_tasks: set_nfs.yml
+      loop: "{{ groups['nfs_storage_nodes'] }}"
+      loop_control:
+        loop_var: nfs_node
+    

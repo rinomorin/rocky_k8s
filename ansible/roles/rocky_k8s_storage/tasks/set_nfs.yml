@@ -1,0 +1,51 @@
+---
+# This file is evaluated sequentially for each node using 'nfs_node'
+
+- name: "Execute Local Configuration Block on {{ nfs_node }}"
+  delegate_to: "{{ nfs_node }}"
+  vars:
+    ansible_user: "{{ hostvars[nfs_node]['ansible_user'] | default('core') }}"
+  block:
+    - name: "1.4 - Install Cephadm Tooling on Cloned Node via Shell"
+      ansible.builtin.shell: >
+        sudo dnf install -y cephadm
+      ignore_errors: true
+
+    - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
+      ansible.builtin.shell: >
+        sudo cephadm bootstrap --mon-ip {{ ceph_primary_ip }} --cluster-network {{ ceph_cluster_network }} --skip-dashboard
+      register: bootstrap_out
+      when: nfs_node == ceph_primary_node
+
+    - name: "1.6 - Fetch Ceph Cluster Public SSH Key"
+      ansible.builtin.shell: >
+        sudo cat /etc/ceph/ceph.pub
+      register: ceph_pub_key
+      when: nfs_node == ceph_primary_node
+
+
+- name: "Execute Ceph Cluster Mesh Coordination Tasks"
+  delegate_to: "{{ ceph_primary_node }}"
+  vars:
+    ansible_user: "{{ hostvars[ceph_primary_node]['ansible_user'] | default('core') }}"
+  block:
+    - name: "1.7 - Distribute Cluster Keys to Secondary Storage Nodes"
+      ansible.builtin.shell: >
+        sudo echo '{{ hostvars[ceph_primary_node]['ceph_pub_key']['stdout'] }}' >> /root/.ssh/authorized_keys
+      delegate_to: "{{ nfs_node }}"
+      when: nfs_node != ceph_primary_node
+
+    - name: "1.8 - Expand Ceph Mesh and Add Storage Nodes to Orchestrator"
+      ansible.builtin.shell: >
+        sudo ceph orch host add {{ nfs_node }} {{ hostvars[nfs_node]['ansible_host'] }}
+      when: nfs_node != ceph_primary_node
+
+    - name: "1.9 - Automatically Consume Raw Secondary Disks (/dev/vdb) into OSD Pool"
+      ansible.builtin.shell: >
+        sudo ceph orch apply osd --all-available-devices
+      when: nfs_node == ceph_primary_node
+
+    - name: "2.0 - Deploy Active-Active NFS-Ganesha Gateways via Ceph Orchestrator"
+      ansible.builtin.shell: >
+        sudo ceph orch apply nfs SharedStorage Pool1 --placement='3 {{ storage_group_hosts | join(" ") }}'
+      when: nfs_node == ceph_primary_node

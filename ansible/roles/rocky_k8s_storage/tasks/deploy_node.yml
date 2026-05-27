@@ -1,0 +1,38 @@
+---
+- name: 1.0 - Debug Computed Golden Image Name
+  ansible.builtin.debug:
+    msg: "Targeting hypervisor image clone base named: {{ golden_image_name }}"
+
+- name: 1.1 - Clone Storage Node VMs from Computed Golden Image
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
+  become: yes
+  ansible.builtin.command: >
+    virt-clone --original {{ golden_image_name }}
+    --name {{ item }}
+    --file /var/lib/libvirt/images/{{ item }}.qcow2
+  delegate_to: "{{ kvm_host }}"
+  loop: "{{ storage_group_hosts }}"
+  register: storage_clones
+  failed_when:
+    - storage_clones.rc != 0
+    - "'already exists' not in storage_clones.stderr"
+
+- name: 1.2 - Provision Second Raw Logical Volume for Ceph Pool
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
+  become: yes
+  ansible.builtin.shell: >
+    sudo lvcreate -L {{ storage_disk_ceph_size }}G -n lv_dsk_ceph_{{ item }} {{ lookup('ansible.builtin.env', 'VG_NAME') | default('vg_kvm', true) }} || true
+  delegate_to: "{{ kvm_host }}"
+  loop: "{{ storage_group_hosts }}"
+
+- name: 1.3 - Attach Raw Ceph Block Disks to Cloned Storage Instances
+  vars:
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
+  become: yes
+  ansible.builtin.command: >
+    virsh attach-disk {{ item }} /dev/{{ lookup('ansible.builtin.env', 'VG_NAME') | default('vg_kvm', true) }}/lv_dsk_ceph_{{ item }} vdb --targetbus virtio --config --live
+  delegate_to: "{{ kvm_host }}"
+  loop: "{{ storage_group_hosts }}"
+  ignore_errors: true

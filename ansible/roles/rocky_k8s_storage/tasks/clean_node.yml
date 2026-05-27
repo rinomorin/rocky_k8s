@@ -1,0 +1,36 @@
+# 00_pre_check.yml
+- name: 0.1 - Check if nfs Nodes already exist
+  become: yes
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  shell: |
+    if virsh list --all | grep -q "{{ item.split('.')[0] }}"; then
+      echo "exists"
+    else
+      echo "missing"
+    fi
+  register: vm_check
+  loop: "{{ groups['nfs_storage_nodes'] }}"
+
+- name: 0.2 - Determine if Build is Required
+  set_fact:
+    # Build only if:
+    # 1. User forced it via extra-vars
+    # 2. OR any of the VMs are 'missing'
+    skip_build: "{{ not (rebuilld_nfs | default(false) | bool) and ('missing' not in vm_check.results | map(attribute='stdout') | list) }}"
+
+- name: 0.3 - Cleanup for Rebuild (Only if forced)
+  delegate_to: "{{ VM_HOST_IP }}"
+  become: yes
+  when: rebuilld_nfs | default(false) | bool
+  vars:
+    # This forces the connection to use 'secops' from the KVM host's variables
+    ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
+  shell: |
+    VM="{{ item.split('.')[0] }}"
+    virsh destroy $VM || true
+    virsh undefine $VM --remove-all-storage --nvram || true
+    rm -f /var/lib/libvirt/images/${VM}.qcow2
+  loop: "{{ groups['nfs_storage_nodes'] }}"
+
