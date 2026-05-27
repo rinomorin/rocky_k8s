@@ -17,7 +17,11 @@
 
     - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
       ansible.builtin.shell: >
-        sudo cephadm bootstrap --mon-ip {{ ceph_primary_ip }} --cluster-network {{ ceph_cluster_network }} --skip-dashboard
+        sudo cephadm bootstrap 
+        --mon-ip {{ ceph_primary_ip }} 
+        --cluster-network {{ ceph_cluster_network }} 
+        --skip-dashboard 
+        --allow-fqdn-hostname
       register: bootstrap_out
       when: nfs_node == ceph_primary_node
 
