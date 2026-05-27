@@ -248,6 +248,6 @@
         m_ip: "{{ maintenance_map[item] }}"
         ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
       shell: |
-        ssh {{ ssh_opts }} core@{{ m_ip }} "hostnamectl set-hostname {{ hostvars[item.split('.')[0]]['hostname'] }}"
+        ssh {{ ssh_opts }} core@{{ m_ip }} "sudo hostnamectl set-hostname {{ hostvars[item.split('.')[0]]['hostname'] }}"
       loop: "{{ groups['nfs_storage_nodes'] }}"
 
