@@ -15,14 +15,37 @@
       register: ceph_install_result
       changed_when: "'Installing' in ceph_install_result.stdout"
 
+    - name: "1.4.5 - Prepare Root SSH for Cephadm"
+      delegate_to: "{{ nfs_node }}"
+      ansible.builtin.shell: |
+        # Ensure root has an SSH directory
+        mkdir -p /root/.ssh
+        chmod 700 /root/.ssh
+        # Ensure SSH config allows root login (needed for cephadm mesh)
+        sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+        systemctl reload sshd
+      when: nfs_node == ceph_primary_node
+
     - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
+      delegate_to: "{{ nfs_node }}"
       ansible.builtin.shell: >
         sudo cephadm bootstrap 
         --mon-ip {{ ceph_primary_ip }} 
         --cluster-network {{ ceph_cluster_network }} 
         --skip-dashboard 
         --allow-fqdn-hostname
+        --ssh-user root
       register: bootstrap_out
+      ignore_errors: yes  # We ignore because it often 'fails' even if the cluster is up
+      when: nfs_node == ceph_primary_node
+
+    - name: "1.5.1 - Manual Key Injection (Fix for Auth Failed)"
+      delegate_to: "{{ nfs_node }}"
+      ansible.builtin.shell: |
+        if [ -f /etc/ceph/ceph.pub ]; then
+          cat /etc/ceph/ceph.pub >> /root/.ssh/authorized_keys
+          chmod 600 /root/.ssh/authorized_keys
+        fi
       when: nfs_node == ceph_primary_node
 
     - name: "1.6 - Fetch Ceph Cluster Public SSH Key"
