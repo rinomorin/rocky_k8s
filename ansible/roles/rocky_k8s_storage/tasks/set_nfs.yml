@@ -6,10 +6,14 @@
   vars:
     ansible_user: "{{ hostvars[nfs_node]['ansible_user'] | default('core') }}"
   block:
-    - name: "1.4 - Install Cephadm Tooling on Cloned Node via Shell"
-      ansible.builtin.shell: >
-        sudo dnf install -y cephadm
-      ignore_errors: true
+    - name: "1.4 - Enable Ceph Repo and Install Tooling"
+      ansible.builtin.shell: |
+        # 1. Install the release definition (using Quincy for maximum stability on EL9)
+        sudo dnf install -y centos-release-ceph-quincy
+        # 2. Install the actual orchestrator and container tools
+        sudo dnf install -y cephadm podman ceph-common
+      register: ceph_install_result
+      changed_when: "'Installing' in ceph_install_result.stdout"
 
     - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
       ansible.builtin.shell: >
@@ -30,8 +34,10 @@
     ansible_user: "{{ hostvars[ceph_primary_node]['ansible_user'] | default('core') }}"
   block:
     - name: "1.7 - Distribute Cluster Keys to Secondary Storage Nodes"
-      ansible.builtin.shell: >
-        sudo echo '{{ hostvars[ceph_primary_node]['ceph_pub_key']['stdout'] }}' >> /root/.ssh/authorized_keys
+      ansible.builtin.authorized_key:
+        user: root
+        state: present
+        key: "{{ hostvars[ceph_primary_node]['ceph_pub_key']['stdout'] }}"
       delegate_to: "{{ nfs_node }}"
       when: nfs_node != ceph_primary_node
 
