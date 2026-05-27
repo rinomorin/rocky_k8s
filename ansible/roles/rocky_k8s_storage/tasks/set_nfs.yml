@@ -15,7 +15,7 @@
       register: ceph_install_result
       changed_when: "'Installing' in ceph_install_result.stdout"
 
-    - name: "1.4.3 -open firewall for nfs"
+    - name: "1.4.3 - open firewall for nfs"
       delegate_to: "{{ nfs_node }}"
       become: yes
       ansible.builtin.shell: |
@@ -44,15 +44,14 @@
     - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
       delegate_to: "{{ nfs_node }}"
       become: yes
-      ansible.builtin.shell: >
-        cephadm bootstrap 
-        --mon-ip {{ ceph_primary_ip }} 
-        --cluster-network {{ ceph_cluster_network }} 
-        --skip-dashboard 
-        --allow-fqdn-hostname 
-        --ssh-user root
+      ansible.builtin.shell: |
+        cephadm bootstrap \
+          --mon-ip {{ ceph_primary_ip }} \
+          --cluster-network {{ ceph_cluster_network }} \
+          --skip-dashboard \
+          --allow-fqdn-hostname \
+          --ssh-user root
       register: bootstrap_out
-      # We use ignore_errors because if it's already bootstrapped, it returns rc 1
       ignore_errors: yes
       when: nfs_node == ceph_primary_node
 
