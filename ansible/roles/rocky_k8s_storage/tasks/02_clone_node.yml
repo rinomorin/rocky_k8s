@@ -19,7 +19,7 @@
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
   become: yes
   ansible.builtin.shell: >
-    lvcreate -L {{ storage_disk_ceph_size }}G -n lv_dsk_ceph_{{ item }} {{ lookup('ansible.builtin.env', 'VG_NAME') | default('vg_kvm', true) }} || true
+    lvcreate -L {{ storage_disk_ceph_size }}G -n lv_dsk_ceph_{{ item }} {{ lookup('env', 'VG_NAME') | default('vg_kvm', true) }} || true
   delegate_to: "{{ kvm_host }}"
   loop: "{{ groups['nfs_storage_nodes'] }}"
 

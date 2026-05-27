@@ -21,6 +21,11 @@
     # 2. OR any of the VMs are 'missing'
     skip_build: "{{ not (rebuilld_nfs | default(false) | bool) and ('missing' not in vm_check.results | map(attribute='stdout') | list) }}"
 
+- debug:
+    msg: 
+      - "check for {{ item.split('.')[0] }}"
+      - "skip_build: {{ skip_build }}"
+
 - name: 0.3 - Cleanup for Rebuild (Only if forced)
   delegate_to: "{{ VM_HOST_IP }}"
   become: yes
