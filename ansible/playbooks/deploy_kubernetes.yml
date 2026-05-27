@@ -42,8 +42,6 @@
     - role: rocky_k8s_nodes
 
 - name: Environment Setup & Identity Control Deployment
-  hosts: localhost
-  connection: local
   gather_facts: false
   vars:
     # Explicitly overrides the fallback profile value inside defaults
