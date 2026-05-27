@@ -19,7 +19,7 @@
     # Build only if:
     # 1. User forced it via extra-vars
     # 2. OR any of the VMs are 'missing'
-    skip_build: "{{ not (rebuild_nfs | default(false) | bool) or ('missing' not in vm_check.results | map(attribute='stdout') | list) }}"
+    skip_build: "{{ not (rebuild_nfs | default(false) | bool) or ('missing' in vm_check.results | map(attribute='stdout') | list) }}"
 
 - debug:
     msg: 
