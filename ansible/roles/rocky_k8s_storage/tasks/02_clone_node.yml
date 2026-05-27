@@ -244,6 +244,7 @@
       loop: "{{ groups['nfs_storage_nodes'] }}"
 
     - name: set hostname on nfs
+      become: false
       vars:
         m_ip: "{{ maintenance_map[item] }}"
         ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
