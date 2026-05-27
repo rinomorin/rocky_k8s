@@ -1,6 +1,7 @@
 # 00_pre_check.yml
 - name: 0.1 - Check if nfs Nodes already exist
   become: yes
+  delegate_to: "{{ VM_HOST_IP }}"
   vars:
     # This forces the connection to use 'secops' from the KVM host's variables
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] }}"
@@ -33,4 +34,3 @@
     virsh undefine $VM --remove-all-storage --nvram || true
     rm -f /var/lib/libvirt/images/${VM}.qcow2
   loop: "{{ storage_group_hosts }}"
-

@@ -13,6 +13,7 @@ golden_image_name: "gi-{{ build_profile }}-{{ safe_os_version }}-{{ build_date }
 # KVM Hypervisor variables
 VM_HOST: "{{ lookup('env', 'VM_HOST') }}"
 VM_HOST_IP: "{{ lookup('env', 'VM_HOST_IP') }}"
+kvm_host: "{{ groups['kvm'][0]}}"
 storage_disk_ceph_size: 80
 storage_group_hosts: "{{ groups['nfs_storage_nodes'] | default([]) }}"
 
