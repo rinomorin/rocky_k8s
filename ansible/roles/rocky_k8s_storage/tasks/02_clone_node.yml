@@ -24,7 +24,7 @@
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
   become: yes
   ansible.builtin.shell: >
-    lvcreate -L {{ storage_disk_ceph_size }}G -n lv_dsk_ceph_{{ item }} {{ lookup('env', 'VG_NAME') | default('vg_kvm', true) }} || true
+    lvcreate -L {{ storage_disk_ceph_size }}G -n lv_dsk_ceph_{{ item.split('.')[0] }} {{ lookup('env', 'VG_NAME') | default('kvm01', true) }} || true
   delegate_to: "{{ kvm_host }}"
   loop: "{{ groups['nfs_storage_nodes'] }}"
 
@@ -33,7 +33,7 @@
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
   become: yes
   ansible.builtin.command: >
-    virsh attach-disk {{ item }} /dev/{{ lookup('ansible.builtin.env', 'VG_NAME') | default('vg_kvm', true) }}/lv_dsk_ceph_{{ item }} vdb --targetbus virtio --config --live
+    virsh attach-disk {{ item.split('.')[0] }} /dev/{{ lookup('env', 'VG_NAME') | default('kvm01', true) }}/lv_dsk_ceph_{{ item }} vdb --targetbus virtio --config
   delegate_to: "{{ kvm_host }}"
   loop: "{{ groups['nfs_storage_nodes'] }}"
   ignore_errors: true
