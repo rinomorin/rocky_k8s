@@ -130,6 +130,16 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/os: linux
+      
+      # 1. ADD THIS INIT CONTAINER TO FIX ROCKY 9 PERMISSIONS
+      initContainers:
+      - name: fix-permissions
+        image: busybox:latest
+        command: ["sh", "-c", "chown -R 60000:60000 /data"]
+        volumeMounts:
+        - name: portainer-data
+          mountPath: /data
+
       containers:
       - name: portainer
         image: portainer/portainer-ce:latest
