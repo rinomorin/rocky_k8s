@@ -40,3 +40,4 @@ iso_path: "{{ lookup('env', 'ISO_PATH') | default('/var/lib/libvirt/images/Rocky
 tos_variant: "9"
 build_loops: "{{ bl|default(120)}}"
 metallb_vip: "{{ lookup('env', 'metallb_vip') | default('192.168.100.200') }}"
+cloud_status: "unknown"

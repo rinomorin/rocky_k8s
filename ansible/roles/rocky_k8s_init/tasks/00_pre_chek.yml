@@ -1,0 +1,31 @@
+---
+# 00_pre_check.yml
+- name: Perform Linux Cluster Health Check
+  delegate_to: localhost
+  block:
+    - name: 1. Verify Nginx Ingress via Service VIP
+      ansible.builtin.uri:
+        url: "https://nginx.api.{{ cloud_zone }}/"
+        method: GET
+        validate_certs: no
+        timeout: 10
+        # Corrected: Accepting 401 as a valid 'Service Alive' indicator
+        status_code: [200, 401]
+      register: uri_check
+
+    - name: 2. Count Ready Nodes via kubectl
+      ansible.builtin.shell: "kubectl get nodes --no-headers | grep ' Ready' | wc -l"
+      register: node_count
+      changed_when: false
+
+    - name: Evaluate Cloud Status
+      ansible.builtin.set_fact:
+        cloud_status: "up"
+      when: 
+        - uri_check.status in [200, 401]
+        - node_count.stdout | int >= (groups['cluster_nodes'] | length)
+
+  rescue:
+    - name: Connectivity or Node check failed
+      ansible.builtin.set_fact:
+        cloud_status: "down"
