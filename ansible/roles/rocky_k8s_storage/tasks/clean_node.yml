@@ -11,7 +11,7 @@
       echo "missing"
     fi
   register: vm_check
-  loop: "{{ groups['nfs_storage_nodes'] }}"
+  loop: "{{ storage_group_hosts }}"
 
 - name: 0.2 - Determine if Build is Required
   set_fact:
@@ -32,5 +32,5 @@
     virsh destroy $VM || true
     virsh undefine $VM --remove-all-storage --nvram || true
     rm -f /var/lib/libvirt/images/${VM}.qcow2
-  loop: "{{ groups['nfs_storage_nodes'] }}"
+  loop: "{{ storage_group_hosts }}"
 
