@@ -131,14 +131,10 @@ spec:
       nodeSelector:
         kubernetes.io/os: linux
       
-      # 1. ADD THIS INIT CONTAINER TO FIX ROCKY 9 PERMISSIONS
-      initContainers:
-      - name: fix-permissions
-        image: busybox:latest
-        command: ["sh", "-c", "chown -R 60000:60000 /data"]
-        volumeMounts:
-        - name: portainer-data
-          mountPath: /data
+      # 1. Bypasses Rocky Linux SELinux and updates host path ownership natively
+      securityContext:
+        fsGroup: 60000
+        runAsUser: 60000
 
       containers:
       - name: portainer
@@ -156,6 +152,7 @@ spec:
         hostPath:
           path: /var/lib/portainer
           type: DirectoryOrCreate
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
