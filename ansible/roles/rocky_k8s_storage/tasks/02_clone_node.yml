@@ -14,6 +14,11 @@
     - nfs_nodes.rc != 0 
     - "'already exists' not in nfs_nodes.stderr"
 
+- debug:
+    msg: 
+    - "size: {{ storage_disk_ceph_size}}G"
+    - "vgname: {{ lookup('env', 'VG_NAME') | default('vg_kvm', true)}}"
+
 - name: 1.1 - Provision Second Raw Logical Volume for Ceph Pool
   vars:
     ansible_user: "{{ hostvars[kvm_host]['ansible_user'] | default('core') }}"
