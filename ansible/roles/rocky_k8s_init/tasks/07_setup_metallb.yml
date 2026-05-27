@@ -190,6 +190,7 @@
   when: not tls_cert.stat.exists
   run_once: true
 
+
 - name: Ensure service principal exists for api.{{ cloud_zone }}
   delegate_to: localhost
   ansible.builtin.command: "ipa service-add HTTP/api.{{ cloud_zone }}"
