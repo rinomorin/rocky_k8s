@@ -2,6 +2,8 @@
 - name: DNS Delegation via IPA CLI
   delegate_to: "{{ ipa_master_ip }}"
   block:
+    - debug:
+        msg: "{{ ipa_admin_password}}"
     - name: Obtain Kerberos ticket for IPA Admin
       ansible.builtin.shell: echo "{{ ipa_admin_password }}" | kinit admin
       changed_when: false
