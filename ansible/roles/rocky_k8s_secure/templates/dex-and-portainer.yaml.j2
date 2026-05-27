@@ -1,12 +1,48 @@
 ---
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: portainer
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dex-service-account
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dex-storage-role
+rules:
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list", "watch", "create"]
+- apiGroups: ["://coreos.com"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dex-storage-binding
+subjects:
+- kind: ServiceAccount
+  name: dex-service-account
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: dex-storage-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: dex-config
   namespace: kube-system
 data:
   config.yaml: |
-    issuer: http://10.244.4
+    issuer: http://{{ target_ingress_vip }}:31156/dex
     storage:
       type: kubernetes
       config:
@@ -19,18 +55,18 @@ data:
       id: active-directory
       name: Active Directory
       config:
-        host: "192.168.100.30:389"
+        host: "{{ ad_domain_controller_ip }}:{{ ad_domain_ldap_port }}"
         insecureNoSSL: true
-        bindDN: "cn=AnsibleService,ou=ServiceAccounts,dc=yourdomain,dc=local"
-        bindPW: "YourSecurePassword"
+        bindDN: "{{ ad_bind_dn }}"
+        bindPW: "{{ ad_bind_password }}"
         userSearch:
-          baseDN: "ou=Users,dc=yourdomain,dc=local"
+          baseDN: "ou=Users,{{ ad_base_dn }}"
           filter: "(objectClass=person)"
           username: sAMAccountName
           idAttr: sAMAccountName
           emailAttr: mail
         groupSearch:
-          baseDN: "ou=Groups,dc=yourdomain,dc=local"
+          baseDN: "ou=Groups,{{ ad_base_dn }}"
           filter: "(objectClass=group)"
           userMatchers:
           - userAttr: DN
@@ -40,14 +76,9 @@ data:
     staticClients:
     - id: portainer-client
       redirectURIs:
-      - 'http://10.244.4'
+      - 'http://{{ target_ingress_vip }}:30090/'
       name: 'Portainer GUI'
       secret: portainer-super-secret-key
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: portainer
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -64,6 +95,7 @@ spec:
       labels:
         app: dex
     spec:
+      serviceAccountName: dex-service-account
       nodeSelector:
         kubernetes.io/os: linux
       containers:
@@ -106,6 +138,14 @@ spec:
           name: http
         - containerPort: 9443
           name: https
+        volumeMounts:
+        - name: portainer-data
+          mountPath: /data
+      volumes:
+      - name: portainer-data
+        hostPath:
+          path: /var/lib/portainer
+          type: DirectoryOrCreate
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

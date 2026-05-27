@@ -1,15 +1,19 @@
 ---
 # Kubeconfig configuration
 kubeconfig_path: "/home/core/.kube/config"
-
-# Network & Domain Configuration
-ad_domain_controller_ip: "192.168.100.30"
-ad_domain_ldap_port: 389
-ad_base_dn: "dc=yourdomain,dc=local"
-ad_bind_dn: "cn=AnsibleService,ou=ServiceAccounts,dc=yourdomain,dc=local"
-ad_bind_password: "YourSecurePassword"
-
 # Target routing IPs (Update to match your entry point/ingress/helper routing)
 dex_issuer_url: "http://10.244.4"
 portainer_redirect_url: "http://10.244.4"
 portainer_oauth_secret: "portainer-super-secret-key"
+
+# Target IP mappings referenced straight from inventory vars
+target_ingress_vip: "{{ k8s_api_vip }}"
+ad_domain_controller_ip: "{{ k8s_api_vip }}"
+
+# Dynamic DN computation building: turns "home.morinsoft.ca" into "dc=home,dc=morinsoft,dc=ca"
+ad_base_dn: "{{ lookup('ansible.builtin.env', 'ipa_domain') | default('home.morinsoft.ca', true) | split('.') | map('regex_replace', '^(.*)$', 'dc=\\1') | join(',') }}"
+
+# Updated administrative lookups utilizing FreeIPA Directory Manager passwords
+ad_bind_password: "{{ lookup('ansible.builtin.env', 'ipa_dm_password') | default('On32dr1v3H0me~', true) }}"
+ad_domain_ldap_port: 389
+ad_bind_dn: "cn=Directory Manager"
