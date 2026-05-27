@@ -174,8 +174,9 @@
     --a-rec={{ k8s_api_vip }}
   register: dns_add_result
   failed_when:
-    - dns_add_result.rc != 0
-    - "'already exists' not in dns_add_result.stderr"
+    - ipa_api_result.rc != 0
+    - "'no modifications to be performed' not in ipa_api_result.stderr"
+    - "'already exists' not in ipa_api_result.stderr"
   when: not tls_cert.stat.exists
   run_once: true
 
