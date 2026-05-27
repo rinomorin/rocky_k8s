@@ -1,0 +1,27 @@
+---
+- name: Environment Setup & Identity Control Deployment
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Pre-req 1 - Ensure Kubernetes Ansible Collection is installed
+      community.general.ansible_galaxy_collection:
+        name: kubernetes.core
+        state: present
+      register: collection_install
+      failed_when: false # Prevents crashing if network issues occur but collection exists
+
+    - name: Pre-req 2 - Install required Python packages for Kubernetes modules
+      ansible.builtin.pip:
+        name:
+          - kubernetes
+          - jsonpatch
+        state: present
+        extra_args: "--user" # Installs to local user space to avoid sudo/root permissions
+
+    - name: Pre-req 3 - Refresh Ansible internal paths
+      ansible.builtin.meta: refresh_inventory
+
+  roles:
+    - rocky_k8s_secure

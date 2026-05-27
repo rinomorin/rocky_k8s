@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dex-config
+  namespace: kube-system
+data:
+  config.yaml: |
+    issuer: {{ dex_issuer_url }}
+    storage:
+      type: kubernetes
+      config:
+        inCluster: true
+    web:
+      http: 0.0.0.0:5556
+    
+    connectors:
+    - type: ldap
+      id: active-directory
+      name: Active Directory
+      config:
+        host: "{{ ad_domain_controller_ip }}:{{ ad_domain_ldap_port }}"
+        insecureNoSSL: true
+        bindDN: "{{ ad_bind_dn }}"
+        bindPW: "{{ ad_bind_password }}"
+        userSearch:
+          baseDN: "ou=Users,{{ ad_base_dn }}"
+          filter: "(objectClass=person)"
+          username: sAMAccountName
+          idAttr: sAMAccountName
+          emailAttr: mail
+        groupSearch:
+          baseDN: "ou=Groups,{{ ad_base_dn }}"
+          filter: "(objectClass=group)"
+          userMatchers:
+          - userAttr: DN
+            groupAttr: member
+          nameAttr: cn
+
+    staticClients:
+    - id: portainer-client
+      redirectURIs:
+      - '{{ portainer_redirect_url }}'
+      name: 'Portainer GUI'
+      secret: {{ portainer_oauth_secret }}
