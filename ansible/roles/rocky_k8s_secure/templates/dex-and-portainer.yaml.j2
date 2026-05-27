@@ -113,6 +113,42 @@ spec:
         configMap:
           name: dex-config
 ---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: portainer-pv
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /var/lib/portainer
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/os
+          operator: In
+          values:
+          - linux
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: portainer-pvc
+  namespace: portainer
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: local-storage
+  resources:
+    requests:
+      storage: 10Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -131,7 +167,6 @@ spec:
       nodeSelector:
         kubernetes.io/os: linux
       
-      # 1. Bypasses Rocky Linux SELinux and updates host path ownership natively
       securityContext:
         fsGroup: 60000
         runAsUser: 60000
@@ -149,9 +184,8 @@ spec:
           mountPath: /data
       volumes:
       - name: portainer-data
-        hostPath:
-          path: /var/lib/portainer
-          type: DirectoryOrCreate
+        persistentVolumeClaim:
+          claimName: portainer-pvc
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
