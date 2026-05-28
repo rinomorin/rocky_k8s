@@ -53,6 +53,7 @@
         ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
       shell: |
         ssh core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --permanent --add-port=6443/tcp 
+        ssh core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --permanent --add-port=2049/tcp 
         ssh core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --permanent --add-rich-rule='rule protocol value=\"vrrp\" accept'
         ssh core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --reload
         ssh core@{{ hostvars[item].ansible_host }} sudo systemctl enable --now haproxy keepalived
