@@ -56,6 +56,7 @@
         ssh core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --permanent --add-rich-rule='rule protocol value=\"vrrp\" accept'
         ssh core@{{ hostvars[item].ansible_host }} sudo firewall-cmd --reload
         ssh core@{{ hostvars[item].ansible_host }} sudo systemctl enable --now haproxy keepalived
+        ssh core@{{ hostvars[item].ansible_host }} sudo semanage port -a -t http_port_t -p tcp 2049
       # loop: "{{ groups['hahost'] }}"
       register: lb_bootstrap
       loop: "{{ groups['hahost'] }}"
