@@ -89,13 +89,12 @@
       ansible.builtin.shell: |
         # 1. Reach back out to the primary node dynamically to get the real-time public key
         PRIMARY_M_IP="{{ maintenance_map[ceph_primary_node] }}"
-        CEPH_KEY=\$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@\${PRIMARY_M_IP} "sudo cat /etc/ceph/ceph.pub")
+        CEPH_KEY=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@${PRIMARY_M_IP} "sudo cat /etc/ceph/ceph.pub")
         
         # 2. Append that key to the current loop target
         TARGET_M_IP="{{ maintenance_map[item] }}"
-        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@\${TARGET_M_IP} "sudo mkdir -p /root/.ssh && echo \"\${CEPH_KEY}\" | sudo tee -a /root/.ssh/authorized_keys && sudo chmod 600 /root/.ssh/authorized_keys"
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@${TARGET_M_IP} "sudo mkdir -p /root/.ssh && echo \"${CEPH_KEY}\" | sudo tee -a /root/.ssh/authorized_keys && sudo chmod 600 /root/.ssh/authorized_keys"
       loop: "{{ groups['nfs_storage_nodes'] }}"
-      # Skip the primary node since it already has its own loopback key
       when: item != ceph_primary_node
 
     - name: "1.8 - Expand Ceph Mesh and Add Storage Nodes to Orchestrator"
