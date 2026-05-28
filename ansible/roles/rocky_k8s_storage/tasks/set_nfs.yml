@@ -29,11 +29,15 @@
       delegate_to: "{{ nfs_node }}"
       become: yes
       ansible.builtin.shell: |
+        mkdir -p /etc/ssh/sshd_config.d
+        echo "PermitRootLogin yes" > /etc/ssh/sshd_config.d/00-cephadm-override.conf
+        echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config.d/00-cephadm-override.conf
+        
         sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
         sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-        systemctl reload sshd
         
         echo "root:CephBootstrap2026!" | chpasswd
+        usermod -U root
         
         mkdir -p /root/.ssh
         chmod 700 /root/.ssh
@@ -44,9 +48,12 @@
         fi
         chmod 600 /root/.ssh/authorized_keys
         
+        # 4. Correct security parameters and force complete service restart
         restorecon -R -v /root/.ssh
         setsebool -P container_manage_cgroup true || true
         setsebool -P container_connect_any true || true
+        
+        systemctl restart sshd
       when: nfs_node == ceph_primary_node
 
     - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
