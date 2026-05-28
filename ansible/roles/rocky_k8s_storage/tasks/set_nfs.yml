@@ -54,8 +54,7 @@
         setsebool -P container_connect_any true || true
         
         systemctl restart sshd
-      when: nfs_node == ceph_primary_node
-
+    
     - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
       delegate_to: "{{ nfs_node }}"
       become: yes
