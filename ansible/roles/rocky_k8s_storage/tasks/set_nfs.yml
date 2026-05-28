@@ -16,7 +16,6 @@
       changed_when: "'Installing' in ceph_install_result.stdout"
 
     - name: "1.4.3 - open firewall for nfs"
-      delegate_to: "{{ nfs_node }}"
       become: yes
       ansible.builtin.shell: |
         sudo firewall-cmd --zone=public --add-port=9283/tcp
@@ -26,7 +25,6 @@
       when: nfs_node == ceph_primary_node
 
     - name: "1.4.5 - Hard-Reset Root SSH for Cephadm"
-      delegate_to: "{{ nfs_node }}"
       become: yes
       ansible.builtin.shell: |
         mkdir -p /etc/ssh/sshd_config.d
@@ -48,7 +46,7 @@
         fi
         chmod 600 /root/.ssh/authorized_keys
         
-        # 4. Correct security parameters and force complete service restart
+        # Correct security parameters and force complete service restart
         restorecon -R -v /root/.ssh
         setsebool -P container_manage_cgroup true || true
         setsebool -P container_connect_any true || true
@@ -56,7 +54,6 @@
         systemctl restart sshd
     
     - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
-      delegate_to: "{{ nfs_node }}"
       become: yes
       ansible.builtin.shell: |
         cephadm bootstrap \
@@ -69,7 +66,6 @@
       when: nfs_node == ceph_primary_node    
 
     - name: "1.5.1 - Manual Key Injection (Fix for Auth Failed)"
-      delegate_to: "{{ nfs_node }}"
       ansible.builtin.shell: |
         if [ -f /etc/ceph/ceph.pub ]; then
           cat /etc/ceph/ceph.pub >> /root/.ssh/authorized_keys
@@ -78,7 +74,6 @@
       when: nfs_node == ceph_primary_node
 
     - name: "1.6 - Fetch Ceph Cluster Public SSH Key"
-      delegate_to: "{{ nfs_node }}"
       become: yes
       ansible.builtin.shell: "cat /etc/ceph/ceph.pub"
       register: ceph_pub_key
@@ -86,7 +81,6 @@
 
 
 - name: "Execute Ceph Cluster Mesh Coordination Tasks"
-  delegate_to: "{{ ceph_primary_node }}"
   vars:
     ansible_user: "{{ hostvars[ceph_primary_node]['ansible_user'] | default('core') }}"
   block:
@@ -99,9 +93,7 @@
         EOF"
       loop: "{{ groups['nfs_storage_nodes'] }}"
       # Skip the primary node since cephadm already added its own loopback key
-      when: 
-        - hostvars[ceph_primary_node]['ceph_pub_key']['stdout'] is defined
-        - item != ceph_primary_node
+      when: item != ceph_primary_node
 
     - name: "1.8 - Expand Ceph Mesh and Add Storage Nodes to Orchestrator"
       delegate_to: "{{ ceph_primary_node }}"
@@ -113,19 +105,18 @@
       until: host_add_out.rc == 0
       retries: 5
       delay: 10
-      when: 
-        - nfs_node == ceph_primary_node
-        - item != ceph_primary_node
+      when: item != ceph_primary_node
 
     - name: "1.9 - Automatically Consume Raw Secondary Disks (/dev/vdb) into OSD Pool"
       delegate_to: "{{ ceph_primary_node }}"
       become: yes
       ansible.builtin.shell: "ceph orch apply osd --all-available-devices"
-      when: nfs_node == ceph_primary_node
 
     - name: "2.0 - Deploy Active-Active NFS-Ganesha Gateways via Ceph Orchestrator"
       delegate_to: "{{ ceph_primary_node }}"
       become: yes
       ansible.builtin.shell: >
         ceph orch apply nfs SharedStorage Pool1 --placement="{{ groups['nfs_storage_nodes'] | length }} {{ groups['nfs_storage_nodes'] | join(' ') }}"
-      when: nfs_node == ceph_primary_node
+
+  # CRITICAL FIX: Only run this whole orchestration block on the VERY LAST node iteration
+  when: nfs_node == groups['nfs_storage_nodes'][-1]
