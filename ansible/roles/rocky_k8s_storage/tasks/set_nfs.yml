@@ -37,6 +37,8 @@
         chmod 700 /root/.ssh
         touch /root/.ssh/authorized_keys
         chmod 600 /root/.ssh/authorized_keys
+
+        restorecon -R -v /root/.ssh
       when: nfs_node == ceph_primary_node
 
     - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
@@ -50,7 +52,6 @@
           --allow-fqdn-hostname \
           --ssh-user root
       register: bootstrap_out
-      ignore_errors: yes
       when: nfs_node == ceph_primary_node    
 
     - name: "1.5.1 - Manual Key Injection (Fix for Auth Failed)"
