@@ -78,4 +78,22 @@ backend k8s-maint-backend-http
     server {{ host }} {{ hostvars[host].provision_ip }}:30443 check
     {% endfor %}
 
+
+# --- CEPH ACTIVE-ACTIVE NFS MESH (2049) ---
+frontend ceph-nfs-front
+    bind {{ k8s_api_vip }}:2049
+    mode tcp
+    option tcplog
+    timeout client  1h
+    timeout server  1h
+    default_backend ceph-nfs-back
+
+backend ceph-nfs-back
+    mode tcp
+    balance roundrobin
+    {% for host in groups['nfs_storage_nodes'] %}
+    server {{ host }} {{ hostvars[host]['provision_ip'] }}:2049 check  inter 2000 rise 2 fall 3
+    {% endfor %}
+
+
 # THE LINE BELOW IS THE FIX FOR THE "MISSING LF" ERROR - DO NOT DELETE IT
