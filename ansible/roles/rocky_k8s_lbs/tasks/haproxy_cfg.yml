@@ -13,6 +13,7 @@
         # 2. Update SELinux to allow HAProxy on K8s API port
         if [ "$(getenforce)" != "Disabled" ]; then
           semanage port -a -t http_port_t -p tcp 6443 || semanage port -m -t http_port_t -p tcp 6443
+          semanage port -a -t http_port_t -p tcp 2049 || semanage port -m -t http_port_t -p tcp 2049
         fi
       become: yes
 
@@ -32,7 +33,7 @@
 
     - name: Allow HAProxy to bind to custom ports in SELinux
       community.general.seport:
-        ports: 5443,30443,30080,30180
+        ports: 5443,30443,30080,30180,2049
         proto: tcp
         setype: http_port_t
         state: present
@@ -72,7 +73,7 @@
 
     - name: Allow HAProxy to bind to custom ports in SELinux
       community.general.seport:
-        ports: 5443,30443,30080,30180
+        ports: 5443,30443,30080,30180,2049
         proto: tcp
         setype: http_port_t
         state: present
@@ -89,3 +90,4 @@
       become: yes
       command: sync
       loop: "{{ groups['hahost'] }}"
+
