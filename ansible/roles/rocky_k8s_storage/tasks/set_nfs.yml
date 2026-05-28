@@ -29,12 +29,10 @@
       delegate_to: "{{ nfs_node }}"
       become: yes
       ansible.builtin.shell: |
-        # 1. Fix SSH Config for Root
         sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
         sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
         systemctl reload sshd
         
-        # 2. Ensure Root's .ssh directory is ready
         mkdir -p /root/.ssh
         chmod 700 /root/.ssh
         touch /root/.ssh/authorized_keys
@@ -53,7 +51,7 @@
           --ssh-user root
       register: bootstrap_out
       ignore_errors: yes
-      when: nfs_node == ceph_primary_node
+      when: nfs_node == ceph_primary_node    
 
     - name: "1.5.1 - Manual Key Injection (Fix for Auth Failed)"
       delegate_to: "{{ nfs_node }}"
