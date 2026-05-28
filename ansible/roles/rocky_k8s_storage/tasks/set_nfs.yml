@@ -79,8 +79,9 @@
       when: nfs_node == ceph_primary_node
 
     - name: "1.6 - Fetch Ceph Cluster Public SSH Key"
-      ansible.builtin.shell: >
-        sudo cat /etc/ceph/ceph.pub
+      delegate_to: "{{ nfs_node }}"
+      become: yes
+      ansible.builtin.shell: "cat /etc/ceph/ceph.pub"
       register: ceph_pub_key
       when: nfs_node == ceph_primary_node
 
@@ -90,25 +91,42 @@
   vars:
     ansible_user: "{{ hostvars[ceph_primary_node]['ansible_user'] | default('core') }}"
   block:
-    - name: "1.7 - Distribute Cluster Keys to Secondary Storage Nodes"
-      ansible.builtin.authorized_key:
-        user: root
-        state: present
-        key: "{{ hostvars[ceph_primary_node]['ceph_pub_key']['stdout'] }}"
-      delegate_to: "{{ nfs_node }}"
-      when: nfs_node != ceph_primary_node
+    - name: "1.7 - Distribute Cluster Keys to Secondary Storage Nodes via Maintenance Map"
+      delegate_to: "localhost"
+      become: false
+      ansible.builtin.shell: |
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@{{ maintenance_map[item] }} "sudo cat << 'EOF' >> /root/.ssh/authorized_keys
+        {{ hostvars[ceph_primary_node]['ceph_pub_key']['stdout'] }}
+        EOF"
+      loop: "{{ groups['nfs_storage_nodes'] }}"
+      # Skip the primary node since cephadm already added its own loopback key
+      when: 
+        - hostvars[ceph_primary_node]['ceph_pub_key']['stdout'] is defined
+        - item != ceph_primary_node
 
     - name: "1.8 - Expand Ceph Mesh and Add Storage Nodes to Orchestrator"
-      ansible.builtin.shell: >
-        sudo ceph orch host add {{ nfs_node }} {{ hostvars[nfs_node]['ansible_host'] }}
-      when: nfs_node != ceph_primary_node
+      delegate_to: "{{ ceph_primary_node }}"
+      become: yes
+      ansible.builtin.shell: |
+        ceph orch host add {{ item }} {{ hostvars[item]['provision_ip'] }}
+      loop: "{{ groups['nfs_storage_nodes'] }}"
+      register: host_add_out
+      until: host_add_out.rc == 0
+      retries: 5
+      delay: 10
+      when: 
+        - nfs_node == ceph_primary_node
+        - item != ceph_primary_node
 
     - name: "1.9 - Automatically Consume Raw Secondary Disks (/dev/vdb) into OSD Pool"
-      ansible.builtin.shell: >
-        sudo ceph orch apply osd --all-available-devices
+      delegate_to: "{{ ceph_primary_node }}"
+      become: yes
+      ansible.builtin.shell: "ceph orch apply osd --all-available-devices"
       when: nfs_node == ceph_primary_node
 
     - name: "2.0 - Deploy Active-Active NFS-Ganesha Gateways via Ceph Orchestrator"
+      delegate_to: "{{ ceph_primary_node }}"
+      become: yes
       ansible.builtin.shell: >
-        sudo ceph orch apply nfs SharedStorage Pool1 --placement='3 {{ storage_group_hosts | join(" ") }}'
+        ceph orch apply nfs SharedStorage Pool1 --placement="{{ groups['nfs_storage_nodes'] | length }} {{ groups['nfs_storage_nodes'] | join(' ') }}"
       when: nfs_node == ceph_primary_node
