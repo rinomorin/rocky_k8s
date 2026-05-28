@@ -167,16 +167,16 @@
   register: tls_cert
   run_once: true
 
-- name: Ensure DNS A record exists for api.{{ cloud_zone }}
+- name: "Ensure DNS A record exists for api.{{ cloud_zone }}"
   delegate_to: localhost
   ansible.builtin.command: >
     ipa dnsrecord-add {{ cloud_zone }} api
     --a-rec={{ k8s_api_vip }}
   register: dns_add_result
   failed_when:
-    - ipa_api_result.rc != 0
-    - "'no modifications to be performed' not in ipa_api_result.stderr"
-    - "'already exists' not in ipa_api_result.stderr"
+    - dns_add_result.rc != 0
+    - "'no modifications to be performed' not in dns_add_result.stderr"
+    - "'already exists' not in dns_add_result.stderr"
   when: not tls_cert.stat.exists
   run_once: true
 
@@ -189,7 +189,6 @@
     - "'already exists' not in host_add_result.stderr"
   when: not tls_cert.stat.exists
   run_once: true
-
 
 - name: Ensure service principal exists for api.{{ cloud_zone }}
   delegate_to: localhost
