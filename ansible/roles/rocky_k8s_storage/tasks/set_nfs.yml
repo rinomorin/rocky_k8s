@@ -60,7 +60,6 @@
   vars:
     ansible_user: "{{ hostvars[ceph_primary_node]['ansible_user'] | default('core') }}"
   block:
-    # 1.6b - Live captures the key from disk on the primary host, completely bypassing hostvars loop errors
     - name: "1.6b - Live Query Primary SSH Public Key"
       ansible.builtin.shell: "sudo cat /etc/ceph/ceph.pub"
       register: live_mesh_key
@@ -90,9 +89,9 @@
       delay: 15
       changed_when: false
 
+    # --- SIMPLIFIED AND CORRECTED NATIVE OSD COMMAND ---
     - name: "1.9 - Automatically Consume Raw Secondary Disks (/dev/vda) into Pool"
-      ansible.builtin.shell: |
-        sudo ceph orch apply osd --drive-groups <(echo 'service_type: osd\nservice_id: vda_pool\nplacement:\n  all: true\ndata_devices:\n  paths:\n    - /dev/vda') --flags unmanaged=false
+      ansible.builtin.shell: "sudo ceph orch apply osd --all-available-devices"
       changed_when: true
 
     - name: "1.9b - Wait for Active Storage OSDs to complete Replication Factor Provisioning"
