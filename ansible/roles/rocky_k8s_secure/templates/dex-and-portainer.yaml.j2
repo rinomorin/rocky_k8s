@@ -15,12 +15,12 @@ kind: ClusterRole
 metadata:
   name: dex-storage-role
 rules:
-- apiGroups: ["apiextensions.k8s.io"]
-  resources: ["customresourcedefinitions"]
-  verbs: ["get", "list", "watch", "create"]
-- apiGroups: ["://coreos.com"]
-  resources: ["*"]
-  verbs: ["*"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["*"]
+  - apiGroups: ["dex.coreos.com"]
+    resources: ["*"]
+    verbs: ["*"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -42,7 +42,7 @@ metadata:
   namespace: kube-system
 data:
   config.yaml: |
-    issuer: http://{{ target_ingress_vip }}:31156/dex
+    issuer: http://morinsoft.ca
     storage:
       type: kubernetes
       config:
@@ -76,7 +76,7 @@ data:
     staticClients:
     - id: portainer-client
       redirectURIs:
-      - 'http://{{ target_ingress_vip }}:30090/'
+      - 'http://morinsoft.ca'
       name: 'Portainer GUI'
       secret: portainer-super-secret-key
 ---
@@ -114,6 +114,19 @@ spec:
           name: dex-config
 ---
 apiVersion: v1
+kind: Service
+metadata:
+  name: dex
+  namespace: kube-system
+spec:
+  ports:
+  - name: http
+    port: 5556
+    targetPort: 5556
+  selector:
+    app: dex
+---
+apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: portainer-pv
@@ -124,10 +137,10 @@ spec:
   accessModes:
   - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: ceph-nfs-storage # ◄ Changed storage class identifier
+  storageClassName: ceph-nfs-storage
   nfs:
-    server: 10.0.0.51 # ◄ Directs traffic to your primary active Ceph instance
-    path: / # ◄ The standard root directory export on your Ceph engine
+    server: 10.0.0.51
+    path: /
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -137,7 +150,7 @@ metadata:
 spec:
   accessModes:
   - ReadWriteOnce
-  storageClassName: ceph-nfs-storage # ◄ Must match the PV class exactly
+  storageClassName: ceph-nfs-storage
   volumeName: portainer-pv
   resources:
     requests:
@@ -180,16 +193,71 @@ spec:
       - name: portainer-data
         persistentVolumeClaim:
           claimName: portainer-pvc
-
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portainer
+  namespace: portainer
+spec:
+  ports:
+  - name: http
+    port: 9000
+    targetPort: 9000
+  selector:
+    app: portainer
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: ClusterRoleBinding
 metadata:
-  name: dex-storage-role
-rules:
-  - apiGroups: ["apiextensions.k8s.io"]
-    resources: ["customresourcedefinitions"]
-    verbs: ["*"] # ◄ Changed from restricted list to allow everything
-  - apiGroups: ["dex.coreos.com"]
-    resources: ["*"]
-    verbs: ["*"]
+  name: ad-cluster-admins
+subjects:
+- kind: Group
+  name: "Domain Admins"
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform-identity-ingress
+  namespace: kube-system
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "dex.api.cloud.home.morinsoft.ca"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: dex
+            port:
+              number: 5556
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portainer-gui-ingress
+  namespace: portainer
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "portainer.api.cloud.home.morinsoft.ca"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: portainer
+            port:
+              number: 9000
