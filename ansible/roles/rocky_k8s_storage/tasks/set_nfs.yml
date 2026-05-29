@@ -83,6 +83,13 @@
   vars:
     ansible_user: "{{ hostvars[ceph_primary_node]['ansible_user'] | default('core') }}"
   block:
+    # Safely bridges the public key out of the local variable engine into cluster memory
+    - name: "1.6b - Register Public Key Fact globally on controller"
+      ansible.builtin.set_fact:
+        shared_ceph_pub_key: "{{ ceph_pub_key_fetched.stdout }}"
+      when: nfs_node == ceph_primary_node
+
+
     - name: "1.7 - Distribute Cluster Keys to Secondary Storage Nodes via Maintenance Map"
       delegate_to: "localhost"
       become: false
@@ -110,10 +117,10 @@
       when: item != ceph_primary_node
 
     # --- AUTOMATED STEP 1 ---
-    - name: "1.8b - Distribute Admin Configuration Keyrings to All Nodes"
-      ansible.builtin.shell: >
-        sudo ceph orch client-keyring set client.admin placement="3 {{ storage_group_hosts | join(' ') }}"
-      when: nfs_node == ceph_primary_node
+    # - name: "1.8b - Distribute Admin Configuration Keyrings to All Nodes"
+    #   ansible.builtin.shell: >
+    #     sudo ceph orch client-keyring set client.admin placement="3 {{ storage_group_hosts | join(' ') }}"
+    #   when: nfs_node == ceph_primary_node
 
     - name: "1.8c - Wait for All Nodes to Join the Ceph Mesh"
       ansible.builtin.shell: >
@@ -129,6 +136,16 @@
       delegate_to: "{{ ceph_primary_node }}"
       become: yes
       ansible.builtin.shell: "ceph orch apply osd --all-available-devices"
+
+    - name: "1.9b - Wait for OSD Pool to Reach Replication Factor Baseline"
+      ansible.builtin.shell: >
+        sudo ceph osd stat --format json | jq '.num_osds'
+      register: active_osds
+      until: active_osds.stdout | int >= 3
+      retries: 30
+      delay: 20
+      when: nfs_node == ceph_primary_node
+      changed_when: false
 
     - name: "2.0 - Deploy Active-Active NFS-Ganesha Gateways via Ceph Orchestrator"
       delegate_to: "{{ ceph_primary_node }}"
