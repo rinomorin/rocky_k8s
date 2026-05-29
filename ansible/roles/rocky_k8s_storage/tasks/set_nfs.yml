@@ -109,6 +109,22 @@
       delay: 10
       when: item != ceph_primary_node
 
+    # --- AUTOMATED STEP 1 ---
+    - name: "1.8b - Distribute Admin Configuration Keyrings to All Nodes"
+      ansible.builtin.shell: >
+        sudo ceph orch client-keyring set client.admin placement="3 {{ storage_group_hosts | join(' ') }}"
+      when: nfs_node == ceph_primary_node
+
+    - name: "1.8c - Wait for All Nodes to Join the Ceph Mesh"
+      ansible.builtin.shell: >
+        sudo ceph orch host ls --format json | jq '. | length'
+      register: host_count
+      until: host_count.stdout | int == 3
+      retries: 15
+      delay: 10
+      when: nfs_node == ceph_primary_node
+      changed_when: false
+    
     - name: "1.9 - Automatically Consume Raw Secondary Disks (/dev/vdb) into OSD Pool"
       delegate_to: "{{ ceph_primary_node }}"
       become: yes
