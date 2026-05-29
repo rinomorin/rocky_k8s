@@ -1,42 +1,34 @@
 ---
 # This file is evaluated sequentially for each node using 'nfs_node'
 
-- name: "Execute Local Configuration Block on {{ nfs_node }}"
+- name: "Execute Local Node Profile System Tasks on {{ nfs_node }}"
   delegate_to: "{{ nfs_node }}"
   vars:
     ansible_user: "{{ hostvars[nfs_node]['ansible_user'] | default('core') }}"
   block:
-    - name: "1.4 - Enable Ceph Repo and Install Tooling"
+    - name: "1.4 - Enable Ceph Quincy Repo and Install Software Baseline"
       ansible.builtin.shell: |
-        # 1. Install the release definition (using Quincy for maximum stability on EL9)
         sudo dnf install -y centos-release-ceph-quincy
-        # 2. Install the actual orchestrator and container tools
-        sudo dnf install -y cephadm podman ceph-common
-      register: ceph_install_result
-      changed_when: "'Installing' in ceph_install_result.stdout"
+        sudo dnf install -y cephadm podman ceph-common jq
+      changed_when: false
 
-    - name: "1.4.3 - open firewall for nfs"
-      become: yes
+    - name: "1.4.3 - Open Core Networking Ports on Public Zone"
       ansible.builtin.shell: |
-        sudo firewall-cmd --zone=public --add-port=9283/tcp
-        sudo firewall-cmd --zone=public --add-port=8765/tcp
-        sudo firewall-cmd --zone=public --add-port=8443/tcp
+        sudo firewall-cmd --zone=public --add-port=9283/tcp --permanent
+        sudo firewall-cmd --zone=public --add-port=8765/tcp --permanent
+        sudo firewall-cmd --zone=public --add-port=8443/tcp --permanent
         sudo firewall-cmd --reload
-      when: nfs_node == ceph_primary_node
+      changed_when: false
 
-    - name: "1.4.5 - Hard-Reset Root SSH for Cephadm"
-      become: yes
+    - name: "1.4.5 - Hard-Reset Root Access Parameters for Cephadm Mesh"
       ansible.builtin.shell: |
         mkdir -p /etc/ssh/sshd_config.d
         echo "PermitRootLogin yes" > /etc/ssh/sshd_config.d/00-cephadm-override.conf
         echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config.d/00-cephadm-override.conf
-        
         sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
         sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-        
         echo "root:CephBootstrap2026!" | chpasswd
         usermod -U root
-        
         mkdir -p /root/.ssh
         chmod 700 /root/.ssh
         if [ -f /home/core/.ssh/authorized_keys ]; then
@@ -45,113 +37,81 @@
           touch /root/.ssh/authorized_keys
         fi
         chmod 600 /root/.ssh/authorized_keys
-        
-        # Correct security parameters and force complete service restart
         restorecon -R -v /root/.ssh
         setsebool -P container_manage_cgroup true || true
         setsebool -P container_connect_any true || true
-        
         systemctl restart sshd
-    
-    - name: "1.5 - Bootstrap Primary Ceph Node Dynamically"
-      become: yes
+      changed_when: false
+
+    - name: "1.5 - Bootstrap Primary Ceph Cluster Controller"
       ansible.builtin.shell: |
-        cephadm bootstrap \
+        sudo cephadm bootstrap \
           --mon-ip {{ ceph_primary_ip }} \
           --cluster-network {{ ceph_cluster_network }} \
           --skip-dashboard \
           --allow-fqdn-hostname \
           --ssh-user root
       register: bootstrap_out
-      when: nfs_node == ceph_primary_node    
-
-    - name: "1.5.1 - Manual Key Injection (Fix for Auth Failed)"
-      ansible.builtin.shell: |
-        if [ -f /etc/ceph/ceph.pub ]; then
-          cat /etc/ceph/ceph.pub >> /root/.ssh/authorized_keys
-          chmod 600 /root/.ssh/authorized_keys
-        fi
       when: nfs_node == ceph_primary_node
 
-    - name: "1.6 - Fetch Ceph Cluster Public SSH Key"
-      become: yes
-      ansible.builtin.shell: "cat /etc/ceph/ceph.pub"
+    - name: "1.6 - Capture Generated Cluster Public Keys"
+      ansible.builtin.shell: "sudo cat /etc/ceph/ceph.pub"
       register: ceph_pub_key
       when: nfs_node == ceph_primary_node
 
-- name: "Execute Ceph Cluster Mesh Coordination Tasks"
+
+- name: "Execute Consolidated Cluster Mesh Coordination Tasks"
+  delegate_to: "{{ ceph_primary_node }}"
   vars:
     ansible_user: "{{ hostvars[ceph_primary_node]['ansible_user'] | default('core') }}"
   block:
-    # Safely bridges the public key out of the local variable engine into cluster memory
-    - name: "1.6b - Register Public Key Fact globally on controller"
+    # 1.6b - Safely extracts the public key from the primary node's memory buffer
+    - name: "1.6b - Extract Primary SSH Public Key String"
       ansible.builtin.set_fact:
-        shared_ceph_pub_key: "{{ ceph_pub_key_fetched.stdout }}"
-      when: nfs_node == ceph_primary_node
+        global_ceph_key: "{{ hostvars[ceph_primary_node]['ceph_pub_key']['stdout'] }}"
 
-
-    - name: "1.7 - Distribute Cluster Keys to Secondary Storage Nodes via Maintenance Map"
-      delegate_to: "localhost"
-      become: false
+    - name: "1.7 - Distribute Authorized Root Mesh Keys across Infrastructure Map"
       ansible.builtin.shell: |
-        # 1. Reach back out to the primary node dynamically to get the real-time public key
-        PRIMARY_M_IP="{{ maintenance_map[ceph_primary_node] }}"
-        CEPH_KEY=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@${PRIMARY_M_IP} "sudo cat /etc/ceph/ceph.pub")
-        
-        # 2. Append that key to the current loop target
-        TARGET_M_IP="{{ maintenance_map[item] }}"
-        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa core@${TARGET_M_IP} "sudo mkdir -p /root/.ssh && echo \"${CEPH_KEY}\" | sudo tee -a /root/.ssh/authorized_keys && sudo chmod 600 /root/.ssh/authorized_keys"
+        sudo mkdir -p /root/.ssh
+        echo "{{ global_ceph_key }}" | sudo tee -a /root/.ssh/authorized_keys
+        sudo chmod 600 /root/.ssh/authorized_keys
+      delegate_to: "{{ item }}"
       loop: "{{ groups['nfs_storage_nodes'] }}"
       when: item != ceph_primary_node
-
-    - name: "1.8 - Expand Ceph Mesh and Add Storage Nodes to Orchestrator"
-      delegate_to: "{{ ceph_primary_node }}"
-      become: yes
-      ansible.builtin.shell: |
-        ceph orch host add {{ item }} {{ hostvars[item]['provision_ip'] }}
-      loop: "{{ groups['nfs_storage_nodes'] }}"
-      register: host_add_out
-      until: host_add_out.rc == 0
-      retries: 5
-      delay: 10
-      when: item != ceph_primary_node
-
-    # --- AUTOMATED STEP 1 ---
-    # - name: "1.8b - Distribute Admin Configuration Keyrings to All Nodes"
-    #   ansible.builtin.shell: >
-    #     sudo ceph orch client-keyring set client.admin placement="3 {{ storage_group_hosts | join(' ') }}"
-    #   when: nfs_node == ceph_primary_node
-
-    - name: "1.8c - Wait for All Nodes to Join the Ceph Mesh"
-      ansible.builtin.shell: >
-        sudo ceph orch host ls --format json | jq '. | length'
-      register: host_count
-      until: host_count.stdout | int == 3
-      retries: 15
-      delay: 10
-      when: nfs_node == ceph_primary_node
       changed_when: false
-    
-    - name: "1.9 - Automatically Consume Raw Secondary Disks (/dev/vdb) into OSD Pool"
-      delegate_to: "{{ ceph_primary_node }}"
-      become: yes
-      ansible.builtin.shell: "ceph orch apply osd --all-available-devices"
 
-    - name: "1.9b - Wait for OSD Pool to Reach Replication Factor Baseline"
-      ansible.builtin.shell: >
-        sudo ceph osd stat --format json | jq '.num_osds'
-      register: active_osds
-      until: active_osds.stdout | int >= 3
+    # --labels _admin automatically synchronizes the admin keyring down to nodes 52 and 53 natively!
+    - name: "1.8 - Expand Ceph Mesh and Inject Node Admin Access Controls"
+      ansible.builtin.shell: |
+        sudo ceph orch host add {{ item }} {{ hostvars[item]['provision_ip'] }} --labels _admin
+      loop: "{{ groups['nfs_storage_nodes'] }}"
+      when: item != ceph_primary_node
+      changed_when: true
+
+    - name: "1.8c - Verify All Nodes Exist in Orchestrator Quorum"
+      ansible.builtin.shell: "sudo ceph orch host ls --format json | jq '. | length'"
+      register: current_host_count
+      until: current_host_count.stdout | int == (groups['nfs_storage_nodes'] | length)
+      retries: 20
+      delay: 15
+      changed_when: false
+
+    - name: "1.9 - Automatically Consume Raw Secondary Disks (/dev/vdb) into Pool"
+      ansible.builtin.shell: "sudo ceph orch apply osd --all-available-devices"
+      changed_when: true
+
+    - name: "1.9b - Wait for Active Storage OSDs to complete Replication Factor Provisioning"
+      ansible.builtin.shell: "sudo ceph osd stat --format json | jq '.num_osds'"
+      register: pool_osd_count
+      until: pool_osd_count.stdout | int >= (groups['nfs_storage_nodes'] | length)
       retries: 30
       delay: 20
-      when: nfs_node == ceph_primary_node
       changed_when: false
 
-    - name: "2.0 - Deploy Active-Active NFS-Ganesha Gateways via Ceph Orchestrator"
-      delegate_to: "{{ ceph_primary_node }}"
-      become: yes
-      ansible.builtin.shell: >
-        ceph orch apply nfs SharedStorage Pool1 --placement="{{ groups['nfs_storage_nodes'] | length }} {{ groups['nfs_storage_nodes'] | join(' ') }}"
+    - name: "2.0 - Deploy Active-Active NFS-Ganesha Cluster Exports Layer"
+      ansible.builtin.shell: |
+        sudo ceph orch apply nfs SharedStorage Pool1 --placement="{{ groups['nfs_storage_nodes'] | length }} {{ groups['nfs_storage_nodes'] | join(' ') }}"
+      changed_when: true
 
-  # Only run this whole orchestration block on the VERY LAST node iteration
+  # Forces this master orchestration block to run exactly ONCE on the final loop pass
   when: nfs_node == groups['nfs_storage_nodes'][-1]
