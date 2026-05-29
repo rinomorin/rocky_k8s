@@ -5,6 +5,11 @@ kubeconfig_path: "/home/core/.kube/config"
 dex_issuer_url: "http://10.244.4"
 portainer_redirect_url: "http://10.244.4"
 portainer_oauth_secret: "portainer-super-secret-key"
+c_zone: "{{ lookup('env', 'cloud_zone') | default('cloud.home.morinsoft.ca', true) }}"
+p_zone: "{{ lookup('env', 'provision_zone') | default('home.morinsoft.ca', true) }}"
+k8s_api_vip: "{{ lookup('env', 'k8s_api_vip') | default('192.168.100.30', true) }}"
+metallb_vip: "{{ lookup('env', 'metallb_vip') | default('10.0.0.200', true) }}"
+ipa_master_fqdn: "ipa.{{ c_zone }}"
 
 # Target IP mappings referenced straight from inventory vars
 target_ingress_vip: "{{ k8s_api_vip }}"

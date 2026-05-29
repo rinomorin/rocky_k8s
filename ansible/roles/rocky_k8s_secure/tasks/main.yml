@@ -26,3 +26,31 @@
 - name: 1.4 - Output Manifest Applied Results
   ansible.builtin.debug:
     var: kubectl_output.stdout_lines
+
+# ... [Keep your existing task 1.1 through 1.4 manifests exactly as they are] ..
+- name: 1.5 - Dynamically Register Wildcard DNS Record inside FreeIPA Directory
+  delegate_to: ipa01
+  vars:
+    ansible_user: "core"
+    # Uses your literal directory manager lookup variable from your defaults
+    ipa_password: "{{ ad_bind_password }}"
+  ansible.builtin.shell: |
+    # 1. Obtain a valid administrative Kerberos ticket using your variables
+    echo "{{ ipa_password }}" | kinit admin@{{ lookup('env', 'ipa_domain') |upper }}
+    
+    # 2. Add the dynamic wildcard A record to your cloud zone mapping via your variables
+    ipa dnsrecord-add {{ c_zone }} * --a-rec={{ k8s_api_vip }} || true
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: 1.6 - Run Automated End-to-End Ingress Connectivity Verification
+  ansible.builtin.shell: >
+    curl -sk -o /dev/null -w "%{http_code}" https://portainer.{{ c_zone }}/
+  args:
+    executable: /bin/bash
+  register: ingress_test_status
+  until: ingress_test_status.stdout == "200"
+  retries: 6
+  delay: 10
+  changed_when: false
