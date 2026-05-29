@@ -124,17 +124,10 @@ spec:
   accessModes:
   - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
-  local:
-    path: /var/lib/portainer
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-      - matchExpressions:
-        - key: kubernetes.io/os
-          operator: In
-          values:
-          - linux
+  storageClassName: ceph-nfs-storage # ◄ Changed storage class identifier
+  nfs:
+    server: 10.0.0.51 # ◄ Directs traffic to your primary active Ceph instance
+    path: / # ◄ The standard root directory export on your Ceph engine
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -144,7 +137,8 @@ metadata:
 spec:
   accessModes:
   - ReadWriteOnce
-  storageClassName: local-storage
+  storageClassName: ceph-nfs-storage # ◄ Must match the PV class exactly
+  volumeName: portainer-pv
   resources:
     requests:
       storage: 10Gi
