@@ -54,26 +54,22 @@
       register: bootstrap_out
       when: nfs_node == ceph_primary_node
 
-    # Bypasses the loop-variable loss issue by saving the key safely to disk on the helper machine
-    - name: "1.6 - Localize Captured Cluster Public Keys to Controller Scratchpad"
-      ansible.builtin.shell: "sudo cat /etc/ceph/ceph.pub"
-      register: local_scratch_key
-      when: nfs_node == ceph_primary_node
 
-
-- name: "Execute Ceph Cluster Mesh Coordination Tasks"
+- name: "Execute Consolidated Cluster Mesh Coordination Tasks"
   delegate_to: "{{ ceph_primary_node }}"
   vars:
     ansible_user: "{{ hostvars[ceph_primary_node]['ansible_user'] | default('core') }}"
   block:
-    - name: "1.6b - Extract Primary SSH Public Key String"
-      ansible.builtin.set_fact:
-        global_ceph_key: "{{ hostvars[ceph_primary_node]['ceph_pub_key']['stdout'] }}"
+    # 1.6b - Live captures the key from disk on the primary host, completely bypassing hostvars loop errors
+    - name: "1.6b - Live Query Primary SSH Public Key"
+      ansible.builtin.shell: "sudo cat /etc/ceph/ceph.pub"
+      register: live_mesh_key
 
     - name: "1.7 - Distribute Authorized Root Mesh Keys across Infrastructure Map"
       ansible.builtin.shell: |
         sudo mkdir -p /root/.ssh
-        echo "{{ global_ceph_key }}" | sudo tee -a /root/.ssh/authorized_keys
+        echo "{{ live_mesh_key.stdout }}" | sudo tee -a /root/.ssh/authorized_keys
+        sudo chmod 600 /root/.ssh/authorized_keys
       delegate_to: "{{ item }}"
       loop: "{{ groups['nfs_storage_nodes'] }}"
       when: item != ceph_primary_node
@@ -94,9 +90,9 @@
       delay: 15
       changed_when: false
 
-    # --- DRIVER DEVICE CORRECTION FIXED HERE ---
     - name: "1.9 - Automatically Consume Raw Secondary Disks (/dev/vda) into Pool"
-      ansible.builtin.shell: "sudo ceph orch apply osd --drive-groups <(echo 'service_type: osd\nservice_id: vda_pool\nplacement:\n  all: true\ndata_devices:\n  paths:\n    - /dev/vda') --flags unmanaged=false"
+      ansible.builtin.shell: |
+        sudo ceph orch apply osd --drive-groups <(echo 'service_type: osd\nservice_id: vda_pool\nplacement:\n  all: true\ndata_devices:\n  paths:\n    - /dev/vda') --flags unmanaged=false
       changed_when: true
 
     - name: "1.9b - Wait for Active Storage OSDs to complete Replication Factor Provisioning"
@@ -112,4 +108,5 @@
         sudo ceph orch apply nfs SharedStorage Pool1 --placement="{{ groups['nfs_storage_nodes'] | length }} {{ groups['nfs_storage_nodes'] | join(' ') }}"
       changed_when: true
 
+  # Forces this master orchestration block to run exactly ONCE on the final loop pass
   when: nfs_node == groups['nfs_storage_nodes'][-1]
