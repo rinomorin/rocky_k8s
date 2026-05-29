@@ -54,9 +54,10 @@
       register: bootstrap_out
       when: nfs_node == ceph_primary_node
 
-    - name: "1.6 - Capture Generated Cluster Public Keys"
+    # Bypasses the loop-variable loss issue by saving the key safely to disk on the helper machine
+    - name: "1.6 - Localize Captured Cluster Public Keys to Controller Scratchpad"
       ansible.builtin.shell: "sudo cat /etc/ceph/ceph.pub"
-      register: ceph_pub_key
+      register: local_scratch_key
       when: nfs_node == ceph_primary_node
 
 
@@ -65,22 +66,20 @@
   vars:
     ansible_user: "{{ hostvars[ceph_primary_node]['ansible_user'] | default('core') }}"
   block:
-    # 1.6b - Safely extracts the public key from the primary node's memory buffer
-    - name: "1.6b - Extract Primary SSH Public Key String"
-      ansible.builtin.set_fact:
-        global_ceph_key: "{{ hostvars[ceph_primary_node]['ceph_pub_key']['stdout'] }}"
+    # 1.6b - Evaluates the key cleanly from memory without querying multi-pass loop arrays
+    - name: "1.6b - Dynamically Extract Primary SSH Public Key via Live Query"
+      ansible.builtin.shell: "sudo cat /etc/ceph/ceph.pub"
+      register: live_mesh_key
 
     - name: "1.7 - Distribute Authorized Root Mesh Keys across Infrastructure Map"
       ansible.builtin.shell: |
         sudo mkdir -p /root/.ssh
-        echo "{{ global_ceph_key }}" | sudo tee -a /root/.ssh/authorized_keys
-        sudo chmod 600 /root/.ssh/authorized_keys
+        echo "{{ live_mesh_key.stdout }}" | sudo tee -a /root/.ssh/authorized_keys
       delegate_to: "{{ item }}"
       loop: "{{ groups['nfs_storage_nodes'] }}"
       when: item != ceph_primary_node
       changed_when: false
 
-    # --labels _admin automatically synchronizes the admin keyring down to nodes 52 and 53 natively!
     - name: "1.8 - Expand Ceph Mesh and Inject Node Admin Access Controls"
       ansible.builtin.shell: |
         sudo ceph orch host add {{ item }} {{ hostvars[item]['provision_ip'] }} --labels _admin
@@ -92,7 +91,7 @@
       ansible.builtin.shell: "sudo ceph orch host ls --format json | jq '. | length'"
       register: current_host_count
       until: current_host_count.stdout | int == (groups['nfs_storage_nodes'] | length)
-      retries: 20
+      retries: 25
       delay: 15
       changed_when: false
 
@@ -104,7 +103,7 @@
       ansible.builtin.shell: "sudo ceph osd stat --format json | jq '.num_osds'"
       register: pool_osd_count
       until: pool_osd_count.stdout | int >= (groups['nfs_storage_nodes'] | length)
-      retries: 30
+      retries: 35
       delay: 20
       changed_when: false
 
