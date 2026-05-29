@@ -98,7 +98,7 @@
       ansible.builtin.shell: "sudo ceph osd stat --format json | jq '.num_osds'"
       register: pool_osd_count
       until: pool_osd_count.stdout | int >= (groups['nfs_storage_nodes'] | length)
-      retries: 35
+      retries: 55
       delay: 20
       changed_when: false
 
