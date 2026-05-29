@@ -1,0 +1,23 @@
+- name: "Execute Local Node Profile System Tasks on {{ nfs_node }}"
+  delegate_to: "{{ nfs_node }}"
+  vars:
+    ansible_user: "{{ hostvars[nfs_node]['ansible_user'] | default('core') }}"
+  block:
+    - name: Forcefully purge any legacy Ceph or LVM structures from secondary disk
+      shell: |
+        # 1. Clear any active container runtimes using the devices
+        podman stop $(podman ps -a -q) 2>/dev/null || true
+        podman rm $(podman ps -a -q) 2>/dev/null || true
+        
+        # 2. Break active kernel hardware mapper locks on RHEL
+        dmsetup remove_all --force || true
+        
+        # 3. Destroy volume groups and physical disk headers
+        vgremove -y -f $(vgs -o vg_name --noheadings | grep ceph) 2>/dev/null || true
+        pvremove -y -ff /dev/vda 2>/dev/null || true
+        
+        # 4. Zero out metadata blocks completely
+        wipefs -a -f /dev/vda
+        dd if=/dev/zero of=/dev/vda bs=1M count=200 oflag=direct
+      failed_when: false
+      changed_when: true

@@ -2,6 +2,12 @@
 - include_tasks: 02_clone_node.yml
 - name: Kubernetes NFS Block
   block:
+    - name: Clean all disk prior to starting
+      include_tasks: pre-clean_nfs_nodes.yml
+      loop: "{{ storage_group_hosts }}"
+      loop_control:
+        loop_var: nfs_node
+        
     - name: 0.1 - Configure Nodes (Repos, Packages, etc)
       include_tasks: set_nfs.yml
       loop: "{{ storage_group_hosts }}"
