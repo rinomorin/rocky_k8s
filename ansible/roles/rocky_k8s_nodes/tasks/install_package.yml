@@ -23,6 +23,21 @@
       shell: |
         dnf install -y kubeadm kubelet kubectl bind-utils
   
+    # roles/rocky_k8s_nodes/tasks/install_package.yml
+
+    - name: Install system package baseline via shell
+      become: yes
+      ansible.builtin.shell: |
+        sudo dnf install -y {{ item }}
+      loop:
+        - tar
+        - bzip2
+        - jq
+        - socat
+        - conntrack
+        - nfs-utils # ◄ ADDED HERE: Natively bakes the storage mount system handlers into all nodes
+      changed_when: true
+
     # --------------------------------------------------------
     # Install crictl
     # --------------------------------------------------------
