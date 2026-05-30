@@ -42,7 +42,7 @@ metadata:
   namespace: kube-system
 data:
   config.yaml: |
-    issuer: http://morinsoft.ca
+    issuer: http://{{ lookup('env', 'p_zone') }}
     storage:
       type: kubernetes
       config:
@@ -76,7 +76,7 @@ data:
     staticClients:
     - id: portainer-client
       redirectURIs:
-      - 'http://morinsoft.ca'
+      - 'http://{{  'p_zone' }}'
       name: 'Portainer GUI'
       secret: portainer-super-secret-key
 ---
@@ -230,7 +230,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: "dex.api.cloud.home.morinsoft.ca"
+  - host: "dex.api.{{c_zone}}"
     http:
       paths:
       - path: /
@@ -251,7 +251,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: "portainer.api.cloud.home.morinsoft.ca"
+  - host: "portainer.api.{{c_zone}}"
     http:
       paths:
       - path: /

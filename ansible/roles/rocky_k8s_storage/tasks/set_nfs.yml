@@ -110,3 +110,19 @@
   # Forces this master orchestration block to run exactly ONCE on the final loop pass
   when: nfs_node == groups['nfs_storage_nodes'][-1]
 
+
+# ... [Keep your existing KVM clones and set_nfs loop tasks exactly as they are] ...
+
+- name: Kubernetes Worker Node Storage Prereqs Block
+  block:
+    - name: 2.1 - Extract Live Internal Cluster Node IPs
+      ansible.builtin.shell: >
+        kubectl --kubeconfig={{ kubeconfig_path }} get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}'
+      register: live_worker_ips
+      changed_when: false
+
+    - name: 2.2 - Ensure NFS Helpers Exist Across All Cluster Workers via Local Core Key
+      ansible.builtin.shell: >
+        ssh -o StrictHostKeyChecking=no core@{{ item }} "sudo dnf install -y nfs-utils"
+      loop: "{{ live_worker_ips.stdout.split() }}"
+      changed_when: true

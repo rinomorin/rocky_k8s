@@ -19,7 +19,7 @@ data:
       id: active-directory
       name: Active Directory
       config:
-        host: "192.168.100.30:389"
+        host: "{{ k8s_api_vip}}:389"
         insecureNoSSL: true
         bindDN: "cn=AnsibleService,ou=ServiceAccounts,dc=yourdomain,dc=local"
         bindPW: "YourSecurePassword"
