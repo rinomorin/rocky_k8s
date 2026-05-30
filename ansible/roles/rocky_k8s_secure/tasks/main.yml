@@ -46,7 +46,7 @@
 
 - name: 1.6 - Run Automated End-to-End Ingress Connectivity Verification
   ansible.builtin.shell: >
-    curl -sk -o /dev/null -w "%{http_code}" https://portainer.{{ c_zone }}/
+    curl -sk -o /dev/null -w "%{http_code}" https://portainer.api.{{ c_zone }}/
   args:
     executable: /bin/bash
   register: ingress_test_status
