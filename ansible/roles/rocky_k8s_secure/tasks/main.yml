@@ -44,7 +44,33 @@
     executable: /bin/bash
   changed_when: true
 
-- name: 1.6 - Run Automated End-to-End Ingress Connectivity Verification
+- name: 1.6a - Wait for Portainer Deployment Rollout
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  ansible.builtin.shell: >
+    kubectl rollout status deployment/portainer -n portainer --timeout=120s
+  args:
+    executable: /bin/bash
+  register: portainer_rollout
+  failed_when: portainer_rollout.rc != 0
+  changed_when: false
+
+- name: 1.6b - Wait for Portainer Service Endpoints to populate
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  ansible.builtin.shell: >
+    kubectl get endpoints portainer -n portainer -o jsonpath='{.subsets}' || true
+  args:
+    executable: /bin/bash
+  register: portainer_endpoints
+  until: portainer_endpoints.stdout is defined and portainer_endpoints.stdout != '' and portainer_endpoints.stdout != 'null'
+  retries: 12
+  delay: 10
+  changed_when: false
+
+- name: 1.6c - Run Automated End-to-End Ingress Connectivity Verification
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
   ansible.builtin.shell: >
     curl -sk -o /dev/null -w "%{http_code}" https://portainer.api.{{ c_zone }}/
   args:
