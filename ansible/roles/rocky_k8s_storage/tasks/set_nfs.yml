@@ -8,7 +8,7 @@
   block:
     - name: Set Resolv.conf to Use our dns
       ansible.builtin.shell: |
-        echo "search {{ c_zone }} {{ p_zone }} {{ b_zone }}"  > /etc/resolv.conf
+        echo "search {{ p_zone }} {{ c_zone }} {{ b_zone }}"  > /etc/resolv.conf
         echo "nameserver {{ hostvars[groups['helper'][0]]['provision_ip'] }}" >> /etc/resolv.conf
         echo "nameserver {{ hostvars[groups['ipa'][0]]['ansible_host'] }}" >> /etc/resolv.conf
     
