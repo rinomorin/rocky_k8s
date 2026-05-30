@@ -113,16 +113,17 @@
     - name: "2.1 - Force Apply Read-Write (RW) Permissions to Ceph NFS Export"
       ansible.builtin.shell: |
         sudo ceph nfs export apply SharedStorage -i -
-      stdin: |
-        {
-          "export_id": 1,
-          "path": "/",
-          "pseudo": "/",
-          "access_type": "RW",
-          "squash": "none",
-          "protocols": ["NFSv4"],
-          "transports": ["TCP"]
-        }
+      args:
+        stdin: |
+          {
+            "export_id": 1,
+            "path": "/",
+            "pseudo": "/",
+            "access_type": "RW",
+            "squash": "none",
+            "protocols": ["NFSv4"],
+            "transports": ["TCP"]
+          }
       become: yes
       changed_when: true
       when: nfs_node == groups['nfs_storage_nodes'][-1]
