@@ -131,10 +131,11 @@
             "squash": "none",
             "protocols": ["NFSv4"],
             "transports": ["TCP"],
-            "sec_types": ["sys"]
           }
       become: yes
       changed_when: true
+      register: nfs_export_apply
+      failed_when: nfs_export_apply.rc != 0
       when: nfs_node == groups['nfs_storage_nodes'][-1]
 
     - name: "2.1b - Verify Ceph NFS Export is RW and Active"
@@ -143,9 +144,9 @@
       register: export_access_type
       retries: 5
       delay: 10
-      until: export_access_type.rc == 0 and 'RW' in export_access_type.stdout
+      until: export_access_type.rc == 0 and export_access_type.stdout is defined and 'RW' in export_access_type.stdout
       changed_when: false
-      failed_when: false
+      failed_when: export_access_type.rc != 0 or export_access_type.stdout is not defined or 'RW' not in export_access_type.stdout
       when: nfs_node == groups['nfs_storage_nodes'][-1]
   # Forces this master orchestration block to run exactly ONCE on the final loop pass
   when: nfs_node == groups['nfs_storage_nodes'][-1]
