@@ -170,29 +170,40 @@ spec:
     metadata:
       labels:
         app: portainer
-    spec:
-      nodeSelector:
-        kubernetes.io/os: linux
+  spec:
+    nodeSelector:
+      kubernetes.io/os: linux
       
-      securityContext:
-        fsGroup: 60000
-        runAsUser: 60000
+    securityContext:
+      fsGroup: 60000
+      runAsUser: 60000
 
-      containers:
-      - name: portainer
-        image: portainer/portainer-ce:latest
-        ports:
-        - containerPort: 9000
-          name: http
-        - containerPort: 9443
-          name: https
-        volumeMounts:
-        - name: portainer-data
-          mountPath: /data
-      volumes:
+    # --- ADD THIS AUTOMATED WORKSPACE INITIALIZATION BLOCK ---
+    initContainers:
+    - name: volume-permissions-fix
+      image: alpine:latest
+      command: ["sh", "-c", "mkdir -p /data/certs /data/db && chown -R 60000:60000 /data && chmod -R 775 /data"]
+      securityContext:
+        runAsUser: 0  # Runs temporarily as root to cut through the NFS mount lock
+      volumeMounts:
       - name: portainer-data
-        persistentVolumeClaim:
-          claimName: portainer-pvc
+        mountPath: /data
+
+    containers:
+    - name: portainer
+      image: portainer/portainer-ce:latest
+      ports:
+      - containerPort: 9000
+        name: http
+      - containerPort: 9443
+        name: https
+      volumeMounts:
+      - name: portainer-data
+        mountPath: /data
+    volumes:
+    - name: portainer-data
+      persistentVolumeClaim:
+        claimName: portainer-pvc
 ---
 apiVersion: v1
 kind: Service
