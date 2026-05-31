@@ -62,6 +62,16 @@
         - hostvars[cloud_node] not in groups['helpers']
         - item.0 != "0.0.0.0."    
 
+    - name: if 172.16.0.1
+      ansible.builtin.shell: |
+        if grep '172.16.0.1' /etc/resolv.conf; then
+          sudo tee /etc/resolv.conf << 'EOF'
+          search {{ p_zone }} {{ c_zone }} {{ b_zone }}
+          nameserver {{ hostvars[groups['helper'] | first]['provision_ip'] }}
+          nameserver {{ hostvars[groups['ipa'] | first]['ansible_host'] }}
+          EOF
+        fi
+
     - name: Add Repos configurations
       include_tasks: repo.yml
       when: 
