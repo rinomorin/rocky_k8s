@@ -12,6 +12,7 @@ golden_image_name: "gi-{{ build_profile }}-{{ safe_os_version }}-{{ build_date }
 # ------------------------------------------------------------
 c_zone: "{{ lookup('env', 'cloud_zone') | default('morinsoft.ca', true) }}"
 p_zone: "{{ lookup('env', 'provision_zone') | default('prov.morinsoft.ca', true) }}"
+b_zone: "{{ lookup('env', 'public_zone') | default('home.morinsoft.ca', true) }}"
 ssh_key_path: "{{ lookup('env', 'ssh_key_path') | default('~/.ssh/id_rsa', true) | regex_replace('\\.pub$', '') }}"
 # ------------------------------------------------------------
 # Dynamic CIDR Extraction (from install.yml / inventory)
