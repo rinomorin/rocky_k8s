@@ -125,7 +125,7 @@
         stdin: |
           {
             "export_id": 1,
-            "path": "/portainer",
+            "path": "/",
             "pseudo": "/portainer",
             "access_type": "RW",
             "squash": "none",
