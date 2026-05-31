@@ -74,7 +74,7 @@
 - name: 1.6a.debug - Describe Portainer pod on rollout failure
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
-  ansible.builtin.shell: >
+  ansible.builtin.shell: |
     POD=$(kubectl get pods -n portainer -o jsonpath='{.items[0].metadata.name}')
     if [ -n "$POD" ]; then
       kubectl describe pod -n portainer "$POD"
@@ -90,7 +90,7 @@
 - name: 1.6a.debug - Dump init container logs for Portainer on rollout failure
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
-  ansible.builtin.shell: >
+  ansible.builtin.shell: |
     POD=$(kubectl get pods -n portainer -o jsonpath='{.items[0].metadata.name}')
     if [ -n "$POD" ]; then
       kubectl logs -n portainer "$POD" -c volume-permissions-fix || true
@@ -106,7 +106,7 @@
 - name: 1.6a.debug - Dump main Portainer container logs on rollout failure
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
-  ansible.builtin.shell: >
+  ansible.builtin.shell: |
     POD=$(kubectl get pods -n portainer -o jsonpath='{.items[0].metadata.name}')
     if [ -n "$POD" ]; then
       kubectl logs -n portainer "$POD" -c portainer || true
