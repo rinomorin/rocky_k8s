@@ -27,7 +27,7 @@
         NS_IP="{{ item.2 }}"
 
         # Skip if the prefix is our dummy '0.0.0.0' or not found on an interface
-        if [ "$PREFIX" != "0.0.0.0." ] && ip -4 -br addr show | grep -q "$PREFIX"; then
+        if [ "$PREFIX" != "0.0.0.0" ] && ip -4 -br addr show | grep -q "$PREFIX"; then
           grep -q '^search' /etc/resolv.conf || echo 'search' >> /etc/resolv.conf
           
           if ! grep '^search' /etc/resolv.conf | grep -q "$DOMAIN"; then
@@ -39,7 +39,7 @@
       loop:
         # 1. Provisioning
         - [ 
-            "{{ (hostvars[groups['helpers'][0]]['provision_ip'] | default('0.0.0.0')).split('.')[:3] | join('.') }}.", 
+            "{{ (hostvars[groups['helpers'][0]]['provision_ip'] | default('0.0.0.0')).split('.')[:3] | join('.') }}.0", 
             "{{ c_zone.replace(c_zone.split('.')[-1], 'local') if c_zone is defined else 'example.local' }}", 
             "{{ hostvars[groups['helpers'][0]]['provision_ip'] | default('0.0.0.0') }}" 
           ]

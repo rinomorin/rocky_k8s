@@ -130,11 +130,12 @@
             "access_type": "RW",
             "squash": "none",
             "protocols": ["NFSv4"],
-            "transports": ["TCP"]
+            "transports": ["TCP"],
+            "sec_types": ["sys"]
+
           }
       become: yes
       changed_when: true
       when: nfs_node == groups['nfs_storage_nodes'][-1]
   # Forces this master orchestration block to run exactly ONCE on the final loop pass
   when: nfs_node == groups['nfs_storage_nodes'][-1]
-
