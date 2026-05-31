@@ -52,8 +52,65 @@
   args:
     executable: /bin/bash
   register: portainer_rollout
-  failed_when: portainer_rollout.rc != 0
+  failed_when: false
   changed_when: false
+
+- name: 1.6a.1 - Capture rollout failure status
+  ansible.builtin.set_fact:
+    portainer_rollout_failed: "{{ portainer_rollout.rc != 0 }}"
+  changed_when: false
+
+- name: 1.6a.debug - Show Portainer PVC status on rollout failure
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  ansible.builtin.shell: >
+    kubectl get pvc -n portainer
+  args:
+    executable: /bin/bash
+  register: portainer_pvc_status
+  changed_when: false
+  when: portainer_rollout_failed
+
+- name: 1.6a.debug - Describe Portainer pod on rollout failure
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  ansible.builtin.shell: >
+    POD=$(kubectl get pods -n portainer -o jsonpath='{.items[0].metadata.name}')
+    kubectl describe pod -n portainer "$POD"
+  args:
+    executable: /bin/bash
+  register: portainer_pod_description
+  changed_when: false
+  when: portainer_rollout_failed
+
+- name: 1.6a.debug - Dump init container logs for Portainer on rollout failure
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  ansible.builtin.shell: >
+    POD=$(kubectl get pods -n portainer -o jsonpath='{.items[0].metadata.name}')
+    kubectl logs -n portainer "$POD" -c volume-permissions-fix || true
+  args:
+    executable: /bin/bash
+  register: portainer_init_logs
+  changed_when: false
+  when: portainer_rollout_failed
+
+- name: 1.6a.debug - Dump main Portainer container logs on rollout failure
+  environment:
+    KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
+  ansible.builtin.shell: >
+    POD=$(kubectl get pods -n portainer -o jsonpath='{.items[0].metadata.name}')
+    kubectl logs -n portainer "$POD" -c portainer || true
+  args:
+    executable: /bin/bash
+  register: portainer_main_logs
+  changed_when: false
+  when: portainer_rollout_failed
+
+- name: 1.6a.fail if Portainer rollout still failed
+  ansible.builtin.fail:
+    msg: "Portainer rollout timed out. Check Kubernetes diagnostics above."
+  when: portainer_rollout_failed
 
 - name: 1.6b - Wait for Portainer Service Endpoints to populate
   environment:
@@ -67,6 +124,7 @@
   retries: 12
   delay: 10
   changed_when: false
+  when: not portainer_rollout_failed | default(false)
 
 - name: 1.6c - Run Automated End-to-End Ingress Connectivity Verification
   environment:
@@ -80,3 +138,4 @@
   retries: 6
   delay: 10
   changed_when: false
+  when: not portainer_rollout_failed | default(false)
