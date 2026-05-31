@@ -140,13 +140,13 @@
 
     - name: "2.1b - Verify Ceph NFS Export is RW and Active"
       ansible.builtin.shell: |
-        sudo ceph nfs export ls SharedStorage --format json | jq -r '.[] | select(.access_type=="RW") | .pseudo'
+        sudo ceph nfs export get SharedStorage 1 --format json | jq -r '.access_type'
       register: export_access_type
       retries: 5
       delay: 10
-      until: export_access_type.rc == 0 and export_access_type.stdout is defined and export_access_type.stdout != ''
+      until: export_access_type.rc == 0 and export_access_type.stdout is defined and export_access_type.stdout == 'RW'
       changed_when: false
-      failed_when: export_access_type.rc != 0 or export_access_type.stdout is not defined or export_access_type.stdout == ''
+      failed_when: export_access_type.rc != 0 or export_access_type.stdout is not defined or export_access_type.stdout != 'RW'
       when: nfs_node == groups['nfs_storage_nodes'][-1]
   # Forces this master orchestration block to run exactly ONCE on the final loop pass
   when: nfs_node == groups['nfs_storage_nodes'][-1]
