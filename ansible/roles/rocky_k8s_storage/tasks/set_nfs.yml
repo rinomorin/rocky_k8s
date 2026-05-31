@@ -9,10 +9,10 @@
     - name: Set Resolv.conf to Use our dns
       become: true
       ansible.builtin.shell: |
-        echo "search {{ p_zone }} {{ c_zone }} {{ b_zone }}"  > /etc/resolv.conf
-        echo "nameserver {{ hostvars[groups['helper'][0]]['provision_ip'] }}" >> /etc/resolv.conf
-        echo "nameserver {{ hostvars[groups['ipa'][0]]['ansible_host'] }}" >> /etc/resolv.conf
-    
+        echo "search {{ p_zone }} {{ c_zone }} {{ b_zone }}" > /etc/resolv.conf
+        echo "nameserver {{ hostvars[groups['helper'] | first]['provision_ip'] }}" >> /etc/resolv.conf
+        echo "nameserver {{ hostvars[groups['ipa'] | first]['ansible_host'] }}" >> /etc/resolv.conf 
+
     - name: "1.4 - Enable Ceph Quincy Repo and Install Software Baseline"
       ansible.builtin.shell: |
         sudo dnf install -y centos-release-ceph-quincy
