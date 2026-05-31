@@ -97,7 +97,6 @@
       delay: 15
       changed_when: false
 
-    # --- SIMPLIFIED AND CORRECTED NATIVE OSD COMMAND ---
     - name: "1.9 - Automatically Consume Raw Secondary Disks (/dev/vda) into Pool"
       ansible.builtin.shell: "sudo ceph orch apply osd --all-available-devices"
       changed_when: true
@@ -110,43 +109,57 @@
       delay: 20
       changed_when: false
 
+    # --- NEW CRITICAL BLOCK: PROVISION CEPHFS STORAGE CHANNELS ---
+    - name: "1.9c - Create Dedicated CephFS Metadata Pool"
+      ansible.builtin.shell: "sudo ceph osd pool create cephfs_metadata 16 16"
+      changed_when: true
+
+    - name: "1.9d - Create Dedicated CephFS Data Pool"
+      ansible.builtin.shell: "sudo ceph osd pool create cephfs_data 32 32"
+      changed_when: true
+
+    - name: "1.9e - Enable and Build CephFS File System Volume Architecture"
+      ansible.builtin.shell: "sudo ceph fs new cephfs cephfs_metadata cephfs_data"
+      changed_when: true
 
     - name: "2.0 - Deploy Active-Active NFS-Ganesha Cluster Exports Layer"
       ansible.builtin.shell: |
         sudo ceph orch apply nfs SharedStorage Pool1 --placement="{{ groups['nfs_storage_nodes'] | length }} {{ groups['nfs_storage_nodes'] | join(' ') }}"
       changed_when: true
-      when: nfs_node == groups['nfs_storage_nodes'][-1]
 
-    # --- ADD THIS AUTOMATED SEAMLESS READ-WRITE STORAGE PATCH ---
+    # --- FIXED EXPORT ROUTINE PASSING CORRECT PROPERTY ARRAYS ---
     - name: "2.1 - Force Apply Read-Write (RW) Permissions to Ceph NFS Export"
-      ansible.builtin.shell: |
-        sudo ceph nfs export apply SharedStorage -i -
+      ansible.builtin.shell: "sudo ceph nfs export apply SharedStorage -i -"
       args:
         stdin: |
           {
             "export_id": 1,
             "path": "/",
-            "pseudo": "/portainer",
+            "pseudo": "/sharedstorage",
             "access_type": "RW",
             "squash": "none",
-            "protocols": ["NFSv4"],
-            "transports": ["TCP"]
+            "protocols": [4],
+            "transports": ["TCP"],
+            "fsal": {
+              "name": "CEPH",
+              "user_id": "nfs.SharedStorage.1",
+              "fs_name": "cephfs"
+            }
           }
-      become: yes
       changed_when: true
       register: nfs_export_apply
       failed_when: nfs_export_apply.rc != 0
-      when: nfs_node == groups['nfs_storage_nodes'][-1]
 
+    # --- FIXED VERIFICATION TASK TARGETING PSEUDO ROUTE KEY ---
     - name: "2.1b - Verify Ceph NFS Export is RW and Active"
       ansible.builtin.shell: |
-        sudo ceph nfs export get SharedStorage 1 --format json | jq -r '.access_type'
+        sudo ceph nfs export get SharedStorage /sharedstorage --format json | jq -r '.access_type'
       register: export_access_type
       retries: 5
       delay: 10
-      until: export_access_type.rc == 0 and export_access_type.stdout is defined and export_access_type.stdout == 'RW'
+      until: export_access_type.rc == 0 and export_access_type.stdout is defined and export_access_type.stdout | trim == 'RW'
       changed_when: false
-      failed_when: export_access_type.rc != 0 or export_access_type.stdout is not defined or export_access_type.stdout != 'RW'
-      when: nfs_node == groups['nfs_storage_nodes'][-1]
+      failed_when: export_access_type.rc != 0 or export_access_type.stdout is not defined or export_access_type.stdout | trim != 'RW'
+
   # Forces this master orchestration block to run exactly ONCE on the final loop pass
   when: nfs_node == groups['nfs_storage_nodes'][-1]
