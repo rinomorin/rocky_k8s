@@ -71,6 +71,11 @@
   changed_when: false
   when: portainer_rollout_failed
 
+- name: 1.6a.debug - Print Portainer PVC status
+  ansible.builtin.debug:
+    var: portainer_pvc_status.stdout_lines
+  when: portainer_rollout_failed
+
 - name: 1.6a.debug - Describe Portainer pod on rollout failure
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
@@ -85,6 +90,11 @@
     executable: /bin/bash
   register: portainer_pod_description
   changed_when: false
+  when: portainer_rollout_failed
+
+- name: 1.6a.debug - Print Portainer pod description output
+  ansible.builtin.debug:
+    var: portainer_pod_description.stdout_lines
   when: portainer_rollout_failed
 
 - name: 1.6a.debug - Dump init container logs for Portainer on rollout failure
@@ -103,6 +113,11 @@
   changed_when: false
   when: portainer_rollout_failed
 
+- name: 1.6a.debug - Print Portainer init log output
+  ansible.builtin.debug:
+    var: portainer_init_logs.stdout_lines
+  when: portainer_rollout_failed
+
 - name: 1.6a.debug - Dump main Portainer container logs on rollout failure
   environment:
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
@@ -117,6 +132,11 @@
     executable: /bin/bash
   register: portainer_main_logs
   changed_when: false
+  when: portainer_rollout_failed
+
+- name: 1.6a.debug - Print Portainer main log output
+  ansible.builtin.debug:
+    var: portainer_main_logs.stdout_lines
   when: portainer_rollout_failed
 
 - name: 1.6a.fail if Portainer rollout still failed
