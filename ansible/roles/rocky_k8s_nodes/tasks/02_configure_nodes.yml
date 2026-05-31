@@ -70,7 +70,7 @@
           if ! grep '^search' /etc/resolv.conf | grep -q "{{ p_zone }}"; then
             sed -i "/^search/ s/$/ {{ p_zone }} {{ c_zone }} {{ b_zone }}/" /etc/resolv.conf
           fi
-          sed -i "/^nameserver/ s/$/ {{ hostvars[groups['helper'] | first]['provision_ip'] }}/" /etc/resolv.conf
+          sed -i "/^nameserver/ s/$/ {{ hostvars[groups['helpers'] | first]['provision_ip'] }}/" /etc/resolv.conf
         fi
 
     - name: Add Repos configurations
