@@ -63,13 +63,14 @@
         - item.0 != "0.0.0.0."    
 
     - name: if 172.16.0.1
+      become: yes
       ansible.builtin.shell: |
         if grep '172.16.0.1' /etc/resolv.conf; then
-          sudo tee /etc/resolv.conf << 'EOF'
-          search {{ p_zone }} {{ c_zone }} {{ b_zone }}
-          nameserver {{ hostvars[groups['helper'] | first]['provision_ip'] }}
-          nameserver {{ hostvars[groups['ipa'] | first]['ansible_host'] }}
-          EOF
+          grep -q '^search' /etc/resolv.conf || echo 'search' >> /etc/resolv.conf
+          if ! grep '^search' /etc/resolv.conf | grep -q "{{ p_zone }}"; then
+            sed -i "/^search/ s/$/ {{ p_zone }} {{ c_zone }} {{ b_zone }}/" /etc/resolv.conf
+          fi
+          sed -i "/^nameserver/ s/$/ {{ hostvars[groups['helper'] | first]['provision_ip'] }}/" /etc/resolv.conf
         fi
 
     - name: Add Repos configurations
