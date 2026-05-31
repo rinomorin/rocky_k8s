@@ -150,10 +150,10 @@
       register: nfs_export_apply
       failed_when: nfs_export_apply.rc != 0
 
-    # --- FIXED VERIFICATION TASK TARGETING PSEUDO ROUTE KEY ---
+    # --- FIXED VERIFICATION TASK TARGETING EXPORT ID ---
     - name: "2.1b - Verify Ceph NFS Export is RW and Active"
       ansible.builtin.shell: |
-        sudo ceph nfs export get SharedStorage /sharedstorage --format json | jq -r '.access_type'
+        sudo ceph nfs export ls SharedStorage --format json | jq -r '.[] | select(.export_id==1) | .access_type'
       register: export_access_type
       retries: 5
       delay: 10
