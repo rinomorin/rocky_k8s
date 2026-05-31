@@ -130,7 +130,7 @@
             "access_type": "RW",
             "squash": "none",
             "protocols": ["NFSv4"],
-            "transports": ["TCP"],
+            "transports": ["TCP"]
           }
       become: yes
       changed_when: true
