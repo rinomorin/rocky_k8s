@@ -76,7 +76,11 @@
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
   ansible.builtin.shell: >
     POD=$(kubectl get pods -n portainer -o jsonpath='{.items[0].metadata.name}')
-    kubectl describe pod -n portainer "$POD"
+    if [ -n "$POD" ]; then
+      kubectl describe pod -n portainer "$POD"
+    else
+      echo "No Portainer pod found to describe"
+    fi
   args:
     executable: /bin/bash
   register: portainer_pod_description
@@ -88,7 +92,11 @@
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
   ansible.builtin.shell: >
     POD=$(kubectl get pods -n portainer -o jsonpath='{.items[0].metadata.name}')
-    kubectl logs -n portainer "$POD" -c volume-permissions-fix || true
+    if [ -n "$POD" ]; then
+      kubectl logs -n portainer "$POD" -c volume-permissions-fix || true
+    else
+      echo "No Portainer pod found for init container logs"
+    fi
   args:
     executable: /bin/bash
   register: portainer_init_logs
@@ -100,7 +108,11 @@
     KUBECONFIG: "/home/{{ lookup('env', 'USER') }}/.kube/config"
   ansible.builtin.shell: >
     POD=$(kubectl get pods -n portainer -o jsonpath='{.items[0].metadata.name}')
-    kubectl logs -n portainer "$POD" -c portainer || true
+    if [ -n "$POD" ]; then
+      kubectl logs -n portainer "$POD" -c portainer || true
+    else
+      echo "No Portainer pod found for main container logs"
+    fi
   args:
     executable: /bin/bash
   register: portainer_main_logs
