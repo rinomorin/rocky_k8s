@@ -153,9 +153,25 @@
     # --- FIXED VERIFICATION TASK TARGETING EXPORT ID ---
     - name: "2.1b - Verify Ceph NFS Export is RW and Active"
       ansible.builtin.shell: |
-        sudo ceph nfs export get SharedStorage /sharedstorage --format json | jq -r '.access_type'
+        set -o pipefail
+
+        # Try known-working commands in order; echo access_type when found
+        # 1) query by pseudo path
+        sudo ceph nfs export get SharedStorage /sharedstorage --format json 2>/tmp/ceph_nfs_get_err || true | jq -r '.access_type' 2>/dev/null | sed -n '1p' && exit 0
+
+        # 2) query by export id
+        sudo ceph nfs export get SharedStorage 1 --format json 2>>/tmp/ceph_nfs_get_err || true | jq -r '.access_type' 2>/dev/null | sed -n '1p' && exit 0
+
+        # 3) fallback to listing and selecting export_id 1
+        sudo ceph nfs export ls SharedStorage --format json 2>>/tmp/ceph_nfs_get_err || true | jq -r '.[] | select(.export_id==1) | .access_type' 2>/dev/null | sed -n '1p' && exit 0
+
+        # If we reach here, collect debug info and fail
+        echo "DEBUG: no export JSON returned from any command" >&2
+        echo "--- ceph_nfs_get_err (stderr from attempts) ---" >&2
+        sed -n '1,200p' /tmp/ceph_nfs_get_err >&2 || true
+        exit 1
       register: export_access_type
-      retries: 5
+      retries: 6
       delay: 10
       until: export_access_type.rc == 0 and export_access_type.stdout is defined and export_access_type.stdout | trim == 'RW'
       changed_when: false
