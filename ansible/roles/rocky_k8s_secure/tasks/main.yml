@@ -22,6 +22,10 @@
         }
       }
   changed_when: true
+  register: nfs_export_apply
+ 
+- debug:
+    var: nfs_export_apply.stdout_lines
 
 - name: "0.2 - Confirm Storage Node Export Path is Active and Operational"
   delegate_to: "{{ groups['nfs_storage_nodes'] | first }}"
@@ -33,6 +37,9 @@
   retries: 6
   delay: 5
   changed_when: false
+
+- debug:
+    var: live_export_status.stdout_lines
 
 # --- EXISTING MANIFEST LIFECYCLE ROUTINES ---
 - name: 1.1 - Compile Dynamic Jinja2 Manifest into YAML file
