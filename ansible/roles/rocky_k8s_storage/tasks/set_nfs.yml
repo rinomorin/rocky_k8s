@@ -129,23 +129,25 @@
 
     # --- FIXED EXPORT ROUTINE PASSING CORRECT PROPERTY ARRAYS ---
     - name: "2.1 - Force Apply Read-Write (RW) Permissions to Ceph NFS Export"
-      ansible.builtin.shell: "sudo ceph nfs export apply SharedStorage -i -"
-      args:
-        stdin: |
-          {
-            "export_id": 1,
-            "path": "/",
-            "pseudo": "/sharedstorage",
-            "access_type": "RW",
-            "squash": "none",
-            "protocols": [4],
-            "transports": ["TCP"],
-            "fsal": {
-              "name": "CEPH",
-              "user_id": "nfs.SharedStorage.1",
-              "fs_name": "cephfs"
-            }
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.shell: |
+        ssh {{ hostvars[nfs_node]['provider_ip'] }} "sudo ceph nfs export apply SharedStorage -i -" <<'EOF'
+        {
+          "export_id": 1,
+          "path": "/",
+          "pseudo": "/sharedstorage",
+          "access_type": "RW",
+          "squash": "none",
+          "protocols": [4],
+          "transports": ["TCP"],
+          "fsal": {
+            "name": "CEPH",
+            "user_id": "nfs.SharedStorage.1",
+            "fs_name": "cephfs"
           }
+        }
+        EOF
       changed_when: true
       register: nfs_export_apply
       failed_when: nfs_export_apply.rc != 0
