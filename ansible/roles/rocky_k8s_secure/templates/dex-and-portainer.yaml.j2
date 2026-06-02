@@ -142,7 +142,7 @@ spec:
   storageClassName: ceph-nfs-storage
   nfs:
     server: 10.0.0.51
-    path: /portainer
+    path: /sharedstorage  # <--- FIXED TO MATCH CEPH PSEUDO MOUNT
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -180,13 +180,13 @@ spec:
         fsGroup: 60000
         runAsUser: 60000
 
-      # --- ADD THIS AUTOMATED WORKSPACE INITIALIZATION BLOCK ---
+      # --- FIXED INDENTATION ALIGNMENT FOR THE API ENGINE ---
       initContainers:
       - name: volume-permissions-fix
         image: alpine:latest
         command: ["sh", "-c", "mkdir -p /data/certs /data/db && chown -R 60000:60000 /data && chmod -R 775 /data"]
         securityContext:
-          runAsUser: 0  # Runs temporarily as root to cut through the NFS mount lock
+          runAsUser: 0
         volumeMounts:
         - name: portainer-data
           mountPath: /data
