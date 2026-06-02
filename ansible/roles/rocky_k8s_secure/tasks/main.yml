@@ -1,4 +1,40 @@
 ---
+# --- PRE-FLIGHT STORAGE ENFORCEMENT ENGINE ---
+- name: "0.1 - Target Primary Storage Controller to Apply Verified Export Schema"
+  delegate_to: "{{ groups['nfs_storage_nodes'] | first }}"
+  vars:
+    ansible_user: "core"
+  ansible.builtin.shell: "sudo ceph nfs export apply SharedStorage -i -"
+  args:
+    stdin: |
+      {
+        "export_id": 1,
+        "path": "/",
+        "pseudo": "/sharedstorage",
+        "access_type": "RW",
+        "squash": "none",
+        "protocols": [4],
+        "transports": ["TCP"],
+        "fsal": {
+          "name": "CEPH",
+          "user_id": "nfs.SharedStorage.1",
+          "fs_name": "cephfs"
+        }
+      }
+  changed_when: true
+
+- name: "0.2 - Confirm Storage Node Export Path is Active and Operational"
+  delegate_to: "{{ groups['nfs_storage_nodes'] | first }}"
+  vars:
+    ansible_user: "core"
+  ansible.builtin.shell: "sudo ceph nfs export get SharedStorage /sharedstorage --format json | jq -r '.access_type'"
+  register: live_export_status
+  until: live_export_status.rc == 0 and live_export_status.stdout | trim == 'RW'
+  retries: 6
+  delay: 5
+  changed_when: false
+
+# --- EXISTING MANIFEST LIFECYCLE ROUTINES ---
 - name: 1.1 - Compile Dynamic Jinja2 Manifest into YAML file
   ansible.builtin.template:
     src: dex-and-portainer.yaml.j2
@@ -27,18 +63,13 @@
   ansible.builtin.debug:
     var: kubectl_output.stdout_lines
 
-# ... [Keep your existing task 1.1 through 1.4 manifests exactly as they are] ..
 - name: 1.5 - Dynamically Register Wildcard DNS Record inside FreeIPA Directory
   delegate_to: ipa01
   vars:
     ansible_user: "core"
-    # Uses your literal directory manager lookup variable from your defaults
     ipa_password: "{{ ad_bind_password }}"
   ansible.builtin.shell: |
-    # 1. Obtain a valid administrative Kerberos ticket using your variables
-    echo "{{ ipa_password }}" | kinit admin@{{ lookup('env', 'ipa_domain') |upper }}
-    
-    # 2. Add the dynamic wildcard A record to your cloud zone mapping via your variables
+    echo "{{ ipa_password }}" | kinit admin@{{ lookup('env', 'ipa_domain') | upper }}
     ipa dnsrecord-add {{ c_zone }} * --a-rec={{ k8s_api_vip }} || true
   args:
     executable: /bin/bash
