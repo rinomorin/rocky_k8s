@@ -132,7 +132,7 @@
       delegate_to: localhost
       run_once: true
       ansible.builtin.shell: |
-        ssh {{ hostvars[nfs_node]['provider_ip'] }} "sudo ceph nfs export apply SharedStorage -i -" <<'EOF'
+        ssh {{ hostvars[nfs_node]['provision_ip'] }} "sudo ceph nfs export apply SharedStorage -i -" <<'EOF'
         {
           "export_id": 1,
           "path": "/",
