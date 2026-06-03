@@ -29,6 +29,7 @@
       changed_when: false
 
     - name: "1.4.5 - Hard-Reset Root Access Parameters for Cephadm Mesh"
+      become: yes
       ansible.builtin.shell: |
         mkdir -p /etc/ssh/sshd_config.d
         echo "PermitRootLogin yes" > /etc/ssh/sshd_config.d/00-cephadm-override.conf
@@ -130,6 +131,7 @@
     # --- FIXED EXPORT ROUTINE PASSING CORRECT PROPERTY ARRAYS ---
     - name: "2.1 - Force Apply Read-Write (RW) Permissions to Ceph NFS Export"
       delegate_to: localhost
+      become: no
       run_once: true
       ansible.builtin.shell: |
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null core@{{ hostvars[nfs_node]['provision_ip'] }} "sudo ceph nfs export apply SharedStorage -i -" <<'EOF'

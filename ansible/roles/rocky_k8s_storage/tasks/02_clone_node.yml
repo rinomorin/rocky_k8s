@@ -145,13 +145,13 @@
   delegate_to: localhost
   become: false
   set_fact:
-    my_public_key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+    my_public_key: "{{ lookup('file', ssh_key_path + '.pub') }}"
 
 - name: 2.3 - Authorize local key on guests
   become: false
   vars:
     m_ip: "{{ maintenance_map[item] }}"
-    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i ~/.ssh/id_rsa"
+    ssh_opts: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -i {{ ssh_key_path }}"
   ansible.builtin.shell: |
     ssh {{ ssh_opts }} core@{{ m_ip }} "mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
     if ! grep -q '{{ my_public_key }}' ~/.ssh/authorized_keys; then \
