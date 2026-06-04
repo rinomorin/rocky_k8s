@@ -152,6 +152,10 @@
           }
       changed_when: true
       run_once: true
+      register: nfs_export_apply
+
+    - debug:
+        var: nfs_export_apply.stdout_lines
 
     - name: "2.1b - Confirm Storage Node Export Path is Active and Operational"
       delegate_to: "{{ groups['nfs_storage_nodes'] | first }}"
