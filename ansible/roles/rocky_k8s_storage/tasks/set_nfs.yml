@@ -128,58 +128,42 @@
         sudo ceph orch apply nfs SharedStorage Pool1 --placement="{{ groups['nfs_storage_nodes'] | length }} {{ groups['nfs_storage_nodes'] | join(' ') }}"
       changed_when: true
 
-    # --- FIXED EXPORT ROUTINE PASSING CORRECT PROPERTY ARRAYS ---
-    - name: "2.1 - Force Apply Read-Write (RW) Permissions to Ceph NFS Export"
-      delegate_to: localhost
-      become: no
-      run_once: true
-      ansible.builtin.shell: |
-        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null core@{{ hostvars[nfs_node]['provision_ip'] }} "sudo ceph nfs export apply SharedStorage -i -" <<'EOF'
-        {
-          "export_id": 1,
-          "path": "/",
-          "pseudo": "/sharedstorage",
-          "access_type": "RW",
-          "squash": "none",
-          "protocols": [4],
-          "transports": ["TCP"],
-          "fsal": {
-            "name": "CEPH",
-            "user_id": "nfs.SharedStorage.1",
-            "fs_name": "cephfs"
+    # --- PRE-FLIGHT STORAGE ENFORCEMENT ENGINE ---
+    - name: "2.1 - Target Primary Storage Controller to Apply Verified Export Schema"
+      delegate_to: "{{ groups['nfs_storage_nodes'] | first }}"
+      vars:
+        ansible_user: "core"
+      ansible.builtin.shell: "sudo ceph nfs export apply SharedStorage -i -"
+      args:
+        stdin: |
+          {
+            "export_id": 1,
+            "path": "/",
+            "pseudo": "/sharedstorage",
+            "access_type": "RW",
+            "squash": "none",
+            "protocols": [4],
+            "transports": ["TCP"],
+            "fsal": {
+              "name": "CEPH",
+              "user_id": "nfs.SharedStorage.1",
+              "fs_name": "cephfs"
+            }
           }
-        }
-        EOF
       changed_when: true
-      register: nfs_export_apply
-      failed_when: nfs_export_apply.rc != 0
+      run_once: true
 
-    # --- FIXED VERIFICATION TASK TARGETING EXPORT ID ---
-    - name: "2.1b - Verify Ceph NFS Export is RW and Active"
-      ansible.builtin.shell: |
-        set -o pipefail
-
-        # Try known-working commands in order; echo access_type when found
-        # 1) query by pseudo path
-        sudo ceph nfs export get SharedStorage /sharedstorage --format json 2>/tmp/ceph_nfs_get_err || true | jq -r '.access_type' 2>/dev/null | sed -n '1p' && exit 0
-
-        # 2) query by export id
-        sudo ceph nfs export get SharedStorage 1 --format json 2>>/tmp/ceph_nfs_get_err || true | jq -r '.access_type' 2>/dev/null | sed -n '1p' && exit 0
-
-        # 3) fallback to listing and selecting export_id 1
-        sudo ceph nfs export ls SharedStorage --format json 2>>/tmp/ceph_nfs_get_err || true | jq -r '.[] | select(.export_id==1) | .access_type' 2>/dev/null | sed -n '1p' && exit 0
-
-        # If we reach here, collect debug info and fail
-        echo "DEBUG: no export JSON returned from any command" >&2
-        echo "--- ceph_nfs_get_err (stderr from attempts) ---" >&2
-        sed -n '1,200p' /tmp/ceph_nfs_get_err >&2 || true
-        exit 1
-      register: export_access_type
+    - name: "2.1b - Confirm Storage Node Export Path is Active and Operational"
+      delegate_to: "{{ groups['nfs_storage_nodes'] | first }}"
+      vars:
+        ansible_user: "core"
+      ansible.builtin.shell: "sudo ceph nfs export get SharedStorage /sharedstorage --format json | jq -r '.access_type'"
+      register: live_export_status
+      until: live_export_status.rc == 0 and live_export_status.stdout | trim == 'RW'
       retries: 6
-      delay: 10
-      until: export_access_type.rc == 0 and export_access_type.stdout is defined and export_access_type.stdout | trim == 'RW'
+      delay: 5
       changed_when: false
-      failed_when: export_access_type.rc != 0 or export_access_type.stdout is not defined or export_access_type.stdout | trim != 'RW'
+      run_once: true
 
   # Forces this master orchestration block to run exactly ONCE on the final loop pass
   when: nfs_node == groups['nfs_storage_nodes'][-1]
